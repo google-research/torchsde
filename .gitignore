@@ -1,0 +1,6 @@
+.idea
+.DS_Store
+.lib
+__pycache__
+.ipynb_checkpoints
+diagnostics/plots/
