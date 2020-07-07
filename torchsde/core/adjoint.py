@@ -19,7 +19,7 @@ from __future__ import print_function
 import torch
 from torch import nn
 
-from torchsde import brownian
+from torchsde.brownian import brownian_path
 from torchsde.core import base_sde
 from torchsde.core import methods
 from torchsde.core import misc
@@ -236,7 +236,7 @@ def sdeint_adjoint(sde, y0, ts, bm=None, logqp=False,
     sdeint.check_contract(sde=sde, method=method, adaptive=adaptive, logqp=logqp, adjoint_method=adjoint_method)
 
     if bm is None:
-        bm = brownian.BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
+        bm = brownian_path.BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
 
     tensor_input = isinstance(y0, torch.Tensor)
     if tensor_input:

@@ -31,7 +31,7 @@ def run_torch(ks=(0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12)):
     t_alls = []
     for k in tqdm.tqdm(ks):
         now = time.time()
-        bm_vanilla = BrownianTree(t0, t1, w0, cache_depth=k)
+        bm_vanilla = BrownianTree(t0=t0, t1=t1, w0=w0, cache_depth=k)
         t_con = time.time() - now
         t_cons.append(t_con)
 
