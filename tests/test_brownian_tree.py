@@ -30,37 +30,38 @@ torch.manual_seed(0)
 torch.set_default_dtype(torch.float64)
 
 D = 3
-BATCH_SIZE = 16384
+SMALL_BATCH_SIZE = 16
+LARGE_BATCH_SIZE = 16384
 REPS = 3
 ALPHA = 0.001
 
 
 class TestBrownianTree(TorchTestCase):
 
-    def _setUp(self, device=None):
+    def _setUp(self, batch_size, device=None):
         t0, t1 = torch.tensor([0., 1.]).to(device)
-        w0 = torch.zeros(BATCH_SIZE, D).to(device=device)
-        w1 = torch.randn(BATCH_SIZE, D).to(device=device)
+        w0 = torch.zeros(batch_size, D).to(device=device)
+        w1 = torch.randn(batch_size, D).to(device=device)
         t = torch.rand([]).to(device)
 
         self.t = t
         self.bm = BrownianTree(t0=t0, t1=t1, w0=w0, w1=w1, entropy=0)
 
     def test_basic_cpu(self):
-        self._setUp(device=torch.device('cpu'))
+        self._setUp(batch_size=SMALL_BATCH_SIZE, device=torch.device('cpu'))
         sample = self.bm(self.t)
-        self.assertEqual(sample.size(), (BATCH_SIZE, D))
+        self.assertEqual(sample.size(), (SMALL_BATCH_SIZE, D))
 
     def test_basic_gpu(self):
         if not torch.cuda.is_available():
             self.skipTest(reason='CUDA not available.')
 
-        self._setUp(device=torch.device('cuda'))
+        self._setUp(batch_size=SMALL_BATCH_SIZE, device=torch.device('cuda'))
         sample = self.bm(self.t)
-        self.assertEqual(sample.size(), (BATCH_SIZE, D))
+        self.assertEqual(sample.size(), (SMALL_BATCH_SIZE, D))
 
     def test_determinism(self):
-        self._setUp()
+        self._setUp(batch_size=SMALL_BATCH_SIZE)
         vals = [self.bm(self.t) for _ in range(REPS)]
         for val in vals[1:]:
             self.tensorAssertAllClose(val, vals[0])
@@ -73,8 +74,8 @@ class TestBrownianTree(TorchTestCase):
         for _ in range(REPS):
             w0_, w1_ = 0.0, npr.randn()
             # Use the same endpoint for the batch, so samples from same dist.
-            w0 = torch.tensor(w0_).repeat(BATCH_SIZE)
-            w1 = torch.tensor(w1_).repeat(BATCH_SIZE)
+            w0 = torch.tensor(w0_).repeat(LARGE_BATCH_SIZE)
+            w1 = torch.tensor(w1_).repeat(LARGE_BATCH_SIZE)
             bm = BrownianTree(t0=t0, t1=t1, w0=w0, w1=w1, pool_size=100, tol=1e-14)
 
             for _ in range(REPS):
@@ -88,6 +89,21 @@ class TestBrownianTree(TorchTestCase):
 
                 _, pval = kstest(samples_, ref_dist.cdf)
                 self.assertGreaterEqual(pval, ALPHA)
+
+    def test_to(self):
+        if not torch.cuda.is_available():
+            self.skipTest(reason='CUDA not available.')
+
+        self._setUp(batch_size=SMALL_BATCH_SIZE)
+        cache = self.bm.get_cache()
+        old = torch.cat(list(cache['ws_prev']) + list(cache['ws']) + list(cache['ws_post']), dim=0)
+
+        gpu = torch.device('cuda')
+        self.bm.to(gpu)
+        cache = self.bm.get_cache()
+        new = torch.cat(list(cache['ws_prev']) + list(cache['ws']) + list(cache['ws_post']), dim=0)
+        self.assertTrue(str(new.device).startswith('cuda'))
+        self.tensorAssertAllClose(old, new.cpu())
 
 
 if __name__ == '__main__':

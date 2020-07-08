@@ -134,10 +134,7 @@ class BrownianPath(base.Brownian):
         )
 
     def to(self, *args, **kwargs):
-        ws_new = blist.blist()
-        for w in self._ws:
-            ws_new.append(w.to(*args, **kwargs))
-        self._ws = ws_new
+        self._ws = utils.blist_to(self._ws, *args, **kwargs)
 
     @property
     def dtype(self):
@@ -153,3 +150,9 @@ class BrownianPath(base.Brownian):
 
     def __len__(self):
         return len(self._ts)
+
+    def get_cache(self):
+        return {
+            'ts': self._ts,
+            'ws': self._ws,
+        }

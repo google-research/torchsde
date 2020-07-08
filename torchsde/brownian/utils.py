@@ -94,3 +94,7 @@ def brownian_bridge(t0: float, t1: float, w0, w1, t: float, seed=None):
 
 def is_scalar(x):
     return isinstance(x, int) or isinstance(x, float) or (isinstance(x, torch.Tensor) and x.numel() == 1)
+
+
+def blist_to(l, *args, **kwargs):
+    return blist.blist([li.to(*args, **kwargs) for li in l])

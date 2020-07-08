@@ -138,9 +138,9 @@ class BrownianTree(base.Brownian):
         )
 
     def to(self, *args, **kwargs):
-        self._ws_prev = _list_to(self._ws_prev, *args, **kwargs)
-        self._ws_post = _list_to(self._ws_post, *args, **kwargs)
-        self._ws = _list_to(self._ws, *args, **kwargs)
+        self._ws_prev = utils.blist_to(self._ws_prev, *args, **kwargs)
+        self._ws_post = utils.blist_to(self._ws_post, *args, **kwargs)
+        self._ws = utils.blist_to(self._ws, *args, **kwargs)
 
     @property
     def dtype(self):
@@ -156,6 +156,16 @@ class BrownianTree(base.Brownian):
 
     def __len__(self):
         return len(self._ts) + len(self._ts_prev) + len(self._ts_post)
+
+    def get_cache(self):
+        return {
+            'ts_prev': self._ts_prev,
+            'ts': self._ts,
+            'ts_post': self._ts_post,
+            'ws_prev': self._ws_prev,
+            'ws': self._ws,
+            'ws_post': self._ws_post
+        }
 
 
 def _binary_search(t0, t1, w0, w1, t, parent, tol):
@@ -211,7 +221,3 @@ def _create_cache(t0, t1, w0, w1, entropy, pool_size, k):
         seeds = new_seeds
 
     return ts, ws, seeds
-
-
-def _list_to(l, *args, **kwargs):
-    return [li.to(*args, **kwargs) for li in l]
