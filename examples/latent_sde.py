@@ -52,9 +52,11 @@ class LatentSDE(SDEIto):
 
         # Approximate posterior drift: Takes in 2 positional encodings and the state.
         self.net = nn.Sequential(
-            nn.Linear(3, 400),
+            nn.Linear(3, 200),
             nn.Tanh(),
-            nn.Linear(400, 1)
+            nn.Linear(200, 200),
+            nn.Tanh(),
+            nn.Linear(200, 1)
         )
         self.net[-1].weight.data.fill_(0.)
         self.net[-1].bias.data.fill_(0.)
@@ -135,10 +137,10 @@ def make_segmented_cosine_data():
 
 def make_irregular_sine_data():
     with torch.no_grad():
-        ts_ = np.sort(npr.uniform(low=0.3, high=1.7, size=20))
+        ts_ = np.sort(npr.uniform(low=0.4, high=1.6, size=16))
         ts_ext_ = np.array([0.] + list(ts_) + [2.0])
         ts_vis_ = np.linspace(0., 2.0, 300)
-        ys_ = np.sin(ts_ * (2. * math.pi))[:, None]
+        ys_ = np.sin(ts_ * (2. * math.pi))[:, None] * 0.8
 
         ts = torch.tensor(ts_).float()
         ts_ext = torch.tensor(ts_ext_).float()
@@ -161,14 +163,20 @@ def main():
     # Plotting parameters.
     vis_batch_size = 1024
     ylims = (-1.75, 1.75)
-    alphas = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
-    percentiles = [0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+    alphas = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
+    percentiles = [0.999, 0.99, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
     vis_idx = npr.permutation(vis_batch_size)
     # From https://colorbrewer2.org/.
-    sample_colors = ('#8c96c6', '#8c6bb1', '#810f7c')
-    fill_color = '#9ebcda'
-    mean_color = '#4d004b'
-    num_samples = len(sample_colors)
+    if args.color == "blue":
+        sample_colors = ('#8c96c6', '#8c6bb1', '#810f7c')
+        fill_color = '#9ebcda'
+        mean_color = '#4d004b'
+        num_samples = len(sample_colors)
+    else:
+        sample_colors = ('#fc4e2a', '#e31a1c', '#bd0026')
+        fill_color = '#fd8d3c'
+        mean_color = '#800026'
+        num_samples = len(sample_colors)
 
     # Fix seed for the random draws used in the plots.
     eps = torch.randn(vis_batch_size, 1).to(device)
@@ -243,7 +251,7 @@ def main():
                     dt = torch.zeros(num, num).fill_(dt).to(device)
                     dy = fty * dt
                     dt_, dy_, t_, y_ = dt.cpu().numpy(), dy.cpu().numpy(), t.cpu().numpy(), y.cpu().numpy()
-                    plt.quiver(t_, y_, dt_, dy_, alpha=0.3, edgecolors='k', width=0.0035, scale=40)
+                    plt.quiver(t_, y_, dt_, dy_, alpha=0.3, edgecolors='k', width=0.0035, scale=50)
 
                 if args.hide_ticks:
                     plt.xticks([], [])
@@ -322,6 +330,7 @@ if __name__ == '__main__':
     parser.add_argument('--show-mean', type=utils.str2bool, default=False)
     parser.add_argument('--hide-ticks', type=utils.str2bool, default=False)
     parser.add_argument('--dpi', type=int, default=300)
+    parser.add_argument('--color', type=str, default='blue', choices=('blue', 'red'))
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
