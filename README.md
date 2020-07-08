@@ -19,7 +19,7 @@ It covers subtle points such as fixing the randomness in the solver and the cons
 Unlike with ordinary differential equation (ODE), where general high-order solvers can be applied, the numerical efficiency of SDE solvers highly depends on the assumption on the noise (i.e. assumptions on the diffusion function).
 We encourage those who are interested in using this codebase to take a peek at the notebook.
 
-[`latent_sde.py`](examples/latent_sde.py) in the [`examples`](examples) folder learns a *latent stochastic differential equation*.
+[`latent_sde.py`](examples/latent_sde.py) in the [`examples`](examples) folder learns a *latent stochastic differential equation* (cf. Section 5 of [\[1\]](https://arxiv.org/pdf/2001.01328.pdf) and references therein).
 The example fits an SDE to data, all the while regularizing it to be like an [Ornstein-Uhlenbeck](https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process) prior process.
 The model can be loosely viewed as a [variational autoencoder](https://en.wikipedia.org/wiki/Autoencoder#Variational_autoencoder_(VAE)) with its prior and approximate posterior being SDEs.
 Note, the example contains many simplifications and is meant to demonstrate basic usage regarding gradient computation.
@@ -43,6 +43,8 @@ The central functions of interest are `sdeint` and `sdeint_adjoint`. They can be
 ```Python
 from torchsde import sdeint, sdeint_adjoint
 ```
+
+### Integrating SDEs
 SDEs are defined with two vector fields, named respectively the *drift* and *diffusion* functions.
 The drift is analogous to the vector field in ODEs, whereas the diffusion controls how the [Brownian motion](https://en.wikipedia.org/wiki/Brownian_motion) affects the system.
 
@@ -78,7 +80,19 @@ bm = BrownianPath(t0=0.0, w0=torch.zeros(batch_size, m))
 ys = sdeint(geometric_bm, y0, ts, bm=bm)
 ```
 To ensure the solvers work, `f` and `g` must take in the time `t` and state `y` in the specific order.
+Most importantly, the SDE class **must** have the attributes `sde_type` and `noise_type`.
+The noise type of the SDE determines what numerical algorithms may be used.
+See [`demo.ipynb`](examples/demo.ipynb) for more on this.
 
+#### Possible noise types and explanations when state dimension=d
+- `diagonal`: The diffusion function is an element-wise function and has output size (d,). The Brownian motion is set to be d-dimensional.
+- `additive`: The diffusion function is constant w.r.t. the state `y` and has output size (d, m). The Brownian motion is set to be m-dimensional.
+- `scalar`: The diffusion function has output size $(d, 1)$. The Brownian motion is set to be 1-dimensional.
+- `general`: The diffusion function has output size $(d, m)$. The Brownian motion is set to be m-dimensional.
+
+In practice, we found `diagonal` and `additive` to produce a good trade-off between model flexibility and computational efficiency.
+
+### Integrating SDEs and a KL penalty
 During modeling, fitting SDEs directly to data will likely give degenerate solutions that are close to being deterministic.
 One benefit of using SDEs is when they are treated as latent variables in a Bayesian formulation.
 With an appropriate prior SDE, a [Kullback–Leibler (KL) divergence](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) on the space of sample paths can be estimated efficiently.
@@ -116,41 +130,34 @@ bm = BrownianPath(t0=0.0, w0=torch.zeros(batch_size, m))
 
 ys, logqp = sdeint(geometric_bm, y0, ts, bm=bm, logqp=True)  # Also returns estimated KL.
 ```
-
 To switch to using the adjoint formulation for memory efficient gradient computation, all we need is to replace `sdeint` with `sdeint_adjoint` in the above code snippets.
 
-### Keyword arguments:
-- `bm`: A `BrownianPath` or `BrownianTree` object. Optionally include to make the numerical solves deterministic.
+### Keyword arguments of `sdeint`
+- `bm`: A `BrownianPath` or `BrownianTree` object. Optionally include to seed the solver's computation.
 - `logqp`: If True, also return the Radon-Nikodym derivative, which is a log-ratio penalty across the whole path.
-- `method` One of the solvers listed below.
+- `method`: One of the solvers listed below.
 - `dt`: A float for the constant step size or initial step size for adaptive time-stepping.
-- `adaptive` If True, use adaptive time-stepping.
-- `rtol` Relative tolerance.
-- `atol` Absolute tolerance.
+- `adaptive`: If True, use adaptive time-stepping.
+- `rtol`: Relative tolerance.
+- `atol`: Absolute tolerance.
 - `dt_min`: Minimum step size for adaptive time-stepping.
 
-#### List of SDE Solvers:
-- `euler` [Euler-Maruyama method](https://en.wikipedia.org/wiki/Euler%E2%80%93Maruyama_method)
-- `milstein` [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
-- `srk` <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_method_(SDE)">Stochastic Runge-Kutta methods</a>
+#### List of SDE solvers
+- `euler`: [Euler-Maruyama method](https://en.wikipedia.org/wiki/Euler%E2%80%93Maruyama_method)
+- `milstein`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
+- `srk`: <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_method_(SDE)">Stochastic Runge-Kutta methods</a>
 
 Note that stochastic Runge-Kutta methods is a class of numerical methods, and the precise formulation for one noise type may be much different than that for another. Internally, `sdeint` selects the algorithm based on the attribute `noise_type` of the SDE object.
 
-<!--## Miscellaneous-->
-
-## Known Issues
+## Known issues
 - Existing solvers prioritize having high *strong order*. High *weak order* solvers will be included in the future.
 - Existing solvers are based on Itô SDEs. Solvers for Stratonovich SDEs will be included in the future.
 - Adjoint mode is currently not supported for SDEs with noise type `scalar` and `general`. We expect the first case to be fixed soon. The second case requires more work and will be fixed after efficient Stratonovich solvers are in place.
 - Implemented in Python, `BrownianPath` and `BrownianTree` suffer from interpreter overhead. We are working on porting this code to C++ using `torch.utils.cpp_extension` to speed up the Brownian motion queries.
-- Unlike the adjoint sensitivity method, our proposed stochastic adjoint sensitivity method is, to the best of our knowledge, a new numerical method. Theoretical properties in terms of its interaction with adaptive time-stepping is still largely unknown, even though we have found the combination to work in practice.
-
-<!--### Other files-->
-<!--- The [`tests`](tests) folder contains gradient checks against both analytically derived values and finite differences.-->
-<!--- The [`diagnostics`](diagnostics) folder contains scripts to inspect the rate of different methods, generating plots on a log-log scale.-->
+- Unlike the adjoint sensitivity method, our proposed stochastic adjoint sensitivity method is, to the best of our knowledge, a new numerical method. Theoretical properties in terms of its interaction with adaptive time-stepping is still largely unknown, even though we have found the combination to typically work in practice.
 
 ### References
-1. Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations." *International Conference on Artificial Intelligence and Statistics.* 2020. [[arxiv]](https://arxiv.org/pdf/2001.01328.pdf)
+\[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations." *International Conference on Artificial Intelligence and Statistics.* 2020. [[arxiv]](https://arxiv.org/pdf/2001.01328.pdf)
 
 ---
 This is a research project, not an official Google product. Expect bugs and sharp edges. Please help by trying it out, reporting bugs, and letting us know what you think!
