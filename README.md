@@ -3,7 +3,6 @@ This codebase provides [stochastic differential equation (SDE)](https://en.wikip
 Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in this repository are fully supported to run on GPUs.
 
 ---
-
 <p align="center">
   <img width="600" height="450" src="./assets/latent_sde.gif">
 </p>
@@ -80,7 +79,7 @@ bm = BrownianPath(t0=0.0, w0=torch.zeros(batch_size, m))
 ys = sdeint(geometric_bm, y0, ts, bm=bm)
 ```
 To ensure the solvers work, `f` and `g` must take in the time `t` and state `y` in the specific order.
-Most importantly, the SDE class **must** have the attributes `sde_type` and `noise_type`.
+**Most importantly, the SDE class must have the attributes `sde_type` and `noise_type`.**
 The noise type of the SDE determines what numerical algorithms may be used.
 See [`demo.ipynb`](examples/demo.ipynb) for more on this.
 
