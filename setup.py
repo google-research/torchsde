@@ -13,6 +13,23 @@
 # limitations under the License.
 
 import setuptools
+from torch.utils import cpp_extension
+import platform
+import os
+
+extra_compile_args = []
+extra_link_args = []
+
+# This is a problem of macOS: https://github.com/pytorch/pytorch/issues/16805.
+if platform.system() == "Darwin":
+    extra_compile_args += ["-stdlib=libc++"]
+    extra_link_args += ["-stdlib=libc++"]
+
+brownian_lib_prefix = os.path.join(".", "csrc")
+sources = os.listdir(brownian_lib_prefix)
+sources = filter(lambda x: x.endswith('.cpp'), sources)
+sources = map(lambda x: os.path.join(brownian_lib_prefix, x), sources)
+sources = list(sources)
 
 setuptools.setup(
     name="torchsde",
@@ -21,7 +38,15 @@ setuptools.setup(
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
     url="https://github.com/google-research/torchsde",
-    packages=setuptools.find_packages(exclude=['diagnostics']),
+    packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
+    ext_modules=[
+        cpp_extension.CppExtension(name='brownian_lib',
+                                   sources=sources,
+                                   extra_compile_args=extra_compile_args,
+                                   extra_link_args=extra_link_args,
+                                   optional=True)
+    ],
+    cmdclass={'build_ext': cpp_extension.BuildExtension},
     install_requires=['torch>=1.5.0', 'blist', 'numpy>=1.17.0', 'scipy'],
     classifiers=[
         "Programming Language :: Python :: 3",
