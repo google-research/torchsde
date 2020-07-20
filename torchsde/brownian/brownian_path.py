@@ -41,11 +41,12 @@ class BrownianPath(base.Brownian):
     """
 
     def __init__(self, t0, w0: torch.Tensor, window_size=8):
-        """Initialize brownian path.
+        """Initialize Brownian path.
 
         Args:
             t0: float or torch.Tensor for initial time.
             w0: torch.Tensor for initial state.
+            window_size: Size of the window around the last query for local search.
         """
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
@@ -129,9 +130,7 @@ class BrownianPath(base.Brownian):
         return old
 
     def __repr__(self):
-        return (
-            f"BrownianPath(t0={self._ts[0]:.3f}, t1={self._ts[-1]:.3f})"
-        )
+        return f"BrownianPath(t0={self._ts[0]:.3f}, t1={self._ts[-1]:.3f})"
 
     def to(self, *args, **kwargs):
         self._ws = utils.blist_to(self._ws, *args, **kwargs)
@@ -152,7 +151,4 @@ class BrownianPath(base.Brownian):
         return len(self._ts)
 
     def get_cache(self):
-        return {
-            'ts': self._ts,
-            'ws': self._ws,
-        }
+        return {'ts': self._ts, 'ws': self._ws}

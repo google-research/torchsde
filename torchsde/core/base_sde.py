@@ -160,7 +160,3 @@ class RenameMethodsSDE(BaseSDE):
         self.f = getattr(base_sde, drift)
         self.g = getattr(base_sde, diffusion)
         self.h = getattr(base_sde, prior_drift)
-
-    @property
-    def noise_type(self):
-        return self._base_sde.noise_type

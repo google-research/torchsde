@@ -317,7 +317,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--adjoint', action='store_true')
     parser.add_argument('--adaptive', action='store_true')
-    parser.add_argument('--method', type=str, default='milstein', choices=('euler', 'milstein', 'srk'),
+    parser.add_argument('--method', type=str, default='euler', choices=('euler', 'milstein', 'srk'),
                         help='Name of numerical solver.')
     parser.add_argument('--dt', type=float, default=1e-2)
     parser.add_argument('--rtol', type=float, default=1e-3)

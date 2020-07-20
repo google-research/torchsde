@@ -86,8 +86,8 @@ See [`demo.ipynb`](examples/demo.ipynb) for more on this.
 #### Possible noise types and explanations when state dimension=d
 - `diagonal`: The diffusion `g` is element-wise and has output size (d,). The Brownian motion is d-dimensional.
 - `additive`: The diffusion `g` is constant w.r.t. `y` and has output size (d, m). The Brownian motion is m-dimensional.
-- `scalar`: The diffusion `g` has output size $(d, 1)$. The Brownian motion is 1-dimensional.
-- `general`: The diffusion `g` has output size $(d, m)$. The Brownian motion is m-dimensional.
+- `scalar`: The diffusion `g` has output size (d, 1). The Brownian motion is 1-dimensional.
+- `general`: The diffusion `g` has output size (d, m). The Brownian motion is m-dimensional.
 
 In practice, we found `diagonal` and `additive` to produce a good trade-off between model flexibility and computational efficiency, and we recommend sticking to these two noise types if possible.
 

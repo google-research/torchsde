@@ -96,17 +96,6 @@ def check_contract(sde, method, adaptive, logqp, adjoint_method=None):
     if len(missing_funcs) > 0:
         raise ValueError(f'sde is required to have the methods {required_funcs}. Missing functions: {missing_funcs}')
 
-    if method not in settings.METHODS:
-        raise ValueError(f'Expected method in {settings.METHODS}, but found {method}.')
-
-    if adjoint_method is not None:
-        if adjoint_method not in settings.METHODS:
-            raise ValueError(f'Expected adjoint_method in {settings.METHODS}, but found {method}.')
-
-    if adaptive and method == 'euler':
-        warnings.warn(f'Numerical solution is only guaranteed to converge to the correct solution '
-                      f'when a strong order >=1.0 scheme is used for adaptive time-stepping.')
-
     if not hasattr(sde, 'noise_type'):
         raise ValueError(f'sde does not have the attribute noise_type.')
 
@@ -118,6 +107,18 @@ def check_contract(sde, method, adaptive, logqp, adjoint_method=None):
 
     if sde.sde_type not in settings.SDE_TYPES:
         raise ValueError(f'Expected sde type in {settings.SDE_TYPES}, but found {sde.sde_type}.')
+
+    if method not in settings.METHODS:
+        raise ValueError(f'Expected method in {settings.METHODS}, but found {method}.')
+
+    if adjoint_method is not None:
+        if adjoint_method not in settings.METHODS:
+            raise ValueError(f'Expected adjoint_method in {settings.METHODS}, but found {method}.')
+
+    # TODO: This warning should be based on the `strong_order` attribute of the solver.
+    if adaptive and method == 'euler' and sde.noise_type != "additive":
+        warnings.warn(f'Numerical solution is only guaranteed to converge to the correct solution '
+                      f'when a strong order >=1.0 scheme is used for adaptive time-stepping.')
 
 
 def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):

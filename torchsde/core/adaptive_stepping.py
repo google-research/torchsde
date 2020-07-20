@@ -51,6 +51,7 @@ def compute_error(y11, y12, rtol, atol, eps=1e-7):
         rtol: relative tolerance weight.
         atol: absolute tolerance.
         eps: a small constant to avoid division by zero.
+
     Returns:
         A tuple of error estimates and a tuple of aggregated tolerance values.
     """
