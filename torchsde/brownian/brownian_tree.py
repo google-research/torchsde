@@ -151,6 +151,9 @@ class BrownianTree(base.Brownian):
         return self._ws[0].device
 
     @property
+    def shape(self):
+        return self._ws[0].size()
+
     def size(self):
         return self._ws[0].size()
 

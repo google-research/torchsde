@@ -44,5 +44,9 @@ class Brownian(abc.ABC):
 
     @property
     @abc.abstractmethod
+    def shape(self):
+        pass
+
+    @abc.abstractmethod
     def size(self):
         pass
