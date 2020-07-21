@@ -152,7 +152,6 @@ Note that stochastic Runge-Kutta methods is a class of numerical methods, and th
 - Existing solvers prioritize having high *strong order*. High *weak order* solvers will be included in the future.
 - Existing solvers are based on Itô SDEs. Solvers for Stratonovich SDEs will be included in the future.
 - Adjoint mode is currently not supported for SDEs with noise type `scalar` and `general`. We expect the first case to be fixed soon. The second case requires more work and will be fixed after efficient Stratonovich solvers are in place.
-- Implemented in Python, `BrownianPath` and `BrownianTree` suffer from interpreter overhead. We are working on porting this code to C++ using `torch.utils.cpp_extension` to speed up the Brownian motion queries.
 - Unlike the adjoint sensitivity method, our proposed stochastic adjoint sensitivity method is, to the best of our knowledge, a new numerical method. Theoretical properties in terms of its interaction with adaptive time-stepping is still largely unknown, even though we have found the combination to typically work in practice.
 
 ### References
