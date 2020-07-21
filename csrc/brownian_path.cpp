@@ -66,7 +66,7 @@ class BrownianPath {
   }
 };
 
-PYBIND11_MODULE(brownian_lib, m) {
+PYBIND11_MODULE(_brownian_lib, m) {
   // TODO: Fix `device`, `dtype`, `to` functions.
   m.doc() = "Fast Brownian motion based on PyTorch C++ API.";
   py::class_<BrownianPath>(m, "BrownianPath")

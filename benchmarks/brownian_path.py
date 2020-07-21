@@ -6,7 +6,7 @@ import numpy.random as npr
 import torch
 
 import torchsde
-import brownian_lib  # Requires installing the C++ extension.
+import torchsde.brownian_lib as brownian_lib
 
 
 t0, t1 = 0.0, 1.0

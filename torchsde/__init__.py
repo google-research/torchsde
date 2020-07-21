@@ -17,3 +17,4 @@ from .brownian.brownian_tree import BrownianTree
 from .core.adjoint import sdeint_adjoint
 from .core.base_sde import BaseSDE, SDEIto
 from .core.sdeint import sdeint
+from . import brownian_lib

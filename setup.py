@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import platform
+
 import setuptools
 from torch.utils import cpp_extension
-import platform
-import os
 
 extra_compile_args = []
 extra_link_args = []
@@ -40,7 +41,7 @@ setuptools.setup(
     url="https://github.com/google-research/torchsde",
     packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
     ext_modules=[
-        cpp_extension.CppExtension(name='brownian_lib',
+        cpp_extension.CppExtension(name='torchsde._brownian_lib',
                                    sources=sources,
                                    extra_compile_args=extra_compile_args,
                                    extra_link_args=extra_link_args,
