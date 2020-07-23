@@ -13,120 +13,85 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "brownian_path.hpp"
+
 #include <math.h>
-#include <pybind11/pybind11.h>
 #include <torch/extension.h>
 #include <torch/torch.h>
 
-#include <iostream>
 #include <iterator>
 #include <map>
 
 #include "utils.hpp"
 
-namespace py = pybind11;
-
-class BrownianPath {
- private:
-  std::map<float, torch::Tensor> cache;
-  float t_head;
-  float t_tail;
-  torch::Tensor w_head;
-  torch::Tensor w_tail;
-  BrownianPath() {}
-
- public:
-  static BrownianPath construct_from_pair(float t0, torch::Tensor w0) {
-    BrownianPath bp = BrownianPath();
-    bp.cache.insert(std::pair<float, torch::Tensor>(t0, w0));
-
-    bp.t_head = t0;
-    bp.t_tail = t0;
-    bp.w_head = w0;
-    bp.w_tail = w0;
-    return bp;
-  }
-
-  static BrownianPath construct_from_dict(std::map<float, torch::Tensor> data) {
-    BrownianPath bp = BrownianPath();
-    for (auto const& x : data) {
-      bp.cache.insert(std::pair<float, torch::Tensor>(x.first, x.second));
-    }
-
-    auto head = data.begin();
-    auto tail = data.rbegin();
-    bp.t_head = head->first;
-    bp.t_tail = tail->first;
-    bp.w_head = head->second;
-    bp.w_tail = tail->second;
-    return bp;
-  }
-
-  torch::Tensor call(float t) {
-    if (t > t_tail) {
-      auto w = w_tail + torch::randn_like(w_tail) * sqrt(t - t_tail);
-      cache.insert(std::pair<float, torch::Tensor>(t, w));
-      t_tail = t;
-      w_tail = w;
-      return w;
-    } else if (t < t_head) {
-      auto w = w_head + torch::randn_like(w_head) * sqrt(t_head - t);
-      cache.insert(std::pair<float, torch::Tensor>(t, w));
-      t_head = t;
-      w_head = w;
-      return w;
-    } else if (cache.find(t) != cache.end()) {
-      return cache.at(t);
-    } else {
-      auto lo = cache.lower_bound(t);
-      auto hi = lo--;
-      auto w = brownian_bridge(t, lo->first, hi->first, lo->second, hi->second);
-      cache.insert(std::pair<float, torch::Tensor>(t, w));
-      return w;
-    }
-  }
-
-  void insert(float t, torch::Tensor w) {
-    cache.insert(std::pair<float, torch::Tensor>(t, w));
-
-    if (t < t_head) {
-      t_head = t;
-      w_head = w;
-    } else if (t > t_tail) {
-      t_tail = t;
-      w_tail = w;
-    }
-  }
-
-  auto repr() const {
-    return "BrownianPath(t0=" + format_float(t_head, 3) +
-           ", t1=" + format_float(t_tail, 3) + ")";
-  }
-
-  std::map<float, torch::Tensor> get_cache() const { return cache; }
-
-  float get_t_head() const { return t_head; }
-
-  float get_t_tail() const { return t_tail; }
-
-  torch::Tensor get_w_head() const { return w_head; }
-
-  torch::Tensor get_w_tail() const { return w_tail; }
-};
-
-PYBIND11_MODULE(_brownian_lib, m) {
-  m.doc() = "Fast Brownian motion based on PyTorch C++ API.";
-  py::class_<BrownianPath>(m, "BrownianPath")
-      .def_static("construct_from_pair", &BrownianPath::construct_from_pair,
-                  py::arg("t0"), py::arg("w0"))
-      .def_static("construct_from_dict", &BrownianPath::construct_from_dict,
-                  py::arg("data"))
-      .def("__call__", &BrownianPath::call, py::arg("t"))
-      .def("__repr__", &BrownianPath::repr)
-      .def("insert", &BrownianPath::insert)
-      .def("get_cache", &BrownianPath::get_cache)
-      .def("get_t_head", &BrownianPath::get_t_head)
-      .def("get_t_tail", &BrownianPath::get_t_tail)
-      .def("get_w_head", &BrownianPath::get_w_head)
-      .def("get_w_tail", &BrownianPath::get_w_tail);
+BrownianPath::BrownianPath(float t0, torch::Tensor w0) {
+  cache.insert(std::pair<float, torch::Tensor>(t0, w0));
+  t_head = t0;
+  t_tail = t0;
+  w_head = w0;
+  w_tail = w0;
 }
+
+BrownianPath::BrownianPath(std::map<float, torch::Tensor> data) {
+  for (auto const& x : data) {
+    cache.insert(std::pair<float, torch::Tensor>(x.first, x.second));
+  }
+
+  auto head = data.begin();
+  auto tail = data.rbegin();
+  t_head = head->first;
+  t_tail = tail->first;
+  w_head = head->second;
+  w_tail = tail->second;
+}
+
+torch::Tensor BrownianPath::call(float t) {
+  if (t > t_tail) {
+    auto w = w_tail + torch::randn_like(w_tail) * sqrt(t - t_tail);
+    cache.insert(std::pair<float, torch::Tensor>(t, w));
+    t_tail = t;
+    w_tail = w;
+    return w;
+  } else if (t < t_head) {
+    auto w = w_head + torch::randn_like(w_head) * sqrt(t_head - t);
+    cache.insert(std::pair<float, torch::Tensor>(t, w));
+    t_head = t;
+    w_head = w;
+    return w;
+  } else if (cache.find(t) != cache.end()) {
+    return cache.at(t);
+  } else {
+    auto lo = cache.lower_bound(t);
+    auto hi = lo--;
+    auto w = brownian_bridge(t, lo->first, hi->first, lo->second, hi->second);
+    cache.insert(std::pair<float, torch::Tensor>(t, w));
+    return w;
+  }
+}
+
+void BrownianPath::insert(float t, torch::Tensor w) {
+  cache.insert(std::pair<float, torch::Tensor>(t, w));
+
+  if (t < t_head) {
+    t_head = t;
+    w_head = w;
+  } else if (t > t_tail) {
+    t_tail = t;
+    w_tail = w;
+  }
+}
+
+std::string BrownianPath::repr() const {
+  return "BrownianPath(t0=" + format_float(t_head, 3) +
+         ", t1=" + format_float(t_tail, 3) + ")";
+}
+
+std::map<float, torch::Tensor> BrownianPath::get_cache() const { return cache; }
+
+float BrownianPath::get_t_head() const { return t_head; }
+
+float BrownianPath::get_t_tail() const { return t_tail; }
+
+torch::Tensor BrownianPath::get_w_head() const { return w_head; }
+
+torch::Tensor BrownianPath::get_w_tail() const { return w_tail; }

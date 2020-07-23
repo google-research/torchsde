@@ -13,24 +13,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "utils.hpp"
+#ifndef BROWNIAN_PATH_HPP
+#define BROWNIAN_PATH_HPP
 
-#include <math.h>
 #include <torch/torch.h>
 
-#include <iomanip>
-#include <random>
-#include <sstream>
+#include <map>
 
-torch::Tensor brownian_bridge(float t, float t0, float t1, torch::Tensor w0,
-                              torch::Tensor w1) {
-  auto mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0);
-  auto std = std::sqrt((t1 - t) * (t - t0) / (t1 - t0));
-  return mean + torch::randn_like(mean) * std;
-}
+class BrownianPath {
+ private:
+  std::map<float, torch::Tensor> cache;
+  float t_head;
+  float t_tail;
+  torch::Tensor w_head;
+  torch::Tensor w_tail;
 
-std::string format_float(float t, int precision) {
-  std::stringstream stream;
-  stream << std::fixed << std::setprecision(precision) << t;
-  return stream.str();
-}
+ public:
+  BrownianPath(float t0, torch::Tensor w0);
+
+  BrownianPath(std::map<float, torch::Tensor> data);
+
+  torch::Tensor call(float t);
+
+  void insert(float t, torch::Tensor w);
+
+  std::string repr() const;
+
+  std::map<float, torch::Tensor> get_cache() const;
+
+  float get_t_head() const;
+
+  float get_t_tail() const;
+
+  torch::Tensor get_w_head() const;
+
+  torch::Tensor get_w_tail() const;
+};
+
+#endif

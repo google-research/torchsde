@@ -37,7 +37,7 @@ class BrownianPath(base.Brownian):
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
-        self._bm = _BrownianPath.construct_from_pair(t0=t0, w0=w0)
+        self._bm = _BrownianPath(t0=t0, w0=w0)
 
     def __call__(self, t):
         return self._bm(t)
@@ -52,7 +52,7 @@ class BrownianPath(base.Brownian):
         cache = self._bm.get_cache()
         for k, v in cache.items():
             cache[k] = v.to(*args, **kwargs)
-        self._bm = _BrownianPath.construct_from_dict(data=cache)
+        self._bm = _BrownianPath(data=cache)
 
     @property
     def dtype(self):

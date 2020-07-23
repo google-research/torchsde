@@ -13,9 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#ifndef UTILS_HPP
+#define UTILS_HPP
+
 #include <torch/torch.h>
 
 torch::Tensor brownian_bridge(float t, float t0, float t1, torch::Tensor w0,
                               torch::Tensor w1);
 
 std::string format_float(float t, int precision = 3);
+
+#endif
