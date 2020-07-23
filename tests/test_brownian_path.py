@@ -27,8 +27,9 @@ import numpy.random as npr
 import torch
 from scipy.stats import norm, kstest
 
-from torchsde.brownian_lib import BrownianPath
 from tests.torch_test import TorchTestCase
+from torchsde.brownian_lib import BrownianPath
+
 
 torch.manual_seed(0)
 torch.set_default_dtype(torch.float64)
