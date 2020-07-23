@@ -4,3 +4,7 @@
 __pycache__
 .ipynb_checkpoints
 diagnostics/plots/
+build/
+dist/
+.vscode/
+*.egg-info/

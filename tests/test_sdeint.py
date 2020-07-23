@@ -16,13 +16,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
+
+sys.path = sys.path[1:]  # A hack so that we always import the installed library.
+
 import unittest
 
 import torch
 
+from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4, GeneralSDE, AdditiveSDE, ScalarSDE, TupleSDE
+from tests.torch_test import TorchTestCase
 from torchsde import BrownianPath, sdeint
-from .basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4, GeneralSDE, AdditiveSDE, ScalarSDE, TupleSDE
-from .torch_test import TorchTestCase
 
 torch.manual_seed(0)
 torch.set_default_dtype(torch.float64)

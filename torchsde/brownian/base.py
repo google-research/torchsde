@@ -29,6 +29,10 @@ class Brownian(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def __repr__(self):
+        pass
+
+    @abc.abstractmethod
     def to(self, *args):
         pass
 

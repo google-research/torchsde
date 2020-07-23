@@ -12,4 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from torchsde._brownian_lib import *
+import warnings
+
+try:
+    from torchsde.brownian_lib.brownian_path import BrownianPath
+except Exception:
+    warnings.warn('Failed to import `torchsde._brownian_lib`; falling back to `torchsde.brownian`.')
