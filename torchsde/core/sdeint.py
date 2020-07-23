@@ -20,7 +20,11 @@ import warnings
 
 import torch
 
-from torchsde.brownian import brownian_path
+try:
+    from torchsde.brownian_lib import BrownianPath
+except Exception:
+    from torchsde.brownian.brownian_path import BrownianPath
+
 from torchsde.core import base_sde
 from torchsde.core import methods
 from torchsde.core import settings
@@ -63,7 +67,7 @@ def sdeint(sde, y0, ts, bm=None, logqp=False, method='srk', dt=1e-3, adaptive=Fa
     check_contract(sde=sde, method=method, adaptive=adaptive, logqp=logqp)
 
     if bm is None:
-        bm = brownian_path.BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
+        bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
 
     tensor_input = isinstance(y0, torch.Tensor)
     if tensor_input:
