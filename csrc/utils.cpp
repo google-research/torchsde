@@ -43,7 +43,7 @@ torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
   std::shared_ptr<at::CPUGenerator> curr = at::detail::createCPUGenerator(seed);
   torch::Tensor mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0);
   double std = std::sqrt((t1 - t) * (t - t0) / (t1 - t0));
-  torch::Tensor bridge_point = at::normal(mean, std, curr.get());
+  torch::Tensor bridge_point = at::normal(mean.cpu(), std, curr.get()).to(mean);
   curr.reset();
   return bridge_point;
 }
