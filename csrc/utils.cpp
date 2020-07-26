@@ -34,3 +34,53 @@ std::string format_float(float t, int precision) {
   stream << std::fixed << std::setprecision(precision) << t;
   return stream.str();
 }
+
+torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
+                                        torch::Tensor w0, torch::Tensor w1,
+                                        std::uint64_t seed) {
+  // TODO: Make this also work for CUDA. Related issue:
+  // https://github.com/pytorch/pytorch/issues/35078.
+  std::shared_ptr<at::CPUGenerator> curr = at::detail::createCPUGenerator(seed);
+  torch::Tensor mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0);
+  double std = std::sqrt((t1 - t) * (t - t0) / (t1 - t0));
+  torch::Tensor bridge_point = at::normal(mean, std, curr.get());
+  curr.reset();
+  return bridge_point;
+}
+
+torch::Tensor binary_search_with_seed(double t, double t0, double t1,
+                                      torch::Tensor w0, torch::Tensor w1,
+                                      std::uint64_t parent, double tol) {
+  std::seed_seq seq({parent});
+  std::vector<std::uint64_t> seeds(3);
+  seq.generate(seeds.begin(), seeds.end());
+
+  std::uint64_t seedv = seeds[0];
+  std::uint64_t seedl = seeds[1];
+  std::uint64_t seedr = seeds[2];
+
+  auto t_mid = (t0 + t1) / 2;
+  auto w_mid = brownian_bridge_with_seed(t_mid, t0, t1, w0, w1, seedv);
+
+  while (std::abs(t - t_mid) > tol) {
+    if (t < t_mid) {
+      t1 = t_mid;
+      w1 = w_mid;
+      parent = seedl;
+    } else {
+      t0 = t_mid;
+      w0 = w_mid;
+      parent = seedr;
+    }
+
+    std::seed_seq seq({parent});
+    seq.generate(seeds.begin(), seeds.end());
+    seedv = seeds[0];
+    seedl = seeds[1];
+    seedr = seeds[2];
+
+    t_mid = (t0 + t1) / 2;
+    w_mid = brownian_bridge_with_seed(t_mid, t0, t1, w0, w1, seedv);
+  }
+  return w_mid;
+}

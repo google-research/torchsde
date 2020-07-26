@@ -16,5 +16,6 @@ import warnings
 
 try:
     from torchsde.brownian_lib.brownian_path import BrownianPath
+    from torchsde.brownian_lib.brownian_tree import BrownianTree
 except Exception:
     warnings.warn('Failed to import `torchsde._brownian_lib`; falling back to `torchsde.brownian`.')

@@ -13,16 +13,16 @@
 # limitations under the License.
 
 import torch
+from torchsde._brownian_lib import BrownianPath as _BrownianPath
 
 from torchsde.brownian import base
 from torchsde.brownian import utils
-from torchsde._brownian_lib import BrownianPath as _BrownianPath
 
 
 class BrownianPath(base.Brownian):
-    """A thin wrapper around the C++ BrownianPath.
+    """Fast Brownian motion with all queries stored in a std::map and uses local search.
 
-    All previous queries are stored in a map. Trades in memory for speed.
+    Trades in memory for speed.
 
     To use:
     >>> bm = BrownianPath(t0=0.0, w0=torch.zeros(4, 1))

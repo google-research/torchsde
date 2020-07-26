@@ -8,3 +8,5 @@ build/
 dist/
 .vscode/
 *.egg-info/
+benchmarks/plots/
+CMakeLists.txt

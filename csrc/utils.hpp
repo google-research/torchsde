@@ -23,4 +23,15 @@ torch::Tensor brownian_bridge(float t, float t0, float t1, torch::Tensor w0,
 
 std::string format_float(float t, int precision = 3);
 
+torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
+                                        torch::Tensor w0, torch::Tensor w1,
+                                        std::uint64_t seed);
+
+// This function performs binary search with given global entropy and the
+// left anchor (t0, w0) and right anchor (t1, w1). Returns the tensor at a time
+// that is tol-close to query time t.
+torch::Tensor binary_search_with_seed(double t, double t0, double t1,
+                                      torch::Tensor w0, torch::Tensor w1,
+                                      std::uint64_t parent, double tol);
+
 #endif
