@@ -16,7 +16,12 @@ import os
 import platform
 
 import setuptools
-from torch.utils import cpp_extension
+
+try:
+    from torch.utils import cpp_extension
+except ModuleNotFoundError:
+    raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.5.0 at "
+                              "https://pytorch.org.")
 
 extra_compile_args = []
 extra_link_args = []
@@ -29,6 +34,8 @@ if platform.system() == "Darwin":
 brownian_lib_prefix = os.path.join(".", "csrc")
 sources = os.listdir(brownian_lib_prefix)
 sources = filter(lambda x: x.endswith('.cpp'), sources)
+# Don't include C++ tests for now.
+sources = filter(lambda x: 'test' not in x, sources)
 sources = map(lambda x: os.path.join(brownian_lib_prefix, x), sources)
 sources = list(sources)
 

@@ -30,11 +30,54 @@ BrownianTree::BrownianTree(double t0, torch::Tensor w0, double t1,
   this->tol = tol;
   this->cache_depth = cache_depth;
   this->safety = safety;
+
+  auto t00 = t0 - safety;
+  auto w00 = w0 + torch::randn_like(w0) * sqrt(safety);
+  this->prev_cache.insert(std::pair<double, torch::Tensor>(t0, w0));
+  this->prev_cache.insert(std::pair<double, torch::Tensor>(t00, w00));
+
+  auto t11 = t1 + safety;
+  auto w11 = w1 + torch::randn_like(w1) * sqrt(safety);
+  this->post_cache.insert(std::pair<double, torch::Tensor>(t1, w1));
+  this->post_cache.insert(std::pair<double, torch::Tensor>(t11, w11));
 }
 
 torch::Tensor BrownianTree::call(double t) {
-  // TODO: Record last query depth.
-  return binary_search_with_seed(t, t0, t1, w0, w1, entropy, tol);
+  if (t <= t0) {  // Preceed boundary.
+    auto begin = prev_cache.begin();
+    if (t < begin->first) {
+      auto w00 = begin->second;
+      auto w = w00 + torch::randn_like(w00) * std::sqrt(begin->first - t);
+      prev_cache.insert(std::pair<double, torch::Tensor>(t, w));
+      return w;
+    } else if (prev_cache.find(t) != prev_cache.end()) {
+      return prev_cache.at(t);
+    } else {
+      auto lo = prev_cache.lower_bound(t);
+      auto hi = lo--;
+      auto w = brownian_bridge(t, lo->first, hi->first, lo->second, hi->second);
+      prev_cache.insert(std::pair<double, torch::Tensor>(t, w));
+      return w;
+    }
+  } else if (t >= t1) {  // Exceed boundary.
+    auto end = post_cache.rbegin();
+    if (t > end->first) {
+      auto w11 = end->second;
+      auto w = w11 + torch::randn_like(w11) * std::sqrt(t - end->first);
+      post_cache.insert(std::pair<double, torch::Tensor>(t, w));
+      return w;
+    } else if (post_cache.find(t) != post_cache.end()) {
+      return post_cache.at(t);
+    } else {
+      auto lo = post_cache.lower_bound(t);
+      auto hi = lo--;
+      auto w = brownian_bridge(t, lo->first, hi->first, lo->second, hi->second);
+      post_cache.insert(std::pair<double, torch::Tensor>(t, w));
+      return w;
+    }
+  } else {
+    return binary_search_with_seed(t, t0, t1, w0, w1, entropy, tol);
+  }
 }
 
 std::string BrownianTree::repr() const {

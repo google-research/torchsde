@@ -9,6 +9,7 @@ namespace py = pybind11;
 PYBIND11_MODULE(_brownian_lib, m) {
   m.doc() = "Fast Brownian motion based on PyTorch C++ API.";
   py::class_<BrownianPath>(m, "BrownianPath")
+      // Defaults to Python taking ownership of returned object.
       .def(py::init([](float t0, torch::Tensor w0) {
              return new BrownianPath(t0, w0);
            }),
@@ -27,12 +28,16 @@ PYBIND11_MODULE(_brownian_lib, m) {
       .def("get_w_tail", &BrownianPath::get_w_tail);
 
   py::class_<BrownianTree>(m, "BrownianTree")
+      // Defaults to Python taking ownership of returned object.
       .def(
           py::init([](double t0, torch::Tensor w0, double t1, torch::Tensor w1,
                       int entropy, double tol, int cache_depth, double safety) {
             return new BrownianTree(t0, w0, t1, w1, entropy, tol, cache_depth,
                                     safety);
-          }))
+          }),
+          py::arg("t0"), py::arg("w0"), py::arg("t1"), py::arg("w1"),
+          py::arg("entropy"), py::arg("tol"), py::arg("cache_depth"),
+          py::arg("safety"))
       .def("__call__", &BrownianTree::call, py::arg("t"))
       .def("__repr__", &BrownianTree::repr)
       .def("get_t0", &BrownianTree::get_t0)

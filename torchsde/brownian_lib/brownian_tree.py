@@ -61,10 +61,18 @@ class BrownianTree(base.Brownian):
 
         self._t0 = t0
         self._t1 = t1
-        self._bm = _BrownianTree(t0, w0, t1, w1, entropy, tol, cache_depth, safety)
+        self._bm = _BrownianTree(
+            t0=t0,
+            w0=w0,
+            t1=t1,
+            w1=w1,
+            entropy=entropy,
+            tol=tol,
+            cache_depth=cache_depth,
+            safety=safety
+        )
 
     def __call__(self, t):
-        assert self._t0 < t < self._t1
         return self._bm(t)
 
     def __repr__(self):

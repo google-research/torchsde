@@ -23,10 +23,6 @@ limitations under the License.
 class BrownianPath {
  private:
   std::map<float, torch::Tensor> cache;
-  float t_head;
-  float t_tail;
-  torch::Tensor w_head;
-  torch::Tensor w_tail;
 
  public:
   BrownianPath(float t0, torch::Tensor w0);

@@ -26,37 +26,25 @@ limitations under the License.
 
 BrownianPath::BrownianPath(float t0, torch::Tensor w0) {
   cache.insert(std::pair<float, torch::Tensor>(t0, w0));
-  t_head = t0;
-  t_tail = t0;
-  w_head = w0;
-  w_tail = w0;
 }
 
 BrownianPath::BrownianPath(std::map<float, torch::Tensor> data) {
-  for (auto const& x : data) {
-    cache.insert(std::pair<float, torch::Tensor>(x.first, x.second));
-  }
-
-  auto head = data.begin();
-  auto tail = data.rbegin();
-  t_head = head->first;
-  t_tail = tail->first;
-  w_head = head->second;
-  w_tail = tail->second;
+  cache = data;
 }
 
 torch::Tensor BrownianPath::call(float t) {
-  if (t > t_tail) {
-    auto w = w_tail + torch::randn_like(w_tail) * sqrt(t - t_tail);
+  auto head = cache.begin();
+  auto tail = cache.rbegin();
+
+  if (t > tail->first) {
+    auto w =
+        tail->second + torch::randn_like(tail->second) * sqrt(t - tail->first);
     cache.insert(std::pair<float, torch::Tensor>(t, w));
-    t_tail = t;
-    w_tail = w;
     return w;
-  } else if (t < t_head) {
-    auto w = w_head + torch::randn_like(w_head) * sqrt(t_head - t);
+  } else if (t < head->first) {
+    auto w =
+        head->second + torch::randn_like(head->second) * sqrt(head->first - t);
     cache.insert(std::pair<float, torch::Tensor>(t, w));
-    t_head = t;
-    w_head = w;
     return w;
   } else if (cache.find(t) != cache.end()) {
     return cache.at(t);
@@ -71,27 +59,23 @@ torch::Tensor BrownianPath::call(float t) {
 
 void BrownianPath::insert(float t, torch::Tensor w) {
   cache.insert(std::pair<float, torch::Tensor>(t, w));
-
-  if (t < t_head) {
-    t_head = t;
-    w_head = w;
-  } else if (t > t_tail) {
-    t_tail = t;
-    w_tail = w;
-  }
 }
 
 std::string BrownianPath::repr() const {
+  float t_head = cache.begin()->first;
+  float t_tail = cache.rbegin()->first;
   return "BrownianPath(t0=" + format_float(t_head, 3) +
          ", t1=" + format_float(t_tail, 3) + ")";
 }
 
 std::map<float, torch::Tensor> BrownianPath::get_cache() const { return cache; }
 
-float BrownianPath::get_t_head() const { return t_head; }
+float BrownianPath::get_t_head() const { return cache.begin()->first; }
 
-float BrownianPath::get_t_tail() const { return t_tail; }
+float BrownianPath::get_t_tail() const { return cache.rbegin()->first; }
 
-torch::Tensor BrownianPath::get_w_head() const { return w_head; }
+torch::Tensor BrownianPath::get_w_head() const { return cache.begin()->second; }
 
-torch::Tensor BrownianPath::get_w_tail() const { return w_tail; }
+torch::Tensor BrownianPath::get_w_tail() const {
+  return cache.rbegin()->second;
+}

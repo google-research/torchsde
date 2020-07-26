@@ -31,6 +31,9 @@ class BrownianTree {
   int cache_depth;
   double safety;
 
+  std::map<double, torch::Tensor> prev_cache;
+  std::map<double, torch::Tensor> post_cache;
+
  public:
   BrownianTree(double t0, torch::Tensor w0, double t1, torch::Tensor w1,
                int entropy, double tol, int cache_depth, double safety);
