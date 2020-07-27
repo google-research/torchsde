@@ -47,6 +47,7 @@ class BrownianTree(base.Brownian):
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
                  t1: Optional[Union[float, torch.Tensor]] = None,
+                 w1: Optional[torch.Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
                  pool_size: int = 24,
@@ -61,6 +62,7 @@ class BrownianTree(base.Brownian):
             t0: Initial time.
             w0: Initial state.
             t1: Terminal time.
+            w1: Terminal state.
             entropy: Global seed, defaults to `None` for random entropy.
             tol: Error tolerance before the binary search is terminated; the search depth ~ log2(tol).
             pool_size: Size of the pooled entropy; should be larger than max depth of queries.
@@ -81,7 +83,9 @@ class BrownianTree(base.Brownian):
         if t0 > t1:
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
         t0, t1 = float(t0), float(t1)
-        w1 = w0 + torch.randn_like(w0) * math.sqrt(t1 - t0)
+
+        if w1 is None:
+            w1 = w0 + torch.randn_like(w0) * math.sqrt(t1 - t0)
 
         self._t0 = t0
         self._t1 = t1

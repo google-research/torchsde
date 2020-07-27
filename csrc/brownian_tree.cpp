@@ -45,6 +45,32 @@ BrownianTree::BrownianTree(double t0, torch::Tensor w0, double t1, int entropy,
   this->safety = safety;
 }
 
+BrownianTree::BrownianTree(double t0, torch::Tensor w0, double t1,
+                           torch::Tensor w1, int entropy, double tol,
+                           int cache_depth, double safety) {
+  // Main cache.
+  seeds = std::vector<std::uint64_t>(1, entropy);
+  cache.insert(std::pair<double, torch::Tensor>(t0, w0));
+  cache.insert(std::pair<double, torch::Tensor>(t1, w1));
+
+  // Head cache.
+  auto t00 = t0 - safety;
+  auto w00 = w0 + torch::randn_like(w0) * sqrt(safety);
+  cache_prev.insert(std::pair<double, torch::Tensor>(t0, w0));
+  cache_prev.insert(std::pair<double, torch::Tensor>(t00, w00));
+
+  // Tail cache.
+  auto t11 = t1 + safety;
+  auto w11 = w1 + torch::randn_like(w1) * sqrt(safety);
+  cache_post.insert(std::pair<double, torch::Tensor>(t1, w1));
+  cache_post.insert(std::pair<double, torch::Tensor>(t11, w11));
+
+  this->entropy = entropy;
+  this->tol = tol;
+  this->cache_depth = cache_depth;
+  this->safety = safety;
+}
+
 BrownianTree::BrownianTree(int entropy, double tol, double cache_depth,
                            double safety, std::map<double, torch::Tensor> cache,
                            std::map<double, torch::Tensor> cache_prev,

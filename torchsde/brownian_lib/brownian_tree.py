@@ -40,6 +40,7 @@ class BrownianTree(base.Brownian):
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
                  t1: Optional[Union[float, torch.Tensor]] = None,
+                 w1: Optional[torch.Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
                  cache_depth: int = 9,
@@ -65,15 +66,29 @@ class BrownianTree(base.Brownian):
 
         self._t0 = t0
         self._t1 = t1
-        self._bm = _BrownianTree(
-            t0=t0,
-            w0=w0,
-            t1=t1,
-            entropy=entropy,
-            tol=tol,
-            cache_depth=cache_depth,
-            safety=safety
-        )
+        if w1 is None:
+            self._bm = _BrownianTree(
+                t0=t0,
+                w0=w0,
+                t1=t1,
+                entropy=entropy,
+                tol=tol,
+                cache_depth=cache_depth,
+                safety=safety
+            )
+        else:
+            # This constructor is used for testing.
+            self._bm = _BrownianTree(
+                t0=t0,
+                w0=w0,
+                t1=t1,
+                w1=w1,
+                entropy=entropy,
+                tol=tol,
+                cache_depth=cache_depth,
+                safety=safety
+            )
+
         self.entropy = entropy
         self.tol = tol
         self.cache_depth = cache_depth

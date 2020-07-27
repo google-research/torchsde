@@ -51,6 +51,16 @@ PYBIND11_MODULE(_brownian_lib, m) {
            py::arg("entropy"), py::arg("tol"), py::arg("cache_depth"),
            py::arg("safety"), py::arg("cache"), py::arg("cache_prev"),
            py::arg("cache_post"), py::arg("seeds"))
+      // For testing correctness.
+      .def(
+          py::init([](double t0, torch::Tensor w0, double t1, torch::Tensor w1,
+                      int entropy, double tol, int cache_depth, double safety) {
+            return new BrownianTree(t0, w0, t1, w1, entropy, tol, cache_depth,
+                                    safety);
+          }),
+          py::arg("t0"), py::arg("w0"), py::arg("t1"), py::arg("w1"),
+          py::arg("entropy"), py::arg("tol"), py::arg("cache_depth"),
+          py::arg("safety"))
       .def("__call__", &BrownianTree::call, py::arg("t"))
       .def("__repr__", &BrownianTree::repr)
       .def("get_cache", &BrownianTree::get_cache)

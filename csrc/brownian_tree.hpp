@@ -44,6 +44,10 @@ class BrownianTree {
                std::map<double, torch::Tensor> cache_post,
                std::vector<std::uint64_t> seeds);
 
+  // This constructor is here mainly to test correctness.
+  BrownianTree(double t0, torch::Tensor w0, double t1, torch::Tensor w1,
+               int entropy, double tol, int cache_depth, double safety);
+
   torch::Tensor call(double t);
 
   std::string repr() const;
