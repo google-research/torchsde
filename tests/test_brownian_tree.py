@@ -45,11 +45,10 @@ class TestBrownianTree(TorchTestCase):
     def _setUp(self, batch_size, device=None):
         t0, t1 = torch.tensor([0., 1.]).to(device)
         w0 = torch.zeros(batch_size, D).to(device=device)
-        w1 = torch.randn(batch_size, D).to(device=device)
         t = torch.rand([]).to(device)
 
         self.t = t
-        self.bm = BrownianTree(t0=t0, t1=t1, w0=w0, w1=w1, entropy=0)
+        self.bm = BrownianTree(t0=t0, t1=t1, w0=w0, entropy=0)
 
     def test_basic_cpu(self):
         self._setUp(batch_size=SMALL_BATCH_SIZE, device=torch.device('cpu'))

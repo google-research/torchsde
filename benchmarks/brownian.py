@@ -40,7 +40,7 @@ def _time_query(bm, ts):
     return time.perf_counter() - now
 
 
-def _compare(w0, w1, ts, msg=''):
+def _compare(w0, ts, msg=''):
     bm = brownian_lib.BrownianPath(t0=t0, w0=w0)
     bp_cpp_time = _time_query(bm, ts)
     logging.warning(f'{msg} (brownian_lib.BrownianPath): {bp_cpp_time:.4f}')
@@ -49,11 +49,11 @@ def _compare(w0, w1, ts, msg=''):
     bp_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
 
-    bm = torchsde.brownian_lib.BrownianTree(t0=t0, w0=w0, t1=t1, w1=w1, tol=1e-5)
+    bm = torchsde.brownian_lib.BrownianTree(t0=t0, w0=w0, t1=t1, tol=1e-5)
     bt_cpp_time = _time_query(bm, ts)
     logging.warning(f'{msg} (brownian_lib.BrownianTree): {bt_cpp_time:.4f}')
 
-    bm = torchsde.BrownianTree(t0=t0, w0=w0, t1=t1, w1=w1, tol=1e-5)
+    bm = torchsde.BrownianTree(t0=t0, w0=w0, t1=t1, tol=1e-5)
     bt_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
 
@@ -64,16 +64,13 @@ def sequential_access():
     ts = torch.linspace(t0, t1, steps=steps)
 
     w0 = torch.zeros(small_batch_size, small_d).to(device)
-    w1 = torch.randn(small_batch_size, small_d).to(device)
-    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s = _compare(w0, w1, ts, msg='small sequential access')
+    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s = _compare(w0, ts, msg='small sequential access')
 
     w0 = torch.zeros(large_batch_size, large_d).to(device)
-    w1 = torch.randn(large_batch_size, large_d).to(device)
-    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l = _compare(w0, w1, ts, msg='large sequential access')
+    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l = _compare(w0, ts, msg='large sequential access')
 
     w0 = torch.zeros(huge_batch_size, huge_d).to(device)
-    w1 = torch.randn(huge_batch_size, huge_d).to(device)
-    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h = _compare(w0, w1, ts, msg="huge sequential access")
+    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h = _compare(w0, ts, msg="huge sequential access")
 
     img_path = os.path.join('.', 'benchmarks', 'plots', 'sequential_access.png')
     if not os.path.exists(os.path.dirname(img_path)):
@@ -99,16 +96,13 @@ def random_access():
     ts = torch.empty(steps).uniform_(t0, t1)
 
     w0 = torch.zeros(small_batch_size, small_d).to(device)
-    w1 = torch.randn(small_batch_size, small_d).to(device)
-    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s = _compare(w0, w1, ts, msg='small random access')
+    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s = _compare(w0, ts, msg='small random access')
 
     w0 = torch.zeros(large_batch_size, large_d).to(device)
-    w1 = torch.randn(large_batch_size, large_d).to(device)
-    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l = _compare(w0, w1, ts, msg='large random access')
+    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l = _compare(w0, ts, msg='large random access')
 
     w0 = torch.zeros(huge_batch_size, huge_d).to(device)
-    w1 = torch.randn(huge_batch_size, huge_d).to(device)
-    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h = _compare(w0, w1, ts, msg="huge random access")
+    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h = _compare(w0, ts, msg="huge random access")
 
     img_path = os.path.join('.', 'benchmarks', 'plots', 'random_access.png')
     if not os.path.exists(os.path.dirname(img_path)):

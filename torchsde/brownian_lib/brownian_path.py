@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Union
+
 import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath
 
@@ -33,7 +35,10 @@ class BrownianPath(base.Brownian):
             [-0.3889]])
     """
 
-    def __init__(self, t0, w0: torch.Tensor, **kwargs):
+    def __init__(self,
+                 t0: Union[float, torch.Tensor],
+                 w0: torch.Tensor,
+                 **kwargs):
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')

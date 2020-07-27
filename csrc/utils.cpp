@@ -22,8 +22,9 @@ limitations under the License.
 #include <random>
 #include <sstream>
 
-torch::Tensor brownian_bridge(float t, float t0, float t1, torch::Tensor w0,
-                              torch::Tensor w1) {
+torch::Tensor brownian_bridge(float t, float t0, float t1,
+                              torch::Tensor const &w0,
+                              torch::Tensor const &w1) {
   auto mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0);
   auto std = std::sqrt((t1 - t) * (t - t0) / (t1 - t0));
   return mean + torch::randn_like(mean) * std;
@@ -36,7 +37,8 @@ std::string format_float(float t, int precision) {
 }
 
 torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
-                                        torch::Tensor w0, torch::Tensor w1,
+                                        torch::Tensor const &w0,
+                                        torch::Tensor const &w1,
                                         std::uint64_t seed) {
   // TODO: Make this also work for CUDA. Related issue:
   // https://github.com/pytorch/pytorch/issues/35078.
@@ -50,8 +52,8 @@ torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
 
 torch::Tensor binary_search_with_seed(double t, double t0, double t1,
                                       torch::Tensor w0, torch::Tensor w1,
-                                      std::uint64_t parent, double tol) {
-  std::seed_seq seq({parent});
+                                      std::uint64_t root, double tol) {
+  std::seed_seq seq({root});
   std::vector<std::uint64_t> seeds(3);
   seq.generate(seeds.begin(), seeds.end());
 
@@ -66,14 +68,14 @@ torch::Tensor binary_search_with_seed(double t, double t0, double t1,
     if (t < t_mid) {
       t1 = t_mid;
       w1 = w_mid;
-      parent = seedl;
+      root = seedl;
     } else {
       t0 = t_mid;
       w0 = w_mid;
-      parent = seedr;
+      root = seedr;
     }
 
-    std::seed_seq seq({parent});
+    std::seed_seq seq({root});
     seq.generate(seeds.begin(), seeds.end());
     seedv = seeds[0];
     seedl = seeds[1];
@@ -83,4 +85,22 @@ torch::Tensor binary_search_with_seed(double t, double t0, double t1,
     w_mid = brownian_bridge_with_seed(t_mid, t0, t1, w0, w1, seedv);
   }
   return w_mid;
+}
+
+void populate_cache(double t0, torch::Tensor const &w0, double t1, int entropy,
+                    int cache_depth, std::map<double, torch::Tensor> &cache,
+                    std::vector<std::uint64_t> &seeds) {
+  auto k = std::pow(2, cache_depth);
+  double dt = (t1 - t0) / k;
+
+  auto t = t0;
+  auto w = w0;
+  for (int i = 0; i <= k; i++) {
+    cache.insert(std::pair<double, torch::Tensor>(t, w));
+    t = t + dt;
+    w = w + torch::randn_like(w) * sqrt(dt);
+  }
+
+  std::seed_seq seq({entropy});
+  seq.generate(seeds.begin(), seeds.end());
 }

@@ -18,13 +18,14 @@ limitations under the License.
 
 #include <torch/torch.h>
 
-torch::Tensor brownian_bridge(float t, float t0, float t1, torch::Tensor w0,
-                              torch::Tensor w1);
+torch::Tensor brownian_bridge(float t, float t0, float t1,
+                              torch::Tensor const &w0, torch::Tensor const &w1);
 
 std::string format_float(float t, int precision = 3);
 
 torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
-                                        torch::Tensor w0, torch::Tensor w1,
+                                        torch::Tensor const &w0,
+                                        torch::Tensor const &w1,
                                         std::uint64_t seed);
 
 // This function performs binary search with given global entropy and the
@@ -32,6 +33,13 @@ torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
 // that is tol-close to query time t.
 torch::Tensor binary_search_with_seed(double t, double t0, double t1,
                                       torch::Tensor w0, torch::Tensor w1,
-                                      std::uint64_t parent, double tol);
+                                      std::uint64_t root, double tol);
+
+// This function populates the cache for BrownianTree. Two things are updated:
+// 1) (t, w) pairs in the map, and 2) seeds for each small interval between two
+// timestamps.
+void populate_cache(double t0, torch::Tensor const &w0, double t1, int entropy,
+                    int cache_depth, std::map<double, torch::Tensor> &cache,
+                    std::vector<std::uint64_t> &seeds);
 
 #endif

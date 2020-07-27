@@ -33,7 +33,7 @@ class Brownian(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def to(self, *args):
+    def to(self, *args, **kwargs):
         pass
 
     @property

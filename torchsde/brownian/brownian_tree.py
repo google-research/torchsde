@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import copy
 import math
+from typing import Union, Optional
 
 import blist
 import numpy as np
@@ -42,18 +43,24 @@ class BrownianTree(base.Brownian):
             [-0.3889]])
     """
 
-    def __init__(self, t0, w0: torch.Tensor, t1=None, w1=None, entropy=None, tol=1e-6, pool_size=24, cache_depth=9,
-                 safety=None):
+    def __init__(self,
+                 t0: Union[float, torch.Tensor],
+                 w0: torch.Tensor,
+                 t1: Optional[Union[float, torch.Tensor]] = None,
+                 entropy: Optional[int] = None,
+                 tol: float = 1e-6,
+                 pool_size: int = 24,
+                 cache_depth: int = 9,
+                 safety: Optional[float] = None):
         """Initialize the Brownian tree.
 
         The random value generation process exploits the parallel random number paradigm and uses
         `numpy.random.SeedSequence`. The default generator is PCG64 (used by `default_rng`).
 
         Args:
-            t0: float or torch.Tensor for initial time.
-            w0: torch.Tensor for initial state.
-            t1: float or torch.Tensor for terminal time.
-            w1: torch.Tensor for terminal state.
+            t0: Initial time.
+            w0: Initial state.
+            t1: Terminal time.
             entropy: Global seed, defaults to `None` for random entropy.
             tol: Error tolerance before the binary search is terminated; the search depth ~ log2(tol).
             pool_size: Size of the pooled entropy; should be larger than max depth of queries.
@@ -67,7 +74,6 @@ class BrownianTree(base.Brownian):
         super(BrownianTree, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
-
         if t1 is None:
             t1 = t0 + 1.0
         if not utils.is_scalar(t1):
@@ -75,9 +81,7 @@ class BrownianTree(base.Brownian):
         if t0 > t1:
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
         t0, t1 = float(t0), float(t1)
-
-        if w1 is None:
-            w1 = w0 + torch.randn_like(w0) * math.sqrt(t1 - t0)
+        w1 = w0 + torch.randn_like(w0) * math.sqrt(t1 - t0)
 
         self._t0 = t0
         self._t1 = t1
@@ -223,4 +227,6 @@ def _create_cache(t0, t1, w0, w1, entropy, pool_size, k):
         ws = new_ws
         seeds = new_seeds
 
+    # ts and ws have 2 ** k - 1 + 2 entries.
+    # seeds have 2 ** k entries.
     return ts, ws, seeds

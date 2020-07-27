@@ -17,6 +17,7 @@ from __future__ import division
 from __future__ import print_function
 
 import math
+from typing import Union
 
 import blist
 import numpy as np
@@ -40,12 +41,12 @@ class BrownianPath(base.Brownian):
             [-0.3889]])
     """
 
-    def __init__(self, t0, w0: torch.Tensor, window_size=8):
+    def __init__(self, t0: Union[float, torch.Tensor], w0: torch.Tensor, window_size: int = 8):
         """Initialize Brownian path.
 
         Args:
-            t0: float or torch.Tensor for initial time.
-            w0: torch.Tensor for initial state.
+            t0: Initial time.
+            w0: Initial state.
             window_size: Size of the window around the last query for local search.
         """
         super(BrownianPath, self).__init__()

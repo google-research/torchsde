@@ -22,24 +22,24 @@ limitations under the License.
 
 class BrownianPath {
  private:
-  std::map<float, torch::Tensor> cache;
+  std::map<double, torch::Tensor> cache;
 
  public:
-  BrownianPath(float t0, torch::Tensor w0);
+  BrownianPath(double t0, torch::Tensor w0);
 
-  BrownianPath(std::map<float, torch::Tensor> data);
+  BrownianPath(std::map<double, torch::Tensor> data);
 
-  torch::Tensor call(float t);
+  torch::Tensor call(double t);
 
-  void insert(float t, torch::Tensor w);
+  void insert(double t, torch::Tensor w);
 
   std::string repr() const;
 
-  std::map<float, torch::Tensor> get_cache() const;
+  std::map<double, torch::Tensor> get_cache() const;
 
-  float get_t_head() const;
+  double get_t_head() const;
 
-  float get_t_tail() const;
+  double get_t_tail() const;
 
   torch::Tensor get_w_head() const;
 
