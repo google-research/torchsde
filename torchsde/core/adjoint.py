@@ -212,35 +212,38 @@ def sdeint_adjoint(sde,
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:
-        sde: An object with the methods `f` and `g` representing the drift and diffusion functions. The methods
-            should take in time `t` and state `y` and return a tensor or tuple of tensors. The output signature of
-            `f` should match `y`. The output of `g` should either be a single (or a tuple) of tensors of size
-            (batch_size, d) for diagonal noise problems or (batch_size, d, m) for other problem types,
-            where d is the dimensionality of state and m is the dimensionality of the Brownian motion.
-        y0: A single (or a tuple) of tensors of size (batch_size, d).
-        ts: A list or 1-D tensor in non-descending order.
-        bm: A `BrownianPath` or `BrownianTree` object. Defaults to `BrownianPath` for diagonal noise residing on CPU.
-        logqp: If True, also return the Radon-Nikodym derivative, which is a log-ratio penalty across the whole path.
-        method: Numerical integration method for forward solve, one of (`euler`, `milstein`, `srk`). Defaults to `srk`.
-        adjoint_method: Numerical integration method for backward adjoint solve, one of (`euler`, `milstein`, `srk`).
-            Defaults to `milstein`.
-        dt: A float for the constant step size or initial step size for adaptive time-stepping.
+        sde: An object with the methods `f` and `g` representing the drift and
+            diffusion functions. The output of `g` should either be a single
+            (or a tuple of) tensor(s) of size (batch_size, d) for diagonal noise
+            SDEs or (batch_size, d, m) for SDEs of other noise type, where d is
+            the dimensionality of state and m is the dimensionality of the
+            Brownian motion.
+        y0: A single (or a tuple of) tensor(s) of size (batch_size, d).
+        ts: A list or size (T,) tensor in non-descending order.
+        bm: A `BrownianPath` or `BrownianTree` object.
+            Defaults to `BrownianPath` for diagonal noise residing on CPU.
+        logqp: If True, also return the log-ratio penalty across the whole path.
+        method: Numerical integration method.
+        adjoint_method: Numerical integration method of backward adjoint solve.
+        dt: The constant step size or initial step size for adaptive stepping.
         adaptive: If True, use adaptive time-stepping.
         rtol: Relative tolerance.
         atol: Absolute tolerance.
-        dt_min: Minimum step size for adaptive time-stepping.
-        options: Optional dict of configuring options for the indicated integration method.
-        adjoint_options: Optional dict of configuring options for the indicated integration method;
-            used for backward solve.
-        names: Optional dict of method names to use as drift, diffusion, and prior drift. Expected keys are `drift`,
-            `diffusion`, `prior_drift`.
+        dt_min: Minimum step size for adaptive stepping.
+        options: Optional dict of options for the indicated integration method.
+        adjoint_options: Optional dict of options for the indicated integration
+            method of the backward adjoint solve.
+        names: Optional dict of method names for drift, diffusion, and prior
+            drift. Expected keys are "drift", "diffusion", and "prior_drift".
 
     Returns:
-        A single state tensor of size (T, batch_size, d) or a tuple of such tensors. Also returns a single log-ratio
-        tensor of size (T - 1, batch_size) or a tuple of such tensors, if logqp=True.
+        A single state tensor of size (T, batch_size, d) or a tuple of such
+        tensors. Also returns a single log-ratio tensor of size
+        (T - 1, batch_size) or a tuple of such tensors, if `logqp`=True.
 
     Raises:
-        ValueError: An error occurred due to unrecognized noise type/method, or sde module missing required methods.
+        ValueError: An error occurred due to unrecognized noise type/method,
+            or `sde` is missing required methods.
     """
     if not isinstance(sde, nn.Module):
         raise ValueError('sde is required to be an instance of nn.Module.')
