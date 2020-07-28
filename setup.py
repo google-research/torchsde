@@ -41,7 +41,7 @@ sources = list(sources)
 
 setuptools.setup(
     name="torchsde",
-    version="0.1.0",
+    version="0.1.1",
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
