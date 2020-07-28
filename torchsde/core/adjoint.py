@@ -16,6 +16,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from typing import Tuple, Union, Optional, List, Dict, Any
+
 import torch
 from torch import nn
 
@@ -24,6 +26,7 @@ try:
 except Exception:
     from torchsde.brownian.brownian_path import BrownianPath
 
+from torchsde.brownian import base
 from torchsde.core import base_sde
 from torchsde.core import methods
 from torchsde.core import misc
@@ -191,9 +194,21 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         return (*adj_y, None, None, adj_params, None, None, None, None, None, None, None, None, None, None)
 
 
-def sdeint_adjoint(sde, y0, ts, bm=None, logqp=False,
-                   method='srk', adjoint_method='milstein', dt=1e-3, adaptive=False, rtol=1e-6, atol=1e-5, dt_min=1e-4,
-                   options=None, adjoint_options=None, names=None):
+def sdeint_adjoint(sde,
+                   y0: Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]],
+                   ts: Union[torch.Tensor, Tuple[float, ...], List[float]],
+                   bm: Optional[base.Brownian] = None,
+                   logqp: Optional[bool] = False,
+                   method: Optional[str] = 'srk',
+                   adjoint_method: Optional[str] = 'milstein',
+                   dt: Optional[float] = 1e-3,
+                   adaptive: Optional[bool] = False,
+                   rtol: Optional[float] = 1e-6,
+                   atol: Optional[float] = 1e-5,
+                   dt_min: Optional[float] = 1e-4,
+                   options: Optional[Dict[str, Any]] = None,
+                   adjoint_options: Optional[Dict[str, Any]] = None,
+                   names: Optional[Dict[str, str]] = None):
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:
