@@ -15,9 +15,9 @@
 """Compare the speed of 4 Brownian motion variants on problems of different size."""
 import argparse
 import logging
+import os
 import time
 
-import os
 import matplotlib.pyplot as plt
 import numpy.random as npr
 import torch
@@ -30,6 +30,31 @@ reps, steps = 3, 100
 small_batch_size, small_d = 128, 5
 large_batch_size, large_d = 256, 128
 huge_batch_size, huge_d = 512, 256
+
+
+def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
+    if plots is None: plots = ()
+    if scatters is None: scatters = ()
+    if options is None: options = {}
+
+    plt.figure()
+    if 'xscale' in options: plt.xscale(options['xscale'])
+    if 'yscale' in options: plt.yscale(options['yscale'])
+    if 'xlabel' in options: plt.xlabel(options['xlabel'])
+    if 'ylabel' in options: plt.ylabel(options['ylabel'])
+    if 'title' in options: plt.title(options['title'])
+
+    for entry in plots:
+        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        plt.plot(entry['x'], entry['y'], **kwargs)
+    for entry in scatters:
+        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        plt.scatter(entry['x'], entry['y'], **kwargs)
+
+    if len(plots) > 0 or len(scatters) > 0: plt.legend()
+    plt.tight_layout()
+    plt.savefig(img_path)
+    plt.close()
 
 
 def _time_query(bm, ts):
@@ -77,19 +102,23 @@ def sequential_access():
         os.makedirs(os.path.dirname(img_path))
 
     xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
-    plt.figure()
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.plot(xaxis, [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], label='bp_cpp', marker='x')
-    plt.plot(xaxis, [bp_py_time_s, bp_py_time_l, bp_py_time_h], label='bp_py', marker='x')
-    plt.plot(xaxis, [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], label='bt_cpp', marker='x')
-    plt.plot(xaxis, [bt_py_time_s, bt_py_time_l, bt_py_time_h], label='bt_py', marker='x')
-    plt.legend()
-    plt.xlabel('size of tensor')
-    plt.ylabel(f'wall time on {device}')
-    plt.title('sequential access')
-    plt.savefig(img_path)
-    plt.close()
+
+    swiss_knife_plotter(
+        img_path,
+        plots=[
+            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
+        ],
+        options={
+            'xscale': 'log',
+            'yscale': 'log',
+            'xlabel': 'size of tensor',
+            'ylabel': f'wall time on {device}',
+            'title': 'sequential access'
+        }
+    )
 
 
 def random_access():
@@ -109,24 +138,131 @@ def random_access():
         os.makedirs(os.path.dirname(img_path))
 
     xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
-    plt.figure()
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.plot(xaxis, [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], label='bp_cpp', marker='x')
-    plt.plot(xaxis, [bp_py_time_s, bp_py_time_l, bp_py_time_h], label='bp_py', marker='x')
-    plt.plot(xaxis, [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], label='bt_cpp', marker='x')
-    plt.plot(xaxis, [bt_py_time_s, bt_py_time_l, bt_py_time_h], label='bt_py', marker='x')
-    plt.legend()
-    plt.xlabel('size of tensor')
-    plt.ylabel(f'wall time on {device}')
-    plt.title('random access')
-    plt.savefig(img_path)
-    plt.close()
+
+    swiss_knife_plotter(
+        img_path,
+        plots=[
+            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
+        ],
+        options={
+            'xscale': 'log',
+            'yscale': 'log',
+            'xlabel': 'size of tensor',
+            'ylabel': f'wall time on {device}',
+            'title': 'random access'
+        }
+    )
+
+
+class SDE(torchsde.SDEIto):
+    def __init__(self):
+        super(SDE, self).__init__(noise_type="diagonal")
+
+    def f(self, t, y):
+        return y
+
+    def g(self, t, y):
+        return torch.exp(-y)
+
+
+def _time_sdeint(sde, y0, ts, bm):
+    now = time.perf_counter()
+    with torch.no_grad():
+        torchsde.sdeint(sde, y0, ts, bm, method='euler')
+    return time.perf_counter() - now
+
+
+def _time_sdeint_bp(sde, y0, ts, bm):
+    now = time.perf_counter()
+    sde.zero_grad()
+    y0 = y0.clone().requires_grad_(True)
+    ys = torchsde.sdeint(sde, y0, ts, bm, method='euler')
+    ys.sum().backward()
+    return time.perf_counter() - now
+
+
+def _time_sdeint_adjoint(sde, y0, ts, bm):
+    now = time.perf_counter()
+    sde.zero_grad()
+    y0 = y0.clone().requires_grad_(True)
+    ys = torchsde.sdeint_adjoint(sde, y0, ts, bm, method='euler')
+    ys.sum().backward()
+    return time.perf_counter() - now
+
+
+def _compare_sdeint(w0, sde, y0, ts, func, msg=''):
+    bm = torchsde.brownian_lib.BrownianPath(t0, w0)
+    bp_cpp_time = func(sde, y0, ts, bm)
+    logging.warning(f'{msg} (brownian_lib.BrownianPath): {bp_cpp_time:.4f}')
+
+    bm = torchsde.BrownianPath(t0, w0)
+    bp_py_time = func(sde, y0, ts, bm)
+    logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
+
+    bm = torchsde.brownian_lib.BrownianTree(t0, w0)
+    bt_cpp_time = func(sde, y0, ts, bm)
+    logging.warning(f'{msg} (brownian_lib.BrownianTree): {bt_cpp_time:.4f}')
+
+    bm = torchsde.BrownianTree(t0, w0)
+    bt_py_time = func(sde, y0, ts, bm)
+    logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
+
+    return bp_cpp_time, bp_py_time, bt_cpp_time, bt_py_time
+
+
+def solver_access(func=_time_sdeint):
+    ts = torch.linspace(t0, t1, steps)
+    sde = SDE().to(device)
+
+    y0 = w0 = torch.zeros(small_batch_size, small_d).to(device)
+    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s = _compare_sdeint(w0, sde, y0, ts, func, msg='small')
+
+    y0 = w0 = torch.zeros(large_batch_size, large_d).to(device)
+    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l = _compare_sdeint(w0, sde, y0, ts, func, msg='large')
+
+    y0 = w0 = torch.zeros(huge_batch_size, huge_d).to(device)
+    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h = _compare_sdeint(w0, sde, y0, ts, func, msg='huge')
+
+    name = {
+        _time_sdeint: 'sdeint',
+        _time_sdeint_bp: 'sdeint-backprop-solver',
+        _time_sdeint_adjoint: 'sdeint-backprop-adjoint'
+    }[func]
+
+    img_path = os.path.join('.', 'benchmarks', 'plots', f'{name}.png')
+    if not os.path.exists(os.path.dirname(img_path)):
+        os.makedirs(os.path.dirname(img_path))
+
+    xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
+
+    swiss_knife_plotter(
+        img_path,
+        plots=[
+            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
+            {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
+        ],
+        options={
+            'xscale': 'log',
+            'yscale': 'log',
+            'xlabel': 'size of tensor',
+            'ylabel': f'wall time on {device}',
+            'title': name
+        }
+    )
 
 
 def main():
     sequential_access()
     random_access()
+
+    solver_access(func=_time_sdeint)
+    solver_access(func=_time_sdeint_bp)
+    solver_access(func=_time_sdeint_adjoint)
 
 
 if __name__ == "__main__":
