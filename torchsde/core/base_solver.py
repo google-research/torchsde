@@ -85,22 +85,22 @@ class GenericSDESolver(SDESolver):
             g_eval = self.sde.g(t, y)
             h_eval = self.sde.h(t, y)
             u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
-            logqp1 = tuple(
+            logqp1 = [
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
-            )
+            ]
         else:
             f_eval = self.sde.f(t, y)
             g_eval = self.sde.g(t, y)
             h_eval = self.sde.h(t, y)
 
-            ginv_eval = tuple(torch.pinverse(g_eval_) for g_eval_ in g_eval)
+            ginv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
             u_eval = misc.seq_batch_mvp(ms=ginv_eval, vs=u_eval)
-            logqp1 = tuple(
+            logqp1 = [
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
-            )
+            ]
         return t1, y1, logqp1
 
     def integrate(self, ts):
@@ -176,7 +176,7 @@ class GenericSDESolver(SDESolver):
         prev_t, prev_y = curr_t, curr_y
 
         for next_t in ts[1:]:
-            curr_logqp = tuple(0. for _ in y0)
+            curr_logqp = [0. for _ in y0]
             prev_logqp = curr_logqp
             while curr_t < next_t:
                 if adaptive:
@@ -214,6 +214,6 @@ class GenericSDESolver(SDESolver):
             for logqp_i, curr_logqp_i in zip(logqp, curr_logqp):
                 logqp_i.append(curr_logqp_i)
 
-        ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
-        logqp = tuple(torch.stack(logqp_i, dim=0) for logqp_i in logqp)
+        ans = [torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0))]
+        logqp = [torch.stack(logqp_i, dim=0) for logqp_i in logqp]
         return (*ans, *logqp)

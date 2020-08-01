@@ -17,26 +17,27 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+import operator
 import types
 
 import torch
 
 
 def flatten(sequence):
-    flat = tuple(p.reshape(-1) for p in sequence)
+    flat = [p.reshape(-1) for p in sequence]
     return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
 
 
 def flatten_convert_none_to_zeros(sequence, like_sequence):
-    flat = tuple(
+    flat = [
         p.reshape(-1) if p is not None else torch.zeros_like(q).flatten()
         for p, q in zip(sequence, like_sequence)
-    )
+    ]
     return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
 
 
 def convert_none_to_zeros(sequence, like_sequence):
-    return tuple(torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence))
+    return [torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)]
 
 
 def make_seq_requires_grad(sequence):
@@ -48,12 +49,12 @@ def make_seq_requires_grad(sequence):
     Returns:
         An Interable of tensors that all require gradients.
     """
-    return tuple(p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence)
+    return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
 
 
 def make_seq_requires_grad_y(sequence, y):
     zero = y[0].sum() * 0.
-    return tuple(p if p.requires_grad else p + zero for p in sequence)
+    return [p if p.requires_grad else p + zero for p in sequence]
 
 
 def is_increasing(t):
@@ -64,19 +65,19 @@ def is_nan(t):
     return torch.any(torch.isnan(t))
 
 
-def seq_add(*tuples):
-    return tuple(functools.reduce(lambda x, y: x + y, tuples_) for tuples_ in zip(*tuples))
+def seq_add(*seqs):
+    return [sum(seq) for seq in zip(*seqs)]
 
 
-def seq_mul(*tuples):
-    return tuple(functools.reduce(lambda x, y: x * y, tuples_) for tuples_ in zip(*tuples))
+def seq_mul(*seqs):
+    return [functools.reduce(operator.mul, seq) for seq in zip(*seqs)]
 
 
-def seq_mul_bc(*tuples):  # Supports broadcasting.
-    soln = ()
-    for tuples_ in zip(*tuples):
-        cumprod = tuples_[0]
-        for tensor in tuples_[1:]:
+def seq_mul_bc(*seqs):  # Supports broadcasting.
+    soln = []
+    for seq in zip(*seqs):
+        cumprod = seq[0]
+        for tensor in seq[1:]:
             # Insert dummy dims at the end of the tensor with fewer dims.
             num_missing_dims = cumprod.dim() - tensor.dim()
             if num_missing_dims > 0:
@@ -86,20 +87,20 @@ def seq_mul_bc(*tuples):  # Supports broadcasting.
                 new_size = cumprod.size() + (1,) * num_missing_dims
                 cumprod = cumprod.reshape(*new_size)
             cumprod = cumprod * tensor
-        soln += (cumprod,)
+        soln += [cumprod]
     return soln
 
 
 def seq_sub(xs, ys):
-    return tuple(x - y for x, y in zip(xs, ys))
+    return [x - y for x, y in zip(xs, ys)]
 
 
 def seq_div(xs, ys):
-    return tuple(_stable_div(x, y) for x, y in zip(xs, ys))
+    return [_stable_div(x, y) for x, y in zip(xs, ys)]
 
 
 def seq_sub_div(xs, ys, zs):
-    return tuple(_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs))
+    return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
 
 
 def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon=1e-7):
@@ -112,7 +113,7 @@ def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon=1e-7):
 
 
 def seq_batch_mvp(ms, vs):
-    return tuple(batch_mvp(m, v) for m, v in zip(ms, vs))
+    return [batch_mvp(m, v) for m, v in zip(ms, vs)]
 
 
 def is_seq_not_nested(x):

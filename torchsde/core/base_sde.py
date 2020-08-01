@@ -87,7 +87,7 @@ class ForwardSDEIto(SDEIto):
 
     def gdg_prod(self, t, y, v):
         with torch.enable_grad():
-            y = tuple(y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y)
+            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
             val = self._base_sde.g(t, y)
             val = misc.make_seq_requires_grad(val)
             vjp_val = torch.autograd.grad(
@@ -140,16 +140,13 @@ class TupleSDE(BaseSDE):
         self._base_sde = base_sde
 
     def f(self, t, y):
-        y, = y
-        return self._base_sde.f(t, y),
+        return self._base_sde.f(t, y[0]),
 
     def g(self, t, y):
-        y, = y
-        return self._base_sde.g(t, y),
+        return self._base_sde.g(t, y[0]),
 
     def h(self, t, y):
-        y, = y
-        return self._base_sde.h(t, y),
+        return self._base_sde.h(t, y[0]),
 
 
 class RenameMethodsSDE(BaseSDE):

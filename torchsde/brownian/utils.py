@@ -49,6 +49,8 @@ def search(ts: blist.blist, ws: blist.blist, t):
         w = None
         found = False
     else:
+        # TODO: Replace with `torch.searchsorted` when torch==1.7.0 releases.
+        #  Also need to make sure we use tensor dt.
         idx = np.searchsorted(ts, t)
         if t == ts[idx]:  # Found `t` in `ts`.
             w = ws[idx]

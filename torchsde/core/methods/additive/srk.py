@@ -51,10 +51,10 @@ class SRKAdditive(base_solver.GenericSDESolver):
 
         with torch.no_grad():
             sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-            I_k = tuple((bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0)))
+            I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
             I_k0 = (
                 utils.compute_trapezoidal_approx(self.bm, t0, y0, dt, sqrt_dt) if self.trapezoidal_approx else
-                tuple(dt / 2. * (delta_bm_ + torch.randn_like(delta_bm_) * sqrt_dt / math.sqrt(3)) for delta_bm_ in I_k)
+                [dt / 2. * (delta_bm_ + torch.randn_like(delta_bm_) * sqrt_dt / math.sqrt(3)) for delta_bm_ in I_k]
             )
 
         t1, y1 = t0 + dt, y0
@@ -64,26 +64,19 @@ class SRKAdditive(base_solver.GenericSDESolver):
             for j in range(i):
                 f_eval = self.sde.f(t0 + C0[j] * dt, H0[j])
                 g_eval = self.sde.g(t0 + C1[j] * dt, y0)  # The state should not affect the diffusion.
-
-                H0i = tuple(
+                H0i = [
                     H0i_ + A0[i][j] * f_eval_ * dt + B0[i][j] * misc.batch_mvp(g_eval_, I_k0_) / dt
                     for H0i_, f_eval_, g_eval_, I_k0_ in zip(H0i, f_eval, g_eval, I_k0)
-                )
-                del f_eval, g_eval
+                ]
             H0.append(H0i)
 
             f_eval = self.sde.f(t0 + C0[i] * dt, H0i)
             g_eval = self.sde.g(t0 + C1[i] * dt, y0)
-
-            g_weight = tuple(
-                beta1[i] * I_k_ + beta2[i] * I_k0_ / dt
-                for I_k_, I_k0_ in zip(I_k, I_k0)
-            )
-
-            y1 = tuple(
+            g_weight = [beta1[i] * I_k_ + beta2[i] * I_k0_ / dt for I_k_, I_k0_ in zip(I_k, I_k0)]
+            y1 = [
                 y1_ + alpha[i] * f_eval_ * dt + misc.batch_mvp(g_eval_, g_weight_)
                 for y1_, f_eval_, g_eval_, g_weight_ in zip(y1, f_eval, g_eval, g_weight)
-            )
+            ]
         return t1, y1
 
     @property

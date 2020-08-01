@@ -72,15 +72,15 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         # TODO: Make use of adjoint_method.
-        aug_bm = lambda t: tuple(-bmi for bmi in bm(-t))
+        aug_bm = lambda t: [-bmi for bmi in bm(-t)]
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(sde=sde, params=params, adaptive=adaptive)
 
         T = ans[0].size(0)
-        adj_y = tuple(grad_outputs_[-1] for grad_outputs_ in grad_outputs)
+        adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
         adj_params = torch.zeros_like(flat_params)
 
         for i in range(T - 1, 0, -1):
-            ans_i = tuple(ans_[i] for ans_ in ans)
+            ans_i = [ans_[i] for ans_ in ans]
             aug_y0 = (*ans_i, *adj_y, adj_params)
 
             aug_ans = sdeint.integrate(
@@ -100,10 +100,10 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             adj_y = aug_ans[n_tensors:2 * n_tensors]
             adj_params = aug_ans[-1]
 
-            adj_y = tuple(adj_y_[1] for adj_y_ in adj_y)
+            adj_y = [adj_y_[1] for adj_y_ in adj_y]
             adj_params = adj_params[1]
 
-            adj_y = misc.seq_add(adj_y, tuple(grad_outputs_[i - 1] for grad_outputs_ in grad_outputs))
+            adj_y = misc.seq_add(adj_y, [grad_outputs_[i - 1] for grad_outputs_ in grad_outputs])
 
             del aug_y0, aug_ans
 
@@ -153,17 +153,17 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         # TODO: Make use of adjoint_method.
-        aug_bm = lambda t: tuple(-bmi for bmi in bm(-t))
+        aug_bm = lambda t: [-bmi for bmi in bm(-t)]
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
             sde=sde, params=params, adaptive=adaptive, logqp=True)
 
         T = ans[0].size(0)
-        adj_y = tuple(grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors])
-        adj_l = tuple(grad_outputs_[-1] for grad_outputs_ in grad_outputs[n_tensors:])
+        adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
+        adj_l = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[n_tensors:]]
         adj_params = torch.zeros_like(flat_params)
 
         for i in range(T - 1, 0, -1):
-            ans_i = tuple(ans_[i] for ans_ in ans)
+            ans_i = [ans_[i] for ans_ in ans]
             aug_y0 = (*ans_i, *adj_y, *adj_l, adj_params)
 
             aug_ans = sdeint.integrate(
@@ -183,11 +183,11 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
             adj_y = aug_ans[n_tensors:2 * n_tensors]
             adj_params = aug_ans[-1]
 
-            adj_y = tuple(adj_y_[1] for adj_y_ in adj_y)
+            adj_y = [adj_y_[1] for adj_y_ in adj_y]
             adj_params = adj_params[1]
 
-            adj_y = misc.seq_add(adj_y, tuple(grad_outputs_[i - 1] for grad_outputs_ in grad_outputs[:n_tensors]))
-            adj_l = tuple(grad_outputs_[i - 1] for grad_outputs_ in grad_outputs[n_tensors:])
+            adj_y = misc.seq_add(adj_y, [grad_outputs_[i - 1] for grad_outputs_ in grad_outputs[:n_tensors]])
+            adj_l = [grad_outputs_[i - 1] for grad_outputs_ in grad_outputs[n_tensors:]]
 
             del aug_y0, aug_ans
 

@@ -38,11 +38,11 @@ def sdeint(sde,
            bm: Optional[base.Brownian] = None,
            logqp: Optional[bool] = False,
            method: Optional[str] = 'srk',
-           dt: Optional[float] = 1e-3,
+           dt: Optional[Union[float, torch.Tensor]] = 1e-3,
            adaptive: Optional[bool] = False,
            rtol: Optional[float] = 1e-6,
            atol: Optional[float] = 1e-5,
-           dt_min: Optional[float] = 1e-4,
+           dt_min: Optional[Union[float, torch.Tensor]] = 1e-4,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None):
     """Numerically integrate an Itô SDE.
@@ -123,7 +123,7 @@ def get_names_to_change(names):
 
 def check_contract(sde, method, adaptive, logqp, adjoint_method=None):
     required_funcs = ('f', 'g', 'h') if logqp else ('f', 'g')
-    missing_funcs = tuple(func for func in required_funcs if not hasattr(sde, func))
+    missing_funcs = [func for func in required_funcs if not hasattr(sde, func)]
     if len(missing_funcs) > 0:
         raise ValueError(f'sde is required to have the methods {required_funcs}. Missing functions: {missing_funcs}')
 

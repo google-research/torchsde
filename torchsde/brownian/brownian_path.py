@@ -119,6 +119,8 @@ class BrownianPath(base.Brownian):
             idx = 0
             old = None
         else:
+            # TODO: Replace with `torch.searchsorted` when torch==1.7.0 releases.
+            #  Also need to make sure we use tensor dt.
             idx = np.searchsorted(self._ts, t)
             if t == self._ts[idx]:
                 old = self._ws[idx]

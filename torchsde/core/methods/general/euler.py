@@ -27,16 +27,16 @@ class EulerGeneral(base_solver.GenericSDESolver):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         with torch.no_grad():
-            I_k = tuple((bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0)))
+            I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
 
         t1, y1 = t0 + dt, y0
         f_eval = self.sde.f(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
 
-        y1 = tuple(
+        y1 = [
             y1_ + f_eval_ * dt + g_prod_eval_
             for y1_, f_eval_, g_prod_eval_ in zip(y1, f_eval, g_prod_eval)
-        )
+        ]
         return t1, y1
 
     @property

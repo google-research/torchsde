@@ -15,8 +15,10 @@
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import tqdm
+from scipy import stats
 
 from tests.problems import Ex2
 from torchsde import sdeint, BrownianPath
@@ -53,7 +55,7 @@ def inspect_sample():
     makedirs_if_not_found(img_dir)
 
     for i, (ys_euler_i, ys_milstein_i, ys_srk_i, ys_analytical_i) in enumerate(
-        zip(ys_euler_, ys_milstein_, ys_srk_, ys_analytical_)):
+            zip(ys_euler_, ys_milstein_, ys_srk_, ys_analytical_)):
         plt.figure()
         plt.plot(ts_, ys_euler_i, label='euler')
         plt.plot(ts_, ys_milstein_i, label='milstein')
@@ -64,7 +66,7 @@ def inspect_sample():
         plt.close()
 
 
-def inspect_rate():
+def inspect_strong_order():
     batch_size, d = 4096, 10
     t0, t1 = ts = torch.tensor([0., 5.]).to(device)
     dts = tuple(2 ** -i for i in range(1, 10))
@@ -94,11 +96,18 @@ def inspect_rate():
             euler_mses_.append(euler_mse_)
             milstein_mses_.append(milstein_mse_)
             srk_mses_.append(srk_mse_)
+    del euler_mse_, milstein_mse_, srk_mse_
+
+    # Divide the log-error by 2, since textbook strong orders are represented so.
+    log = lambda x: np.log(np.array(x))
+    euler_slope, _, _, _, _ = stats.linregress(log(dts), log(euler_mses_) / 2)
+    milstein_slope, _, _, _, _ = stats.linregress(log(dts), log(milstein_mses_) / 2)
+    srk_slope, _, _, _, _ = stats.linregress(log(dts), log(srk_mses_) / 2)
 
     plt.figure()
-    plt.plot(dts, euler_mses_, label='euler')
-    plt.plot(dts, milstein_mses_, label='milstein')
-    plt.plot(dts, srk_mses_, label='srk')
+    plt.plot(dts, euler_mses_, label=f'euler(k={euler_slope:.4f})')
+    plt.plot(dts, milstein_mses_, label=f'milstein(k={milstein_slope:.4f})')
+    plt.plot(dts, srk_mses_, label=f'srk(k={srk_slope:.4f})')
     plt.xscale('log')
     plt.yscale('log')
     plt.legend()
@@ -115,4 +124,4 @@ if __name__ == '__main__':
     torch.manual_seed(0)
 
     inspect_sample()
-    inspect_rate()
+    inspect_strong_order()

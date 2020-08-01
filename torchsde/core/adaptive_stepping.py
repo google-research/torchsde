@@ -46,21 +46,21 @@ def compute_error(y11, y12, rtol, atol, eps=1e-7):
     """Computer error estimate.
 
     Args:
-        y11: a tuple of tensors obtained with a full update.
-        y12: a tuple of tensors obtained with two half updates.
-        rtol: relative tolerance weight.
-        atol: absolute tolerance.
-        eps: a small constant to avoid division by zero.
+        y11: A tuple/list of tensors obtained with a full update.
+        y12: A tuple/list of tensors obtained with two half updates.
+        rtol: Relative tolerance.
+        atol: Absolute tolerance.
+        eps: A small constant to avoid division by zero.
 
     Returns:
-        A tuple of error estimates and a tuple of aggregated tolerance values.
+        A float for the aggregated error estimate.
     """
-    tol = tuple(
+    tol = [
         rtol * torch.max(torch.abs(y11_), torch.abs(y12_)) + atol + eps
         for y11_, y12_ in zip(y11, y12)
-    )
+    ]
     error_estimate = _rms(
-        tuple((y11_ - y12_) / tol_ for y11_, y12_, tol_ in zip(y11, y12, tol))
+        [(y11_ - y12_) / tol_ for y11_, y12_, tol_ in zip(y11, y12, tol)]
     )
     assert not misc.is_nan(error_estimate), (
         'Found nans in the error estimate. Try increasing the tolerance or regularizing the dynamics.')

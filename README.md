@@ -51,7 +51,7 @@ By default, solvers in the codebase integrate SDEs that are `torch.nn.Module` ob
 For instance, the [Geometric Brownian motion](https://en.wikipedia.org/wiki/Geometric_Brownian_motion) can be integrated as follows:
 ```Python
 import torch
-from torchsde import sdeint, BrownianPath
+from torchsde import sdeint
 
 
 class SDE(torch.nn.Module):
@@ -74,9 +74,7 @@ batch_size, d, m = 4, 1, 1  # State dimension d, Brownian motion dimension m.
 geometric_bm = SDE(mu=0.5, sigma=1)
 y0 = torch.zeros(batch_size, d).fill_(0.1)  # Initial state.
 ts = torch.linspace(0, 1, 20)
-bm = BrownianPath(t0=0.0, w0=torch.zeros(batch_size, m))
-
-ys = sdeint(geometric_bm, y0, ts, bm=bm)
+ys = sdeint(geometric_bm, y0, ts)
 ```
 To ensure the solvers work, `f` and `g` must take in the time `t` and state `y` in the specific order.
 **Most importantly, the SDE class must have the attributes `sde_type` and `noise_type`.**
@@ -100,7 +98,7 @@ The KL penalty can be estimated when we specify the argument `logqp=True` to `sd
 ```python
 import torch
 
-from torchsde import sdeint, BrownianPath
+from torchsde import sdeint
 
 class SDE(torch.nn.Module):
 
@@ -125,9 +123,7 @@ batch_size, d, m = 4, 1, 1  # State dimension d, Brownian motion dimension m.
 geometric_bm = SDE(mu=0.5, sigma=1)
 y0 = torch.zeros(batch_size, d).fill_(0.1)  # Initial state.
 ts = torch.linspace(0, 1, 20)
-bm = BrownianPath(t0=0.0, w0=torch.zeros(batch_size, m))
-
-ys, logqp = sdeint(geometric_bm, y0, ts, bm=bm, logqp=True)  # Also returns estimated KL.
+ys, logqp = sdeint(geometric_bm, y0, ts, logqp=True)  # Also returns estimated KL.
 ```
 To switch to using the adjoint formulation for memory efficient gradient computation, all we need is to replace `sdeint` with `sdeint_adjoint` in the above code snippets.
 

@@ -34,17 +34,17 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
-            y = tuple(y_.detach().requires_grad_(True) for y_ in y)
-            adj_y = tuple(adj_y_.detach() for adj_y_ in adj_y)
+            y = [y_.detach().requires_grad_(True) for y_ in y]
+            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             f_eval = sde.f(-t, y)
-            f_eval = tuple(-f_eval_ for f_eval_ in f_eval)
+            f_eval = [-f_eval_ for f_eval_ in f_eval]
             f_eval = misc.make_seq_requires_grad_y(f_eval, y)
 
             vjp_y_and_params = torch.autograd.grad(
                 outputs=f_eval,
                 inputs=y + params,
-                grad_outputs=tuple(-adj_y_ for adj_y_ in adj_y),
+                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
                 allow_unused=True,
                 create_graph=True
             )
@@ -60,18 +60,18 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
-            y = tuple(y_.detach().requires_grad_(True) for y_ in y)
-            adj_y = tuple(adj_y_.detach() for adj_y_ in adj_y)
+            y = [y_.detach().requires_grad_(True) for y_ in y]
+            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
-            g_eval = tuple(-g_ for g_ in sde.g(-t, y))
+            g_eval = [-g_ for g_ in sde.g(-t, y)]
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
             vjp_y_and_params = torch.autograd.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=tuple(
+                grad_outputs=[
                     -noise_.unsqueeze(1) * adj_y_.unsqueeze(2)  # Convert tensors to be of size (batch_size, d, m).
                     for noise_, adj_y_ in zip(noise, adj_y)
-                ),
+                ],
                 allow_unused=True,
             )
             vjp_y = vjp_y_and_params[:n_tensors]
@@ -101,20 +101,20 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
     def f(self, t, y_aug):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 3
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = tuple(torch.zeros_like(adj_l_) for adj_l_ in adj_l)
+        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
 
         with torch.enable_grad():
-            y = tuple(y_.detach().requires_grad_(True) for y_ in y)
-            adj_y = tuple(adj_y_.detach() for adj_y_ in adj_y)
+            y = [y_.detach().requires_grad_(True) for y_ in y]
+            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             f_eval = sde.f(-t, y)
-            f_eval = tuple(-f_eval_ for f_eval_ in f_eval)
+            f_eval = [-f_eval_ for f_eval_ in f_eval]
             f_eval = misc.make_seq_requires_grad_y(f_eval, y)
 
             vjp_y_and_params = torch.autograd.grad(
                 outputs=f_eval,
                 inputs=y + params,
-                grad_outputs=tuple(-adj_y_ for adj_y_ in adj_y),
+                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
                 allow_unused=True,
                 create_graph=True
             )
@@ -127,10 +127,10 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             g_eval = sde.g(-t, y)
             h_eval = sde.h(-t, y)
 
-            ginv_eval = tuple(torch.pinverse(g_eval_) for g_eval_ in g_eval)
+            ginv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
-            u_eval = tuple(torch.bmm(ginv_eval_, u_eval_) for ginv_eval_, u_eval_ in zip(ginv_eval, u_eval))
-            log_ratio_correction = tuple(.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval)
+            u_eval = [torch.bmm(ginv_eval_, u_eval_) for ginv_eval_, u_eval_ in zip(ginv_eval, u_eval)]
+            log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
             log_ratio_correction = misc.make_seq_requires_grad_y(log_ratio_correction, y)
             corr_vjp_y_and_params = torch.autograd.grad(
                 outputs=log_ratio_correction, inputs=y + params,
@@ -150,18 +150,18 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
     def g_prod(self, t, y_aug, noise):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 3
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = tuple(torch.zeros_like(adj_l_) for adj_l_ in adj_l)
+        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
 
         with torch.enable_grad():
-            y = tuple(y_.detach().requires_grad_(True) for y_ in y)
-            adj_y = tuple(adj_y_.detach() for adj_y_ in adj_y)
+            y = [y_.detach().requires_grad_(True) for y_ in y]
+            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
-            g_eval = tuple(-g_ for g_ in sde.g(-t, y))
+            g_eval = [-g_ for g_ in sde.g(-t, y)]
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
             vjp_y_and_params = torch.autograd.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=tuple(-noise_.unsqueeze(1) * adj_y_.unsqueeze(2) for noise_, adj_y_ in zip(noise, adj_y)),
+                grad_outputs=[-noise_.unsqueeze(1) * adj_y_.unsqueeze(2) for noise_, adj_y_ in zip(noise, adj_y)],
                 allow_unused=True,
             )
             vjp_y = vjp_y_and_params[:n_tensors]

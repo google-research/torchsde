@@ -16,6 +16,9 @@ import os
 
 import matplotlib.pyplot as plt
 import torch
+import tqdm
+import numpy as np
+from scipy import stats
 
 from tests.basic_sde import AdditiveSDE
 from tests.problems import Ex3Additive
@@ -59,7 +62,7 @@ def inspect_samples():
         plt.close()
 
 
-def inspect_rate():
+def inspect_strong_order():
     batch_size, d, m = 4096, 5, 5
     t0, t1 = ts = torch.tensor([0., 5.]).to(device)
     dts = tuple(2 ** -i for i in range(1, 10))
@@ -72,7 +75,7 @@ def inspect_rate():
     with torch.no_grad():
         bm = BrownianPath(t0=t0, w0=torch.zeros(batch_size, m).to(device))  # It's important to have the correct size!!!
 
-        for dt in dts:
+        for dt in tqdm.tqdm(dts):
             # Only take end value.
             _, ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
             _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk', options={'trapezoidal_approx': False})
@@ -85,10 +88,16 @@ def inspect_rate():
 
             euler_mses_.append(euler_mse_)
             srk_mses_.append(srk_mse_)
+    del euler_mse_, srk_mse_
+
+    # Divide the log-error by 2, since textbook strong orders are represented so.
+    log = lambda x: np.log(np.array(x))
+    euler_slope, _, _, _, _ = stats.linregress(log(dts), log(euler_mses_) / 2)
+    srk_slope, _, _, _, _ = stats.linregress(log(dts), log(srk_mses_) / 2)
 
     plt.figure()
-    plt.plot(dts, euler_mses_, label='euler')
-    plt.plot(dts, srk_mses_, label='srk')
+    plt.plot(dts, euler_mses_, label=f'euler(k={euler_slope:.4f})')
+    plt.plot(dts, srk_mses_, label=f'srk(k={srk_slope:.4f})')
     plt.xscale('log')
     plt.yscale('log')
     plt.legend()
@@ -105,4 +114,4 @@ if __name__ == '__main__':
     torch.manual_seed(0)
 
     inspect_samples()
-    inspect_rate()
+    inspect_strong_order()

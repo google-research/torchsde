@@ -126,6 +126,8 @@ class BrownianTree(base.Brownian):
         if t >= self._t1:
             return utils.search_and_insert(ts=self._ts_post, ws=self._ws_post, t=t)
 
+        # TODO: Replace with `torch.searchsorted` when torch==1.7.0 releases.
+        #  Also need to make sure we use tensor dt.
         i = np.searchsorted(self._ts, t)
         parent = copy.copy(self._seeds[i - 1])  # Spawn modifies the seed.
         t0, t1 = self._ts[i - 1], self._ts[i]
