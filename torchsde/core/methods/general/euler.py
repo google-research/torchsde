@@ -16,8 +16,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import torch
-
 from torchsde.core import base_solver
 
 
@@ -41,3 +39,7 @@ class EulerGeneral(base_solver.GenericSDESolver):
     @property
     def strong_order(self):
         return 0.5
+
+    @property
+    def weak_order(self):
+        return 1.0

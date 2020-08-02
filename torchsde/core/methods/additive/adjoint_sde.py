@@ -127,9 +127,9 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             g_eval = sde.g(-t, y)
             h_eval = sde.h(-t, y)
 
-            ginv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
+            g_inv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
-            u_eval = [torch.bmm(ginv_eval_, u_eval_) for ginv_eval_, u_eval_ in zip(ginv_eval, u_eval)]
+            u_eval = [torch.bmm(g_inv_eval_, u_eval_) for g_inv_eval_, u_eval_ in zip(g_inv_eval, u_eval)]
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
             log_ratio_correction = misc.make_seq_requires_grad_y(log_ratio_correction, y)
             corr_vjp_y_and_params = torch.autograd.grad(

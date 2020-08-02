@@ -98,3 +98,7 @@ class SRKDiagonal(base_solver.GenericSDESolver):
     @property
     def strong_order(self):
         return 1.5
+
+    @property
+    def weak_order(self):
+        return 1.5

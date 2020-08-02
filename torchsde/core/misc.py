@@ -47,7 +47,7 @@ def make_seq_requires_grad(sequence):
         sequence: an Iterable of tensors.
 
     Returns:
-        An Interable of tensors that all require gradients.
+        A list of tensors that all require gradients.
     """
     return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
 

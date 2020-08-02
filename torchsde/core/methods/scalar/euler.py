@@ -36,3 +36,7 @@ class EulerScalar(base_solver.GenericSDESolver):
     @property
     def strong_order(self):
         return 0.5
+
+    @property
+    def weak_order(self):
+        return 1.0

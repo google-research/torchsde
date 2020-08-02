@@ -25,11 +25,11 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
-from torchsde.brownian import base
 from torchsde.brownian import utils
+from torchsde.brownian.base_brownian import Brownian
 
 
-class BrownianTree(base.Brownian):
+class BrownianTree(Brownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.
@@ -182,24 +182,24 @@ class BrownianTree(base.Brownian):
 
 
 def _binary_search(t0, t1, w0, w1, t, parent, tol):
-    seedv, seedl, seedr = parent.spawn(3)
+    seed_v, seed_l, seed_r = parent.spawn(3)
     t_mid = (t0 + t1) / 2
-    w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seedv)
+    w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seed_v)
     depth = 0
 
     while abs(t - t_mid) > tol:
         if t < t_mid:
             t0, t1 = t0, t_mid
             w0, w1 = w0, w_mid
-            parent = seedl
+            parent = seed_l
         else:
             t0, t1 = t_mid, t1
             w0, w1 = w_mid, w1
-            parent = seedr
+            parent = seed_r
 
-        seedv, seedl, seedr = parent.spawn(3)
+        seed_v, seed_l, seed_r = parent.spawn(3)
         t_mid = (t0 + t1) / 2
-        w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seedv)
+        w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seed_v)
         depth += 1
 
     return w_mid, depth
@@ -217,13 +217,13 @@ def _create_cache(t0, t1, w0, w1, entropy, pool_size, k):
         new_ws = []
         new_seeds = []
         for i, parent in enumerate(seeds):
-            seedv, seedl, seedr = parent.spawn(3)
-            new_seeds.extend([seedl, seedr])
+            seed_v, seed_l, seed_r = parent.spawn(3)
+            new_seeds.extend([seed_l, seed_r])
 
             t0, t1 = ts[i], ts[i + 1]
             w0, w1 = ws[i], ws[i + 1]
             t = (t0 + t1) / 2
-            w = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t, seed=seedv)
+            w = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t, seed=seed_v)
             new_ts.extend([ts[i], t])
             new_ws.extend([ws[i], w])
 

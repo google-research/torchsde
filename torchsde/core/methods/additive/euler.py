@@ -38,3 +38,7 @@ class EulerAdditive(base_solver.GenericSDESolver):
     @property
     def strong_order(self):
         return 1.0
+
+    @property
+    def weak_order(self):
+        return 1.0

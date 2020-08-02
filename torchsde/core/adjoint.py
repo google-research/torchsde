@@ -16,21 +16,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from typing import Tuple, Union, Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 
 import torch
 from torch import nn
 
 try:
     from torchsde.brownian_lib import BrownianPath
-except Exception:
+except Exception:  # noqa
     from torchsde.brownian.brownian_path import BrownianPath
 
-from torchsde.brownian import base
+from torchsde.brownian.base_brownian import Brownian
 from torchsde.core import base_sde
 from torchsde.core import methods
 from torchsde.core import misc
 from torchsde.core import sdeint
+from torchsde.core.types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -71,9 +72,11 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        # TODO: Make use of adjoint_method.
-        aug_bm = lambda t: [-bmi for bmi in bm(-t)]
-        adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(sde=sde, params=params, adaptive=adaptive)
+        # TODO: Make use of `adjoint_method`.
+        aug_bm = lambda t: [-bmi for bmi in bm(-t)]  # noqa
+        adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
+            sde=sde, params=params, adaptive=adaptive
+        )
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -152,10 +155,11 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        # TODO: Make use of adjoint_method.
-        aug_bm = lambda t: [-bmi for bmi in bm(-t)]
+        # TODO: Make use of `adjoint_method`.
+        aug_bm = lambda t: [-bmi for bmi in bm(-t)]  # noqa
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
-            sde=sde, params=params, adaptive=adaptive, logqp=True)
+            sde=sde, params=params, adaptive=adaptive, logqp=True
+        )
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
@@ -195,51 +199,59 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
 
 
 def sdeint_adjoint(sde,
-                   y0: Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]],
-                   ts: Union[torch.Tensor, Tuple[float, ...], List[float]],
-                   bm: Optional[base.Brownian] = None,
+                   y0: TensorOrTensors,
+                   ts: Vector,
+                   bm: Optional[Brownian] = None,
                    logqp: Optional[bool] = False,
                    method: Optional[str] = 'srk',
                    adjoint_method: Optional[str] = 'milstein',
-                   dt: Optional[float] = 1e-3,
+                   dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
-                   rtol: Optional[float] = 1e-6,
-                   atol: Optional[float] = 1e-5,
-                   dt_min: Optional[float] = 1e-4,
+                   rtol: Optional[float] = 1e-5,
+                   atol: Optional[float] = 1e-4,
+                   dt_min: Optional[Scalar] = 1e-5,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
                    names: Optional[Dict[str, str]] = None):
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:
-        sde: An object with the methods `f` and `g` representing the drift and
-            diffusion functions. The output of `g` should either be a single
-            (or a tuple of) tensor(s) of size (batch_size, d) for diagonal noise
-            SDEs or (batch_size, d, m) for SDEs of other noise type, where d is
-            the dimensionality of state and m is the dimensionality of the
-            Brownian motion.
-        y0: A single (or a tuple of) tensor(s) of size (batch_size, d).
-        ts: A list or size (T,) tensor in non-descending order.
-        bm: A `BrownianPath` or `BrownianTree` object.
-            Defaults to `BrownianPath` for diagonal noise residing on CPU.
-        logqp: If True, also return the log-ratio penalty across the whole path.
-        method: Numerical integration method.
-        adjoint_method: Numerical integration method of backward adjoint solve.
-        dt: The constant step size or initial step size for adaptive stepping.
-        adaptive: If True, use adaptive time-stepping.
-        rtol: Relative tolerance.
-        atol: Absolute tolerance.
-        dt_min: Minimum step size for adaptive stepping.
-        options: Optional dict of options for the indicated integration method.
-        adjoint_options: Optional dict of options for the indicated integration
+        sde (object): Object with methods `f` and `g` representing the drift and
+            diffusion. The output of `g` should be a single (or a tuple of)
+            tensor(s) of size (batch_size, d) for diagonal noise SDEs or
+            (batch_size, d, m) for SDEs of other noise types; d is the
+            dimensionality of state and m is the dimensionality of Brownian
+            motion.
+        y0 (sequence of Tensor): Tensors for initial state.
+        ts (Tensor or sequence of float): Query times in non-descending order.
+            The state at the first time of `ts` should be `y0`.
+        bm (Brownian, optional): A `BrownianPath` or `BrownianTree` object.
+            Should return tensors of size (batch_size, m) for `__call__`.
+            Defaults to `BrownianPath` for diagonal noise on CPU.
+            Currently does not support tuple outputs yet.
+        logqp (bool, optional): If `True`, also return the log-ratio penalty.
+        method (str, optional): Name of numerical integration method.
+        adjoint_method (str, optional): Name of numerical integration method for
+            backward adjoint solve.
+        dt (float, optional): The constant step size or initial step size for
+            adaptive time-stepping.
+        adaptive (bool, optional): If `True`, use adaptive time-stepping.
+        rtol (float, optional): Relative tolerance.
+        atol (float, optional): Absolute tolerance.
+        dt_min (float, optional): Minimum step size during integration.
+        options (dict, optional): Dict of options for the integration method.
+        adjoint_options (dict, optional): Dict of options for the integration
             method of the backward adjoint solve.
-        names: Optional dict of method names for drift, diffusion, and prior
-            drift. Expected keys are "drift", "diffusion", and "prior_drift".
+        names (dict, optional): Dict of method names for drift, diffusion, and
+            prior drift. Expected keys are "drift", "diffusion", and
+            "prior_drift". Serves so that users can use methods with names not
+            in `("f", "g", "h")`, e.g. to use the method "foo" for the drift,
+            we would supply `names={"drift": "foo"}`.
 
     Returns:
         A single state tensor of size (T, batch_size, d) or a tuple of such
         tensors. Also returns a single log-ratio tensor of size
-        (T - 1, batch_size) or a tuple of such tensors, if `logqp`=True.
+        (T - 1, batch_size) or a tuple of such tensors, if `logqp==True`.
 
     Raises:
         ValueError: An error occurred due to unrecognized noise type/method,
@@ -251,7 +263,7 @@ def sdeint_adjoint(sde,
     names_to_change = sdeint.get_names_to_change(names)
     if len(names_to_change) > 0:
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-    sdeint.check_contract(sde=sde, method=method, adaptive=adaptive, logqp=logqp, adjoint_method=adjoint_method)
+    sdeint.check_contract(sde=sde, method=method, logqp=logqp, adjoint_method=adjoint_method)
 
     if bm is None:
         bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
@@ -261,16 +273,16 @@ def sdeint_adjoint(sde,
         sde = base_sde.TupleSDE(sde)
         y0 = (y0,)
         bm_ = bm
-        bm = lambda t: (bm_(t),)
+        bm = lambda t: (bm_(t),)  # noqa
 
     flat_params = misc.flatten(sde.parameters())
     if logqp:
-        return _SdeintLogqpAdjointMethod.apply(
+        return _SdeintLogqpAdjointMethod.apply(  # noqa
             *y0, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min,
             options, adjoint_options
         )
 
-    ys = _SdeintAdjointMethod.apply(
+    ys = _SdeintAdjointMethod.apply(  # noqa
         *y0, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min,
         options, adjoint_options
     )

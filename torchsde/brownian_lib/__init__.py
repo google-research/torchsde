@@ -17,5 +17,8 @@ import warnings
 try:
     from torchsde.brownian_lib.brownian_path import BrownianPath
     from torchsde.brownian_lib.brownian_tree import BrownianTree
-except Exception:
+
+    BrownianPath.__init__.__annotations__ = {}
+    BrownianTree.__init__.__annotations__ = {}
+except Exception:  # noqa
     warnings.warn('Failed to import `torchsde._brownian_lib`; falling back to `torchsde.brownian`.')

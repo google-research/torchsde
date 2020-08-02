@@ -56,9 +56,9 @@ class GenericSDESolver(SDESolver):
         pass
 
     @property
+    @abc.abstractmethod
     def weak_order(self):
-        # TODO: Add weak orders for existing solvers.
-        return None
+        pass
 
     def __repr__(self):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'
@@ -95,9 +95,9 @@ class GenericSDESolver(SDESolver):
             g_eval = self.sde.g(t, y)
             h_eval = self.sde.h(t, y)
 
-            ginv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
+            g_inv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
-            u_eval = misc.seq_batch_mvp(ms=ginv_eval, vs=u_eval)
+            u_eval = misc.seq_batch_mvp(ms=g_inv_eval, vs=u_eval)
             logqp1 = [
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
@@ -133,9 +133,9 @@ class GenericSDESolver(SDESolver):
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
                         error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
-                        step_size, prev_error_ratio = adaptive_stepping.update_stepsize(
+                        step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
-                            prev_stepsize=step_size,
+                            prev_step_size=step_size,
                             prev_error_ratio=prev_error_ratio
                         )
 
@@ -197,9 +197,9 @@ class GenericSDESolver(SDESolver):
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
                         error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
-                        step_size, prev_error_ratio = adaptive_stepping.update_stepsize(
+                        step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
-                            prev_stepsize=step_size,
+                            prev_step_size=step_size,
                             prev_error_ratio=prev_error_ratio
                         )
 
@@ -217,7 +217,6 @@ class GenericSDESolver(SDESolver):
                     delta_t = step_size
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
                     curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
-
             if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
                 curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
                     t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t

@@ -20,17 +20,17 @@ import torch
 
 
 def compute_trapezoidal_approx(bm, t0, y0, dt, sqrt_dt, dt1_div_dt=10, dt1_min=0.01):
-    """Estimate \int_{t0}^{t0+dt} \int_{t0}^{s} dW(u) \ds with trapezoidal rule.
+    """Estimate int_{t0}^{t0+dt} int_{t0}^{s} dW(u) ds with trapezoidal rule.
 
     Slower compared to using the Gaussian with analytically derived mean and standard deviation, but ensures
     true determinism, since this rids the random number generation in the solver, i.e. all randomness comes from `bm`.
 
-    The loop is from using the Trapezoidal rule to estimate \int_0^1 v(s) \ds with step size `dt1`.
+    The loop is from using the Trapezoidal rule to estimate int_0^1 v(s) ds with step size `dt1`.
     """
     dt1 = max(min(1.0, dt1_div_dt * dt), dt1_min)
-    v = lambda s: [bmi / sqrt_dt for bmi in bm(s * dt + t0)]
+    v = lambda s: [bmi / sqrt_dt for bmi in bm(s * dt + t0)]  # noqa
 
-    # Estimate \int_0^1 v(s) \ds by Trapezoidal rule.
+    # Estimate int_0^1 v(s) ds by Trapezoidal rule.
     # Based on Section 1.4 of Stochastic Numerics for Mathematical Physics.
     int_v_01 = [-v0 - v1 for v0, v1 in zip(v(0.0), v(1.0))]
     for t in torch.arange(0, 1 + 1e-7, dt1):

@@ -21,7 +21,7 @@ import torch
 from torchsde.core import misc
 
 
-def update_stepsize(error_estimate, prev_stepsize, safety=0.9, facmin=0.2, facmax=1.4, prev_error_ratio=None):
+def update_step_size(error_estimate, prev_step_size, safety=0.9, facmin=0.2, facmax=1.4, prev_error_ratio=None):
     """Adaptively propose the next step size based on estimated errors."""
     if error_estimate > 1:
         pfactor = 0
@@ -38,8 +38,8 @@ def update_stepsize(error_estimate, prev_stepsize, safety=0.9, facmin=0.2, facma
         prev_error_ratio = error_ratio
         facmin = 1.0
     factor = min(facmax, max(facmin, factor))
-    new_stepsize = prev_stepsize * factor
-    return new_stepsize, prev_error_ratio
+    new_step_size = prev_step_size * factor
+    return new_step_size, prev_error_ratio
 
 
 def compute_error(y11, y12, rtol, atol, eps=1e-7):
@@ -56,20 +56,20 @@ def compute_error(y11, y12, rtol, atol, eps=1e-7):
         A float for the aggregated error estimate.
     """
     tol = [
-        rtol * torch.max(torch.abs(y11_), torch.abs(y12_)) + atol + eps
+        (rtol * torch.max(torch.abs(y11_), torch.abs(y12_)) + atol).clamp_min(eps)
         for y11_, y12_ in zip(y11, y12)
     ]
     error_estimate = _rms(
-        [(y11_ - y12_) / tol_ for y11_, y12_, tol_ in zip(y11, y12, tol)]
+        [(y11_ - y12_) / tol_ for y11_, y12_, tol_ in zip(y11, y12, tol)], eps
     )
     assert not misc.is_nan(error_estimate), (
-        'Found nans in the error estimate. Try increasing the tolerance or regularizing the dynamics.')
+        'Found nans in the error estimate. Try increasing the tolerance or regularizing the dynamics.'
+    )
     return error_estimate.detach().cpu().item()
 
 
-def _rms(x):
-    """Compute the square root of mean square."""
+def _rms(x, eps=1e-7):
     if torch.is_tensor(x):
-        return torch.sqrt(x.norm() ** 2. / x.numel())
+        return torch.sqrt((x ** 2.).sum() / x.numel()).clamp_min(eps)
     else:
-        return torch.sqrt(sum(x_.norm() ** 2 for x_ in x) / sum(x_.numel() for x_ in x))
+        return torch.sqrt(sum((x_ ** 2.).sum() for x_ in x) / sum(x_.numel() for x_ in x)).clamp_min(eps)

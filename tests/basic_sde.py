@@ -32,7 +32,7 @@ class BasicSDE1(SDEIto):
         self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
 
     def f(self, t, y):
-        return self.shared_param * torch.sin(y) * 0.2 + y ** 2. * 0.1 + torch.cos(t) + self.no_grad_param * y
+        return self.shared_param * torch.sin(y) * 0.2 + torch.cos(y ** 2.) * 0.1 + torch.cos(t) + self.no_grad_param * y
 
     def g(self, t, y):
         return torch.sigmoid(self.shared_param * torch.cos(y) * .3 + torch.sin(t)) + torch.sigmoid(
@@ -105,7 +105,7 @@ class GeneralSDE(SDEIto):
         self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
 
     def f(self, t, y):
-        return self.shared_param * torch.sin(y) * 0.2 + y ** 2. * 0.1 + torch.cos(t)
+        return self.shared_param * torch.sin(y) * 0.2 + torch.cos(y ** 2.) * 0.1 + torch.cos(t)
 
     def g(self, t, y):
         return torch.sigmoid(y).unsqueeze(dim=2) * self.no_grad_param  # (batch_size, d, m).
@@ -150,7 +150,12 @@ class TupleSDE(SDEIto):
 
     def f(self, t, y):
         y, = y
-        return self.shared_param * torch.sin(y) * 0.2 + y ** 2. * 0.1 + torch.cos(t) + self.no_grad_param * y,
+        return (
+            self.shared_param * torch.sin(y) * 0.2 +
+            torch.sin(y ** 2.) * 0.1 +
+            torch.cos(t) +
+            self.no_grad_param * y,
+        )
 
     def g(self, t, y):
         y, = y

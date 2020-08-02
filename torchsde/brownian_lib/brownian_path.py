@@ -15,13 +15,13 @@
 from typing import Union
 
 import torch
-from torchsde._brownian_lib import BrownianPath as _BrownianPath
+from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
-from torchsde.brownian import base
 from torchsde.brownian import utils
+from torchsde.brownian.base_brownian import Brownian
 
 
-class BrownianPath(base.Brownian):
+class BrownianPath(Brownian):
     """Fast Brownian motion with all queries stored in a std::map and uses local search.
 
     Trades in memory for speed.
@@ -38,7 +38,7 @@ class BrownianPath(base.Brownian):
     def __init__(self,
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
-                 **kwargs):
+                 **kwargs):  # noqa
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')

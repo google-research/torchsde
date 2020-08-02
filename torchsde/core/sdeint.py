@@ -17,62 +17,70 @@ from __future__ import division
 from __future__ import print_function
 
 import warnings
-from typing import Tuple, Union, Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 
 import torch
 
 try:
     from torchsde.brownian_lib import BrownianPath
-except Exception:
+except Exception:  # noqa
     from torchsde.brownian.brownian_path import BrownianPath
 
-from torchsde.brownian import base
+from torchsde.brownian.base_brownian import Brownian
 from torchsde.core import base_sde
 from torchsde.core import methods
 from torchsde.core import settings
+from torchsde.core.types import TensorOrTensors, Scalar, Vector
 
 
 def sdeint(sde,
-           y0: Union[torch.Tensor, Tuple[torch.Tensor, ...], List[torch.Tensor]],
-           ts: Union[torch.Tensor, Tuple[float, ...], List[float]],
-           bm: Optional[base.Brownian] = None,
+           y0: TensorOrTensors,
+           ts: Vector,
+           bm: Optional[Brownian] = None,
            logqp: Optional[bool] = False,
            method: Optional[str] = 'srk',
-           dt: Optional[Union[float, torch.Tensor]] = 1e-3,
+           dt: Optional[Scalar] = 1e-3,
            adaptive: Optional[bool] = False,
-           rtol: Optional[float] = 1e-6,
-           atol: Optional[float] = 1e-5,
-           dt_min: Optional[Union[float, torch.Tensor]] = 1e-4,
+           rtol: Optional[float] = 1e-5,
+           atol: Optional[float] = 1e-4,
+           dt_min: Optional[Scalar] = 1e-5,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None):
     """Numerically integrate an Itô SDE.
 
     Args:
-        sde: An object with the methods `f` and `g` representing the drift and
-            diffusion functions. The output of `g` should either be a single
-            (or a tuple of) tensor(s) of size (batch_size, d) for diagonal noise
-            SDEs or (batch_size, d, m) for SDEs of other noise type, where d is
-            the dimensionality of state and m is the dimensionality of the
-            Brownian motion.
-        y0: A single (or a tuple of) tensor(s) of size (batch_size, d).
-        ts: A list or size (T,) tensor in non-descending order.
-        bm: A `BrownianPath` or `BrownianTree` object.
-            Defaults to `BrownianPath` for diagonal noise residing on CPU.
-        logqp: If True, also return the log-ratio penalty across the whole path.
-        method: Numerical integration method.
-        dt: The constant step size or initial step size for adaptive stepping.
-        adaptive: If True, use adaptive time-stepping.
-        rtol: Relative tolerance.
-        atol: Absolute tolerance.
-        dt_min: Minimum step size for adaptive stepping.
-        options: Optional dict of options for the indicated integration method.
-        names: Optional dict of method names for drift, diffusion, and prior
-            drift. Expected keys are "drift", "diffusion", and "prior_drift".
+        sde (object): Object with methods `f` and `g` representing the drift and
+            diffusion. The output of `g` should be a single (or a tuple of)
+            tensor(s) of size (batch_size, d) for diagonal noise SDEs or
+            (batch_size, d, m) for SDEs of other noise types; d is the
+            dimensionality of state and m is the dimensionality of Brownian
+            motion.
+        y0 (sequence of Tensor): Tensors for initial state.
+        ts (Tensor or sequence of float): Query times in non-descending order.
+            The state at the first time of `ts` should be `y0`.
+        bm (Brownian, optional): A `BrownianPath` or `BrownianTree` object.
+            Should return tensors of size (batch_size, m) for `__call__`.
+            Defaults to `BrownianPath` for diagonal noise on CPU.
+            Currently does not support tuple outputs yet.
+        logqp (bool, optional): If `True`, also return the log-ratio penalty.
+        method (str, optional): Name of numerical integration method.
+        dt (float, optional): The constant step size or initial step size for
+            adaptive time-stepping.
+        adaptive (bool, optional): If `True`, use adaptive time-stepping.
+        rtol (float, optional): Relative tolerance.
+        atol (float, optional): Absolute tolerance.
+        dt_min (float, optional): Minimum step size during integration.
+        options (dict, optional): Dict of options for the integration method.
+        names (dict, optional): Dict of method names for drift, diffusion, and
+            prior drift. Expected keys are "drift", "diffusion", and
+            "prior_drift". Serves so that users can use methods with names not
+            in `("f", "g", "h")`, e.g. to use the method "foo" for the drift,
+            we would supply `names={"drift": "foo"}`.
 
     Returns:
         A single state tensor of size (T, batch_size, d) or a tuple of such
         tensors. Also returns a single log-ratio tensor of size
-        (T - 1, batch_size) or a tuple of such tensors, if `logqp`=True.
+        (T - 1, batch_size) or a tuple of such tensors, if `logqp==True`.
 
     Raises:
         ValueError: An error occurred due to unrecognized noise type/method,
@@ -81,7 +89,7 @@ def sdeint(sde,
     names_to_change = get_names_to_change(names)
     if len(names_to_change) > 0:
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-    check_contract(sde=sde, method=method, adaptive=adaptive, logqp=logqp)
+    check_contract(sde=sde, method=method, logqp=logqp)
 
     if bm is None:
         bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
@@ -91,7 +99,7 @@ def sdeint(sde,
         sde = base_sde.TupleSDE(sde)
         y0 = (y0,)
         bm_ = bm
-        bm = lambda t: (bm_(t),)
+        bm = lambda t: (bm_(t),)  # noqa
 
     sde = base_sde.ForwardSDEIto(sde)
     results = integrate(
@@ -121,7 +129,7 @@ def get_names_to_change(names):
     return {key: names[key] for key in keys if key in names}
 
 
-def check_contract(sde, method, adaptive, logqp, adjoint_method=None):
+def check_contract(sde, method, logqp, adjoint_method=None):
     required_funcs = ('f', 'g', 'h') if logqp else ('f', 'g')
     missing_funcs = [func for func in required_funcs if not hasattr(sde, func)]
     if len(missing_funcs) > 0:
@@ -146,11 +154,6 @@ def check_contract(sde, method, adaptive, logqp, adjoint_method=None):
         if adjoint_method not in settings.METHODS:
             raise ValueError(f'Expected adjoint_method in {settings.METHODS}, but found {method}.')
 
-    # TODO: This warning should be based on the `strong_order` attribute of the solver.
-    if adaptive and method == 'euler' and sde.noise_type != "additive":
-        warnings.warn(f'Numerical solution is only guaranteed to converge to the correct solution '
-                      f'when a strong order >=1.0 scheme is used for adaptive time-stepping.')
-
 
 def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):
     if options is None:
@@ -168,6 +171,9 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
         dt_min=dt_min,
         options=options
     )
+    if adaptive and solver.strong_order < 1.0:
+        warnings.warn(f'Numerical solution is only guaranteed to converge to the correct solution '
+                      f'when a strong order >=1.0 scheme is used for adaptive time-stepping.')
     if logqp:
         return solver.integrate_logqp(ts)
     return solver.integrate(ts)

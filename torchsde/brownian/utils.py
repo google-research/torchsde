@@ -98,5 +98,5 @@ def is_scalar(x):
     return isinstance(x, int) or isinstance(x, float) or (isinstance(x, torch.Tensor) and x.numel() == 1)
 
 
-def blist_to(l, *args, **kwargs):
-    return blist.blist([li.to(*args, **kwargs) for li in l])
+def blist_to(l, *args, **kwargs):  # noqa
+    return blist.blist([li.to(*args, **kwargs) for li in l])  # noqa

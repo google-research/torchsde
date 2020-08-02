@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import brownian_lib
-from .brownian.brownian_path import BrownianPath
-from .brownian.brownian_tree import BrownianTree
-from .core.adjoint import sdeint_adjoint
-from .core.base_sde import BaseSDE, SDEIto
-from .core.sdeint import sdeint
+from typing import Sequence, Union
 
-sdeint.__annotations__ = {}
-sdeint_adjoint.__annotations__ = {}
-BrownianPath.__init__.__annotations__ = {}
-BrownianTree.__init__.__annotations__ = {}
+import torch
+
+TensorOrTensors = Union[torch.Tensor, Sequence[torch.Tensor]]
+Scalar = Union[float, torch.Tensor]
+Vector = Union[Sequence[float], torch.Tensor]
+Number = Union[int, float, bool]

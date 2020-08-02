@@ -16,13 +16,13 @@ import random
 from typing import Union, Optional
 
 import torch
-from torchsde._brownian_lib import BrownianTree as _BrownianTree
+from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
-from torchsde.brownian import base
 from torchsde.brownian import utils
+from torchsde.brownian.base_brownian import Brownian
 
 
-class BrownianTree(base.Brownian):
+class BrownianTree(Brownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.
@@ -45,7 +45,7 @@ class BrownianTree(base.Brownian):
                  tol: float = 1e-6,
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
-                 **kwargs):
+                 **kwargs):  # noqa
         super(BrownianTree, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')

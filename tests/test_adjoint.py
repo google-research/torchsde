@@ -111,7 +111,7 @@ class TestAdjoint(TorchTestCase):
             for adaptive in adaptive_choices:
                 self._test_basic(problem, method, adaptive=adaptive)
 
-    def _test_gradient(self, problem, method, adaptive, rtol=1e-6, atol=1e-5):
+    def _test_gradient(self, problem, method, adaptive, rtol=1e-5, atol=1e-4):
         if method == 'euler' and adaptive:
             return
 
@@ -127,7 +127,7 @@ class TestAdjoint(TorchTestCase):
         adj_grad = torch.cat(tuple(p.grad for p in problem.parameters()))
         self.tensorAssertAllClose(alt_grad, adj_grad)
 
-    def _test_basic(self, problem, method, adaptive, rtol=1e-6, atol=1e-5):
+    def _test_basic(self, problem, method, adaptive, rtol=1e-5, atol=1e-4):
         if method == 'euler' and adaptive:
             return
 
@@ -135,7 +135,8 @@ class TestAdjoint(TorchTestCase):
 
         problem.zero_grad()
         _, yt = sdeint_adjoint(
-            problem, y0, ts, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol)
+            problem, y0, ts, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol
+        )
         loss = yt.sum(dim=1).mean(dim=0)
         loss.backward()
 
