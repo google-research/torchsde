@@ -171,14 +171,10 @@ class BrownianTree(Brownian):
         return len(self._ts) + len(self._ts_prev) + len(self._ts_post)
 
     def get_cache(self):
-        return {
-            'ts_prev': self._ts_prev,
-            'ts': self._ts,
-            'ts_post': self._ts_post,
-            'ws_prev': self._ws_prev,
-            'ws': self._ws,
-            'ws_post': self._ws_post
-        }
+        curr = {k: v for k, v in zip(self._ts, self._ws)}
+        prev = {k: v for k, v in zip(self._ts_prev, self._ws_prev)}
+        post = {k: v for k, v in zip(self._ts_post, self._ws_post)}
+        return curr, prev, post
 
 
 def _binary_search(t0, t1, w0, w1, t, parent, tol):

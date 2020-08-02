@@ -93,20 +93,37 @@ class TestBrownianTree(TorchTestCase):
                 _, pval = kstest(samples_, ref_dist.cdf)
                 self.assertGreaterEqual(pval, ALPHA)
 
-    def test_to(self):
+    def test_to_device(self):
         if not torch.cuda.is_available():
             self.skipTest(reason='CUDA not available.')
 
         self._setUp(batch_size=SMALL_BATCH_SIZE)
-        cache = self.bm.get_cache()
-        old = torch.cat(list(cache['ws_prev']) + list(cache['ws']) + list(cache['ws_post']), dim=0)
+        curr, prev, post = _dict_to_sorted_list(*self.bm.get_cache())
+        old = torch.cat(curr + prev + post, dim=0)
 
-        gpu = torch.device('cuda')
-        self.bm.to(gpu)
-        cache = self.bm.get_cache()
-        new = torch.cat(list(cache['ws_prev']) + list(cache['ws']) + list(cache['ws_post']), dim=0)
+        self.bm.to(torch.device('cuda'))
+        curr, prev, post = _dict_to_sorted_list(*self.bm.get_cache())
+        new = torch.cat(curr + prev + post, dim=0)
         self.assertTrue(str(new.device).startswith('cuda'))
         self.tensorAssertAllClose(old, new.cpu())
+
+    def test_to_float32(self):
+        self._setUp(batch_size=SMALL_BATCH_SIZE)
+        curr, prev, post = _dict_to_sorted_list(*self.bm.get_cache())
+        old = torch.cat(curr + prev + post, dim=0)
+
+        self.bm.to(torch.float32)
+        curr, prev, post = _dict_to_sorted_list(*self.bm.get_cache())
+        new = torch.cat(curr + prev + post, dim=0)
+        self.assertTrue(new.dtype, torch.float32)
+        self.tensorAssertAllClose(old, new.double())
+
+
+def _dict_to_sorted_list(*dicts):
+    lists = tuple([d[k] for k in sorted(d.keys())] for d in dicts)
+    if len(lists) == 1:
+        return lists[0]
+    return lists
 
 
 if __name__ == '__main__':
