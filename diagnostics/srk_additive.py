@@ -65,7 +65,7 @@ def inspect_samples():
 def inspect_strong_order():
     batch_size, d, m = 4096, 5, 5
     t0, t1 = ts = torch.tensor([0., 5.]).to(device)
-    dts = tuple(2 ** -i for i in range(1, 10))
+    dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d).to(device)
     sde = Ex3Additive(d=d).to(device)
 

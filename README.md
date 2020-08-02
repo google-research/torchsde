@@ -135,7 +135,7 @@ To switch to using the adjoint formulation for memory efficient gradient computa
 - `adaptive`: If True, use adaptive time-stepping.
 - `rtol`: Relative tolerance.
 - `atol`: Absolute tolerance.
-- `dt_min`: Minimum step size for adaptive time-stepping.
+- `dt_min`: Minimum step size.
 
 #### List of SDE solvers
 - `euler`: [Euler-Maruyama method](https://en.wikipedia.org/wiki/Euler%E2%80%93Maruyama_method)

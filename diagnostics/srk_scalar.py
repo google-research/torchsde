@@ -40,7 +40,7 @@ def inspect_sample():
         bm = BrownianPath(t0=t0, w0=torch.zeros_like(y0))
         ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
         ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
-        ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
+        ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk', options={'trapezoidal_approx': False})
         ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
         ys_euler = ys_euler.squeeze().t()
@@ -70,7 +70,7 @@ def inspect_sample():
 def inspect_strong_order():
     batch_size, d = 4096, 10
     t0, t1 = ts = torch.tensor([0., 5.]).to(device)
-    dts = tuple(2 ** -i for i in range(1, 10))
+    dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d).to(device)
     sde = Ex2(d=d).to(device)
 
@@ -85,7 +85,7 @@ def inspect_strong_order():
             # Only take end value.
             _, ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
             _, ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
-            _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
+            _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk', options={'trapezoidal_approx': False})
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
             euler_mse = compute_mse(ys_euler, ys_analytical)

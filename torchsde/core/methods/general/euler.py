@@ -26,8 +26,7 @@ class EulerGeneral(base_solver.GenericSDESolver):
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
-        with torch.no_grad():
-            I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
+        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
 
         t1, y1 = t0 + dt, y0
         f_eval = self.sde.f(t0, y0)

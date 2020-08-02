@@ -44,24 +44,26 @@ class SRKDiagonal(base_solver.GenericSDESolver):
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
         super(SRKDiagonal, self).__init__(
             sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
-        # Trapezoidal approximation of \int_0^t W_s \ds using only `bm` allows for truly deterministic behavior.
-        if 'trapezoidal_approx' in self.options and not self.options['trapezoidal_approx']:
-            self.trapezoidal_approx = False
-        else:
-            self.trapezoidal_approx = True
+        # Trapezoidal approximation of \int \int \dW_u \ds using only `bm` allows for truly deterministic behavior.
+        self.trapezoidal_approx = self.options.get('trapezoidal_approx', True)
+        self.dt1_min = self.options.get('dt1_min', 0.01)
+        self.dt1_div_dt = self.options.get('dt1_div_dt', 10)
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
-        with torch.no_grad():
-            sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-            I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
-            I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
-            I_k0 = (
-                utils.compute_trapezoidal_approx(self.bm, t0, y0, dt, sqrt_dt) if self.trapezoidal_approx else
-                [dt / 2. * (delta_bm_ + torch.randn_like(delta_bm_) * sqrt_dt / math.sqrt(3)) for delta_bm_ in I_k]
-            )
-            I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
+        sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
+        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
+        I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
+        I_k0 = (
+            utils.compute_trapezoidal_approx(
+                self.bm, t0, y0, dt, sqrt_dt, dt1_div_dt=self.dt1_div_dt, dt1_min=self.dt1_min
+            ) if self.trapezoidal_approx else [
+                dt / 2. * (delta_bm_ + torch.randn_like(delta_bm_) * sqrt_dt / math.sqrt(3))
+                for delta_bm_ in I_k
+            ]
+        )
+        I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
         t1, y1 = t0 + dt, y0
         H0, H1 = [], []

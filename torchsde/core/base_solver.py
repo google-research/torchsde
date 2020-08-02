@@ -22,6 +22,7 @@ import warnings
 import torch
 
 from torchsde.core import adaptive_stepping
+from torchsde.core import interp
 from torchsde.core import misc
 
 
@@ -133,7 +134,10 @@ class GenericSDESolver(SDESolver):
                     with torch.no_grad():
                         error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_stepsize(
-                            error_estimate=error_estimate, prev_stepsize=step_size, prev_error_ratio=prev_error_ratio)
+                            error_estimate=error_estimate,
+                            prev_stepsize=step_size,
+                            prev_error_ratio=prev_error_ratio
+                        )
 
                     if step_size < dt_min:
                         warnings.warn('Hitting minimum allowed step size in adaptive time-stepping.')
@@ -149,9 +153,12 @@ class GenericSDESolver(SDESolver):
                     delta_t = step_size
                     prev_t, prev_y = curr_t, curr_y
                     curr_t, curr_y = self.step(curr_t, curr_y, delta_t)
-
-            # Pull back when overshoot.
-            curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
+            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
+                curr_t, curr_y = interp.linear_interp(
+                    t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t
+                )
+            else:
+                curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
             ys.append(curr_y)
 
         ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
@@ -191,7 +198,10 @@ class GenericSDESolver(SDESolver):
                     with torch.no_grad():
                         error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_stepsize(
-                            error_estimate=error_estimate, prev_stepsize=step_size, prev_error_ratio=prev_error_ratio)
+                            error_estimate=error_estimate,
+                            prev_stepsize=step_size,
+                            prev_error_ratio=prev_error_ratio
+                        )
 
                     if step_size < dt_min:
                         warnings.warn('Hitting minimum allowed step size in adaptive time-stepping.')
@@ -208,11 +218,14 @@ class GenericSDESolver(SDESolver):
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
                     curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
 
-            # Pull back when overshoot.
-            curr_t, curr_y, curr_logqp = self.step_logqp(prev_t, prev_y, next_t - prev_t, logqp0=prev_logqp)
+            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
+                curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
+                    t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
+                )
+            else:
+                curr_t, curr_y, curr_logqp = self.step_logqp(prev_t, prev_y, next_t - prev_t, logqp0=prev_logqp)
             ys.append(curr_y)
-            for logqp_i, curr_logqp_i in zip(logqp, curr_logqp):
-                logqp_i.append(curr_logqp_i)
+            [logqp_i.append(curr_logqp_i) for logqp_i, curr_logqp_i in zip(logqp, curr_logqp)]
 
         ans = [torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0))]
         logqp = [torch.stack(logqp_i, dim=0) for logqp_i in logqp]
