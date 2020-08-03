@@ -15,6 +15,20 @@ limitations under the License.
 
 #include "utils.hpp"
 
+#include <ATen/ATen.h>
+#include <ATen/CPUGeneratorImpl.h>
+#include <TH/TH.h>
+#include <structmember.h>
+#include <torch/csrc/Generator.h>
+#include <torch/csrc/Device.h>
+#include <torch/csrc/Exceptions.h>
+#include <torch/csrc/utils/tensor_types.h>
+
+#ifdef USE_CUDA
+#include <ATen/CUDAGeneratorImpl.h>
+#include <THC/THCTensorRandom.h>
+#endif
+
 #include <math.h>
 #include <torch/torch.h>
 
@@ -40,13 +54,30 @@ torch::Tensor brownian_bridge_with_seed(double t, double t0, double t1,
                                         torch::Tensor const &w0,
                                         torch::Tensor const &w1,
                                         std::uint64_t seed) {
-  // TODO: Make this also work for CUDA. Related issue:
-  // https://github.com/pytorch/pytorch/issues/35078.
-  std::shared_ptr<at::CPUGenerator> curr = at::detail::createCPUGenerator(seed);
+  auto device = w0.device();
+  at::Generator generator;
+
+  // Adapted from:
+  // https://github.com/pytorch/pytorch/blob/master/torch/csrc/Generator.cpp.
+#ifdef USE_CUDA
+  if (device.type() == at::kCPU) {
+    generator = torch::make_generator<at::CPUGeneratorImpl>();
+  } else if (device.type() == at::kCUDA) {
+    generator = torch::make_generator<at::CUDAGeneratorImpl>(device.index());
+  } else {
+    AT_ERROR("Device type ", c10::DeviceTypeName(device.type()),
+             " is not supported for torch.Generator() api.");
+  }
+#else
+  TORCH_CHECK(device.type() == at::kCPU, "Device type ",
+              c10::DeviceTypeName(device.type()),
+              " is not supported for torch.Generator() api.");
+  generator = torch::make_generator<at::CPUGeneratorImpl>();
+#endif
+  generator.set_current_seed(seed);
   torch::Tensor mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0);
   double std = std::sqrt((t1 - t) * (t - t0) / (t1 - t0));
-  torch::Tensor bridge_point = at::normal(mean.cpu(), std, curr.get()).to(mean);
-  curr.reset();
+  torch::Tensor bridge_point = at::normal(mean, std, generator);
   return bridge_point;
 }
 

@@ -18,6 +18,7 @@ import platform
 import setuptools
 
 try:
+    import torch
     from torch.utils import cpp_extension
 except ModuleNotFoundError:
     raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.5.0 at "
@@ -39,6 +40,17 @@ sources = filter(lambda x: 'test' not in x, sources)
 sources = map(lambda x: os.path.join(brownian_lib_prefix, x), sources)
 sources = list(sources)
 
+USE_CUDA = torch.cuda.is_available() and cpp_extension.CUDA_HOME is not None
+if os.getenv('FORCE_CPU', '0') == '1':
+    USE_CUDA = False
+
+if USE_CUDA:
+    define_macros = [('USE_CUDA', None)]
+    extension_func = cpp_extension.CUDAExtension
+else:
+    define_macros = []
+    extension_func = cpp_extension.CppExtension
+
 setuptools.setup(
     name="torchsde",
     version="0.1.1",
@@ -48,11 +60,12 @@ setuptools.setup(
     url="https://github.com/google-research/torchsde",
     packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
     ext_modules=[
-        cpp_extension.CppExtension(name='torchsde._brownian_lib',
-                                   sources=sources,
-                                   extra_compile_args=extra_compile_args,
-                                   extra_link_args=extra_link_args,
-                                   optional=True)
+        extension_func(name='torchsde._brownian_lib',
+                       sources=sources,
+                       extra_compile_args=extra_compile_args,
+                       extra_link_args=extra_link_args,
+                       define_macros=define_macros,
+                       optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
     install_requires=['torch>=1.5.0', 'blist', 'numpy>=1.17.0', 'scipy'],
