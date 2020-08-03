@@ -68,7 +68,7 @@ setuptools.setup(
                        optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
-    install_requires=['torch>=1.5.0', 'blist', 'numpy>=1.17.0', 'scipy'],
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0', 'scipy'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",

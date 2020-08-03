@@ -16,7 +16,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import torch
+import numpy as np
 
 
 def compute_trapezoidal_approx(bm, t0, y0, dt, sqrt_dt, dt1_div_dt=10, dt1_min=0.01):
@@ -27,13 +27,14 @@ def compute_trapezoidal_approx(bm, t0, y0, dt, sqrt_dt, dt1_div_dt=10, dt1_min=0
 
     The loop is from using the Trapezoidal rule to estimate int_0^1 v(s) ds with step size `dt1`.
     """
+    dt, sqrt_dt = float(dt), float(sqrt_dt)
     dt1 = max(min(1.0, dt1_div_dt * dt), dt1_min)
     v = lambda s: [bmi / sqrt_dt for bmi in bm(s * dt + t0)]  # noqa
 
     # Estimate int_0^1 v(s) ds by Trapezoidal rule.
     # Based on Section 1.4 of Stochastic Numerics for Mathematical Physics.
-    int_v_01 = [-v0 - v1 for v0, v1 in zip(v(0.0), v(1.0))]
-    for t in torch.arange(0, 1 + 1e-7, dt1):
+    int_v_01 = [- v0 - v1 for v0, v1 in zip(v(0.0), v(1.0))]
+    for t in np.arange(0, 1 + 1e-7, dt1, dtype=float):
         int_v_01 = [a + 2. * b for a, b in zip(int_v_01, v(t))]
     int_v_01 = [a * dt1 / 2. for a in int_v_01]
     return [(dt ** (3 / 2) * a - dt * b).to(y0[0]) for a, b in zip(int_v_01, bm(t0))]
