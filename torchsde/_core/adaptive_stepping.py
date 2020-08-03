@@ -18,7 +18,7 @@ from __future__ import print_function
 
 import torch
 
-from torchsde.core import misc
+from torchsde._core import misc
 
 
 def update_step_size(error_estimate, prev_step_size, safety=0.9, facmin=0.2, facmax=1.4, prev_error_ratio=None):

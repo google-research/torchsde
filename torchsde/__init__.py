@@ -13,13 +13,5 @@
 # limitations under the License.
 
 from . import brownian_lib
-from .brownian.brownian_path import BrownianPath
-from .brownian.brownian_tree import BrownianTree
-from .core.adjoint import sdeint_adjoint
-from .core.base_sde import BaseSDE, SDEIto
-from .core.sdeint import sdeint
-
-sdeint.__annotations__ = {}
-sdeint_adjoint.__annotations__ = {}
-BrownianPath.__init__.__annotations__ = {}
-BrownianTree.__init__.__annotations__ = {}
+from ._brownian import BrownianPath, BrownianTree
+from ._core import sdeint, sdeint_adjoint, SDEIto, SDEStratonovich

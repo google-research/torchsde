@@ -24,13 +24,13 @@ import torch
 try:
     from torchsde.brownian_lib import BrownianPath
 except Exception:  # noqa
-    from torchsde.brownian.brownian_path import BrownianPath
+    from torchsde._brownian.brownian_path import BrownianPath  # noqa
 
-from torchsde.brownian.base_brownian import Brownian
-from torchsde.core import base_sde
-from torchsde.core import methods
-from torchsde.core import settings
-from torchsde.core.types import TensorOrTensors, Scalar, Vector
+from torchsde._brownian.base_brownian import Brownian  # noqa
+from . import base_sde
+from . import methods
+from . import settings
+from .types import TensorOrTensors, Scalar, Vector
 
 
 def sdeint(sde,

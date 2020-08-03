@@ -17,8 +17,8 @@ from typing import Union
 import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
-from torchsde.brownian import utils
-from torchsde.brownian.base_brownian import Brownian
+from torchsde._brownian import utils  # noqa
+from torchsde._brownian.base_brownian import Brownian  # noqa
 
 
 class BrownianPath(Brownian):

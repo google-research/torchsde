@@ -16,28 +16,28 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde.core import base_solver
-from torchsde.core.methods.general import euler
+from torchsde._core import base_solver
 
 
-class EulerAdditive(base_solver.GenericSDESolver):
-    """Euler solver for additive noise.
-
-    The functionality is exactly the same as Euler solver for general noise structure, but strong order is different.
-    """
-
-    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
-        super(EulerAdditive, self).__init__(
-            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
-        self._euler_general = euler.EulerGeneral(
-            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
+class EulerDiagonal(base_solver.GenericSDESolver):
 
     def step(self, t0, y0, dt):
-        return self._euler_general.step(t0, y0, dt)
+        assert dt > 0, 'Underflow in dt {}'.format(dt)
+
+        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
+
+        f_eval = self.sde.f(t0, y0)
+        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        y1 = [
+            y0_i + f_eval_i * dt + g_prod_eval_i
+            for y0_i, f_eval_i, g_prod_eval_i in zip(y0, f_eval, g_prod_eval)
+        ]
+        t1 = t0 + dt
+        return t1, y1
 
     @property
     def strong_order(self):
-        return 1.0
+        return 0.5
 
     @property
     def weak_order(self):

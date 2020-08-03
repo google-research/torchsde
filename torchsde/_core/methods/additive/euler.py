@@ -16,27 +16,29 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde.core import base_solver
-from torchsde.core.methods.diagonal import srk
-from torchsde.core.methods.scalar import utils
+from torchsde._core import base_solver
+from torchsde._core.methods.general import euler
 
 
-class SRKScalar(base_solver.GenericSDESolver):
+class EulerAdditive(base_solver.GenericSDESolver):
+    """Euler solver for additive noise.
+
+    The functionality is exactly the same as Euler solver for general noise structure, but strong order is different.
+    """
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
-        super(SRKScalar, self).__init__(
+        super(EulerAdditive, self).__init__(
             sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
-        self._srk_diagonal = srk.SRKDiagonal(
+        self._euler_general = euler.EulerGeneral(
             sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
-        utils.check_scalar_bm(bm(0.0))  # Brownian motion of size (batch_size, 1).
 
     def step(self, t0, y0, dt):
-        return self._srk_diagonal.step(t0, y0, dt)  # Relies on broadcasting.
+        return self._euler_general.step(t0, y0, dt)
 
     @property
     def strong_order(self):
-        return 1.5
+        return 1.0
 
     @property
     def weak_order(self):
-        return 1.5
+        return 1.0

@@ -16,9 +16,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde.core import base_solver
-from torchsde.core.methods.diagonal import milstein
-from torchsde.core.methods.scalar import utils
+from torchsde._core import base_solver
+from torchsde._core.methods.diagonal import milstein
+from torchsde._core.methods.scalar import utils
 
 
 class MilsteinScalar(base_solver.GenericSDESolver):

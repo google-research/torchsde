@@ -21,9 +21,9 @@ import warnings
 
 import torch
 
-from torchsde.core import adaptive_stepping
-from torchsde.core import interp
-from torchsde.core import misc
+from . import adaptive_stepping
+from . import interp
+from . import misc
 
 
 class SDESolver(abc.ABC):

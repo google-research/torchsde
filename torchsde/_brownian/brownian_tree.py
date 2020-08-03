@@ -25,8 +25,8 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
-from torchsde.brownian import utils
-from torchsde.brownian.base_brownian import Brownian
+from torchsde._brownian import utils
+from torchsde._brownian.base_brownian import Brownian
 
 
 class BrownianTree(Brownian):

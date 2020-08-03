@@ -23,8 +23,8 @@ import blist
 import numpy as np
 import torch
 
-from torchsde.brownian import utils
-from torchsde.brownian.base_brownian import Brownian
+from torchsde._brownian import utils
+from torchsde._brownian.base_brownian import Brownian
 
 
 class BrownianPath(Brownian):

@@ -16,25 +16,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde.core import base_solver
+from torchsde._core import base_solver
+from torchsde._core.methods.diagonal import euler
+from torchsde._core.methods.scalar import utils
 
 
-class EulerGeneral(base_solver.GenericSDESolver):
+class EulerScalar(base_solver.GenericSDESolver):
+
+    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
+        super(EulerScalar, self).__init__(
+            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
+        self._euler_diagonal = euler.EulerDiagonal(
+            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
+        utils.check_scalar_bm(bm(0.0))  # Brownian motion of size (batch_size, 1).
 
     def step(self, t0, y0, dt):
-        assert dt > 0, 'Underflow in dt {}'.format(dt)
-
-        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
-
-        t1, y1 = t0 + dt, y0
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
-
-        y1 = [
-            y1_ + f_eval_ * dt + g_prod_eval_
-            for y1_, f_eval_, g_prod_eval_ in zip(y1, f_eval, g_prod_eval)
-        ]
-        return t1, y1
+        return self._euler_diagonal.step(t0, y0, dt)  # Relies on broadcasting.
 
     @property
     def strong_order(self):

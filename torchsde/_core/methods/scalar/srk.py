@@ -16,31 +16,27 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde.core import base_solver
+from torchsde._core import base_solver
+from torchsde._core.methods.diagonal import srk
+from torchsde._core.methods.scalar import utils
 
 
-class MilsteinDiagonal(base_solver.GenericSDESolver):
+class SRKScalar(base_solver.GenericSDESolver):
+
+    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
+        super(SRKScalar, self).__init__(
+            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
+        self._srk_diagonal = srk.SRKDiagonal(
+            sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
+        utils.check_scalar_bm(bm(0.0))  # Brownian motion of size (batch_size, 1).
 
     def step(self, t0, y0, dt):
-        assert dt > 0, 'Underflow in dt {}'.format(dt)
-
-        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
-        v = [delta_bm_ ** 2. - dt for delta_bm_ in I_k]
-
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
-        gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
-        y1 = [
-            y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
-            for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
-        ]
-        t1 = t0 + dt
-        return t1, y1
+        return self._srk_diagonal.step(t0, y0, dt)  # Relies on broadcasting.
 
     @property
     def strong_order(self):
-        return 1.0
+        return 1.5
 
     @property
     def weak_order(self):
-        return 1.0
+        return 1.5
