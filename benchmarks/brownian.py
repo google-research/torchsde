@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Compare the speed of 4 Brownian motion variants on problems of different size."""
+"""Compare the speed of 4 Brownian motion variants on problems of different sizes."""
 import argparse
 import logging
 import os
@@ -23,7 +23,6 @@ import numpy.random as npr
 import torch
 
 import torchsde
-import torchsde.brownian_lib as brownian_lib
 
 t0, t1 = 0.0, 1.0
 reps, steps = 3, 100
@@ -66,7 +65,7 @@ def _time_query(bm, ts):
 
 
 def _compare(w0, ts, msg=''):
-    bm = brownian_lib.BrownianPath(t0=t0, w0=w0)
+    bm = torchsde.brownian_lib.BrownianPath(t0=t0, w0=w0)
     bp_cpp_time = _time_query(bm, ts)
     logging.warning(f'{msg} (brownian_lib.BrownianPath): {bp_cpp_time:.4f}')
 
