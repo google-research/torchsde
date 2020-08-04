@@ -37,20 +37,9 @@ class BaseSDE(abc.ABC, nn.Module):
             raise ValueError(f"Expected noise type in {settings.NOISE_TYPES}, but found {noise_type}")
         if sde_type not in settings.SDE_TYPES:
             raise ValueError(f"Expected sde type in {settings.SDE_TYPES}, but found {sde_type}")
-        self._noise_type = noise_type
-        self._sde_type = sde_type
-
-    @property
-    def noise_type(self):
-        return self._noise_type
-
-    @noise_type.setter
-    def noise_type(self, x):
-        self._noise_type = x
-
-    @property
-    def sde_type(self):
-        return self._sde_type
+        # TODO: Making these Python properties breaks `torch.jit.script`.
+        self.noise_type = noise_type
+        self.sde_type = sde_type
 
 
 class SDEIto(BaseSDE):
