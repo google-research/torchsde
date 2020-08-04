@@ -32,14 +32,6 @@ if platform.system() == "Darwin":
     extra_compile_args += ["-stdlib=libc++"]
     extra_link_args += ["-stdlib=libc++"]
 
-brownian_lib_prefix = os.path.join(".", "csrc")
-sources = os.listdir(brownian_lib_prefix)
-sources = filter(lambda x: x.endswith('.cpp'), sources)
-# Don't include C++ tests for now.
-sources = filter(lambda x: 'test' not in x, sources)
-sources = map(lambda x: os.path.join(brownian_lib_prefix, x), sources)
-sources = list(sources)
-
 USE_CUDA = torch.cuda.is_available() and cpp_extension.CUDA_HOME is not None
 if os.getenv('FORCE_CPU', '0') == '1':
     USE_CUDA = False
@@ -51,6 +43,18 @@ else:
     define_macros = []
     extension_func = cpp_extension.CppExtension
 
+
+def fetch_cpp_sources(path):
+    sources = os.listdir(path)
+    sources = filter(lambda x: x.endswith('.cpp'), sources)
+    sources = filter(lambda x: 'test' not in x, sources)
+    sources = map(lambda x: os.path.join(path, x), sources)
+    return list(sources)
+
+
+brownian_lib_sources = fetch_cpp_sources(os.path.join('.', 'csrc', 'brownian_lib'))
+solver_lib_sources = fetch_cpp_sources(os.path.join('.', 'csrc', 'solver_lib'))
+
 setuptools.setup(
     name="torchsde",
     version="0.1.1",
@@ -61,14 +65,19 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
     ext_modules=[
         extension_func(name='torchsde._brownian_lib',
-                       sources=sources,
+                       sources=brownian_lib_sources,
                        extra_compile_args=extra_compile_args,
                        extra_link_args=extra_link_args,
                        define_macros=define_macros,
-                       optional=True)
+                       optional=True),
+        cpp_extension.CppExtension(name='torchsde._solver_lib',
+                                   sources=solver_lib_sources,
+                                   extra_compile_args=extra_compile_args,
+                                   extra_link_args=extra_link_args,
+                                   optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
-    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0', 'scipy'],
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
