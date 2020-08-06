@@ -21,8 +21,7 @@ try:
     import torch
     from torch.utils import cpp_extension
 except ModuleNotFoundError:
-    raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.5.0 at "
-                              "https://pytorch.org.")
+    raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.6.0 at https://pytorch.org.")
 
 extra_compile_args = []
 extra_link_args = []
@@ -68,7 +67,7 @@ setuptools.setup(
                        optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
-    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0', 'scipy'],
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",

@@ -36,7 +36,7 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
     if scatters is None: scatters = ()
     if options is None: options = {}
 
-    plt.figure()
+    plt.figure(dpi=300)
     if 'xscale' in options: plt.xscale(options['xscale'])
     if 'yscale' in options: plt.yscale(options['yscale'])
     if 'xlabel' in options: plt.xlabel(options['xlabel'])

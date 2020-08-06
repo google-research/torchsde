@@ -31,7 +31,7 @@ from torchsde._core import base_sde
 from torchsde._core import methods
 from torchsde._core import misc
 from torchsde._core.types import TensorOrTensors, Scalar, Vector
-import torchsde._core.sdeint as sdeint_module
+from torchsde._core import sdeint
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -46,7 +46,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
          ctx.adjoint_options) = sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options
 
         sde = base_sde.ForwardSDEIto(sde)
-        ans = sdeint_module.integrate(
+        ans = sdeint.integrate(
             sde=sde,
             y0=y0,
             ts=ts,
@@ -86,7 +86,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             ans_i = [ans_[i] for ans_ in ans]
             aug_y0 = (*ans_i, *adj_y, adj_params)
 
-            aug_ans = sdeint_module.integrate(
+            aug_ans = sdeint.integrate(
                 sde=adjoint_sde,
                 y0=aug_y0,
                 ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
@@ -125,7 +125,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
          ctx.adjoint_options) = sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options
 
         sde = base_sde.ForwardSDEIto(sde)
-        ans_and_logqp = sdeint_module.integrate(
+        ans_and_logqp = sdeint.integrate(
             sde=sde,
             y0=y0,
             ts=ts,
@@ -170,7 +170,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
             ans_i = [ans_[i] for ans_ in ans]
             aug_y0 = (*ans_i, *adj_y, *adj_l, adj_params)
 
-            aug_ans = sdeint_module.integrate(
+            aug_ans = sdeint.integrate(
                 sde=adjoint_sde,
                 y0=aug_y0,
                 ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
@@ -260,10 +260,10 @@ def sdeint_adjoint(sde,
     if not isinstance(sde, nn.Module):
         raise ValueError('sde is required to be an instance of nn.Module.')
 
-    names_to_change = sdeint_module.get_names_to_change(names)
+    names_to_change = sdeint.get_names_to_change(names)
     if len(names_to_change) > 0:
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-    sdeint_module.check_contract(sde=sde, method=method, logqp=logqp, adjoint_method=adjoint_method)
+    sdeint.check_contract(sde=sde, method=method, logqp=logqp, adjoint_method=adjoint_method)
 
     if bm is None:
         bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
