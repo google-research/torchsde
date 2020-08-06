@@ -19,7 +19,8 @@ from __future__ import print_function
 METHODS = (
     'euler',
     'milstein',
-    'srk'
+    'srk',
+    'heun'
 )
 
 NOISE_TYPES = (

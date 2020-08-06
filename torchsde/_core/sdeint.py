@@ -29,6 +29,7 @@ except Exception:  # noqa
 from torchsde._brownian.base_brownian import Brownian  # noqa
 from . import base_sde
 from . import methods
+from . import methods_strat
 from . import settings
 from .types import TensorOrTensors, Scalar, Vector
 
@@ -101,7 +102,11 @@ def sdeint(sde,
         bm_ = bm
         bm = lambda t: (bm_(t),)  # noqa
 
-    sde = base_sde.ForwardSDEIto(sde)
+    if sde.sde_type == 'ito':
+        sde = base_sde.ForwardSDEIto(sde)
+    elif sde.sde_type == 'stratonovich':
+        sde = base_sde.ForwardSDEStratonovich(sde)
+    
     results = integrate(
         sde=sde,
         y0=y0,
@@ -159,7 +164,7 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
     if options is None:
         options = {}
 
-    solver_fn = _select(method=method, noise_type=sde.noise_type)
+    solver_fn = _select(sde_type=sde.sde_type, method=method, noise_type=sde.noise_type)
     solver = solver_fn(
         sde=sde,
         bm=bm,
@@ -179,30 +184,35 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
     return solver.integrate(ts)
 
 
-def _select(method, noise_type):
-    if noise_type == 'diagonal':
+def _select(sde_type, method, noise_type):
+    if sde_type == 'stratonovich':
         return {
-            'euler': methods.EulerDiagonal,
-            'milstein': methods.MilsteinDiagonal,
-            'srk': methods.SRKDiagonal
-        }[method]
-    elif noise_type == "general":
-        if method != 'euler':
-            raise ValueError('For SDEs with general noise only the Euler method is supported.')
-        return {
-            'euler': methods.EulerGeneral,
-        }[method]
-    elif noise_type == "additive":
-        return {
-            'euler': methods.EulerAdditive,
-            'milstein': methods.EulerAdditive,
-            'srk': methods.SRKAdditive,
-        }[method]
-    elif noise_type == "scalar":
-        return {
-            'euler': methods.EulerScalar,
-            'milstein': methods.MilsteinScalar,
-            'srk': methods.SRKScalar,
+            'heun': methods_strat.HeunDiagonal,
         }[method]
     else:
-        exit(1)
+        if noise_type == 'diagonal':
+            return {
+                'euler': methods.EulerDiagonal,
+                'milstein': methods.MilsteinDiagonal,
+                'srk': methods.SRKDiagonal
+            }[method]
+        elif noise_type == "general":
+            if method != 'euler':
+                raise ValueError('For SDEs with general noise only the Euler method is supported.')
+            return {
+                'euler': methods.EulerGeneral,
+            }[method]
+        elif noise_type == "additive":
+            return {
+                'euler': methods.EulerAdditive,
+                'milstein': methods.EulerAdditive,
+                'srk': methods.SRKAdditive,
+            }[method]
+        elif noise_type == "scalar":
+            return {
+                'euler': methods.EulerScalar,
+                'milstein': methods.MilsteinScalar,
+                'srk': methods.SRKScalar,
+            }[method]
+        else:
+            exit(1)

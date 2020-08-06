@@ -121,6 +121,41 @@ class SDEStratonovich(BaseSDE):
     def __init__(self, noise_type):
         super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type='stratonovich')
 
+class ForwardSDEStratonovich(SDEStratonovich):
+    """Wrapper SDE for the forward pass.
+
+    `g_prod` and `gdg_prod` are additional functions that high-order solvers will call.
+    """
+
+    def __init__(self, base_sde):
+        super(ForwardSDEStratonovich, self).__init__(noise_type=base_sde.noise_type)
+        self._base_sde = base_sde
+
+    def f(self, t, y):
+        return self._base_sde.f(t, y)
+
+    def g(self, t, y):
+        return self._base_sde.g(t, y)
+
+    def h(self, t, y):
+        return self._base_sde.h(t, y)
+
+    def g_prod(self, g_eval, v):
+        if self.noise_type == "diagonal":
+            return misc.seq_mul(g_eval, v)
+        elif self.noise_type == "scalar":
+            return misc.seq_mul_bc(g_eval, v)
+        return misc.seq_batch_mvp(ms=g_eval, vs=v)
+
+    def gdg_prod(self, t, y, v): #TODO not changed -> just copied
+        with torch.enable_grad():
+            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
+            val = self._base_sde.g(t, y)
+            val = misc.make_seq_requires_grad(val)
+            vjp_val = torch.autograd.grad(
+                outputs=val, inputs=y, grad_outputs=misc.seq_mul(val, v), create_graph=True, allow_unused=True)
+            vjp_val = misc.convert_none_to_zeros(vjp_val, y)
+        return vjp_val
 
 class TupleSDE(BaseSDE):
 
