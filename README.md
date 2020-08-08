@@ -9,7 +9,7 @@ Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in
 
 ## Installation
 ```shell script
-pip install git+ssh://git@github.com/google-research/torchsde
+pip install git+https://github.com/google-research/torchsde.git
 ```
 
 ## Examples
