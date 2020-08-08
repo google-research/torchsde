@@ -24,7 +24,7 @@ import unittest
 
 import torch
 
-from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4, GeneralSDE, AdditiveSDE, ScalarSDE, TupleSDE
+from tests import basic_sde
 from tests.torch_test import TorchTestCase
 from torchsde import BrownianPath, sdeint
 
@@ -43,45 +43,58 @@ ts = torch.linspace(t0, t1, steps=T).to(device)
 y0 = torch.ones(batch_size, d).to(device)
 
 basic_sdes = (
-    BasicSDE1(d=d).to(device),
-    BasicSDE2(d=d).to(device),
-    BasicSDE3(d=d).to(device),
-    BasicSDE4(d=d).to(device),
+    basic_sde.BasicSDE1(d=d).to(device),
+    basic_sde.BasicSDE2(d=d).to(device),
+    basic_sde.BasicSDE3(d=d).to(device),
+    basic_sde.BasicSDE4(d=d).to(device),
 )
 
 bm_diagonal = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, d).to(device))
 bm_general = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, m).to(device))
 bm_scalar = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, 1).to(device))
 
+
 class TestSdeint(TorchTestCase):
 
+    def test_rename_methods(self):
+        # Test renaming works with a subset of names when `logqp=False`.
+        sde = basic_sde.CustomNamesSDE().to(device)
+        ans = sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward'})
+        self.assertEqual(ans.shape, (T, batch_size, d))
+
+        # Test renaming works with a subset of names when `logqp=True`.
+        sde = basic_sde.CustomNamesSDELogqp().to(device)
+        ans = sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward', 'prior_drift': 'w'}, logqp=True)
+        self.assertEqual(ans[0].shape, (T, batch_size, d))
+        self.assertEqual(ans[1].shape, (T - 1, batch_size))
+
     def test_sdeint_gen(self):
-        sde = GeneralSDE(d=d, m=m).to(device)
+        sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
         for method in ('euler',):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
             self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
 
     def test_sdeint_add(self):
-        sde = AdditiveSDE(d=d, m=m).to(device)
+        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
         for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
             self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
 
     def test_sde_scalar(self):
-        sde = ScalarSDE(d=d, m=m).to(device)
+        sde = basic_sde.ScalarSDE(d=d, m=m).to(device)
         for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
             self._test_sdeint_logqp(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
 
     def test_srk_determinism(self):
         # srk for additive.
-        sde = AdditiveSDE(d=d, m=m).to(device)
+        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
         ys1 = sdeint(sde, y0, ts, bm=bm_general, adaptive=False, method='srk', dt=dt)
         ys2 = sdeint(sde, y0, ts, bm=bm_general, adaptive=False, method='srk', dt=dt)
         self.tensorAssertAllClose(ys1, ys2)
 
         # srk for diagonal.
-        sde = BasicSDE1(d=d).to(device)
+        sde = basic_sde.BasicSDE1(d=d).to(device)
         ys1 = sdeint(sde, y0, ts, bm=bm_diagonal, adaptive=False, method='srk', dt=dt)
         ys2 = sdeint(sde, y0, ts, bm=bm_diagonal, adaptive=False, method='srk', dt=dt)
         self.tensorAssertAllClose(ys1, ys2)
@@ -110,7 +123,7 @@ class TestSdeint(TorchTestCase):
 
     def test_sdeint_tuplesde(self):
         y0_ = (y0,)  # Make tuple input.
-        sde = TupleSDE(d=d).to(device)
+        sde = basic_sde.TupleSDE(d=d).to(device)
         bm = lambda t: (bm_diagonal(t),)
         with torch.no_grad():
             ans = sdeint(sde, y0_, ts, bm, method='euler', dt=dt)

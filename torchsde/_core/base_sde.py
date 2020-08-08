@@ -42,6 +42,8 @@ class BaseSDE(abc.ABC, nn.Module):
         self.sde_type = sde_type
 
 
+# TODO: Lint error "Class SDEIto must implement all abstract methods" comes from changes in torch==1.6.0.
+#  Should be gone in future version. See https://github.com/pytorch/pytorch/issues/42305 for more.
 class SDEIto(BaseSDE):
 
     def __init__(self, noise_type):
@@ -145,4 +147,5 @@ class RenameMethodsSDE(BaseSDE):
         self._base_sde = base_sde
         self.f = getattr(base_sde, drift)
         self.g = getattr(base_sde, diffusion)
-        self.h = getattr(base_sde, prior_drift)
+        if hasattr(base_sde, prior_drift):
+            self.h = getattr(base_sde, prior_drift)

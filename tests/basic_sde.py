@@ -165,3 +165,28 @@ class TupleSDE(SDEIto):
     def h(self, t, y):
         y, = y
         return torch.sigmoid(y),
+
+
+class CustomNamesSDE(SDEIto):
+    def __init__(self):
+        super(CustomNamesSDE, self).__init__(noise_type="diagonal")
+
+    def forward(self, t, y):
+        return y * t
+
+    def g(self, t, y):
+        return torch.sigmoid(t * y)
+
+
+class CustomNamesSDELogqp(SDEIto):
+    def __init__(self):
+        super(CustomNamesSDELogqp, self).__init__(noise_type="diagonal")
+
+    def forward(self, t, y):
+        return y * t
+
+    def g(self, t, y):
+        return torch.sigmoid(t * y)
+
+    def w(self, t, y):
+        return y * t
