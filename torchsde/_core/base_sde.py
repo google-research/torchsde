@@ -81,7 +81,7 @@ class ForwardSDEIto(SDEIto):
             y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
             val = self._base_sde.g(t, y)
             val = misc.make_seq_requires_grad(val)
-            vjp_val = torch.autograd.grad(
+            vjp_val = misc.grad(
                 outputs=val, inputs=y, grad_outputs=misc.seq_mul(val, v), create_graph=True, allow_unused=True)
             vjp_val = misc.convert_none_to_zeros(vjp_val, y)
         return vjp_val
