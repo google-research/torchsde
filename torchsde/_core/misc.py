@@ -153,3 +153,13 @@ def batch_mvp(m, v):
     mvp = torch.bmm(m, v)  # (batch_size, d, 1)
     mvp = mvp.squeeze(dim=-1)  # (batch_size, d)
     return mvp
+
+
+def grad(inputs, **kwargs):
+    # Workaround for PyTorch bug #39784
+    if torch.is_tensor(inputs):
+        inputs = (inputs,)
+    _inputs = []
+    for input in inputs:
+        _inputs.append(torch.as_strided(input, (), ()))
+    return torch.autograd.grad(inputs=inputs, **kwargs)

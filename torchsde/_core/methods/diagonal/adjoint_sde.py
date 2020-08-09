@@ -40,7 +40,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             g_eval = sde.g(-t, y)
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
-            gdg = torch.autograd.grad(
+            gdg = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=g_eval,
                 allow_unused=True,
@@ -53,7 +53,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             f_eval_corrected = misc.seq_sub(gdg, f_eval)  # Stratonovich correction for reverse-time.
             f_eval_corrected = misc.make_seq_requires_grad_y(f_eval_corrected, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=f_eval_corrected,
                 inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
@@ -65,7 +65,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             vjp_params = vjp_y_and_params[n_tensors:]
             vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
 
-            adj_times_dgdx = torch.autograd.grad(
+            adj_times_dgdx = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=adj_y,
                 allow_unused=True,
@@ -74,7 +74,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             adj_times_dgdx = misc.convert_none_to_zeros(adj_times_dgdx, y)
 
             # This extra term is due to converting the *adjoint* Stratonovich backward SDE to Itô.
-            extra_vjp_y_and_params = torch.autograd.grad(
+            extra_vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=adj_times_dgdx,
                 allow_unused=True,
@@ -100,7 +100,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
 
             g_eval = [-g_ for g_ in sde.g(-t, y)]
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[-noise_ * adj_y_ for noise_, adj_y_ in zip(noise, adj_y)],
                 allow_unused=True,
@@ -124,7 +124,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
 
             g_eval = sde.g(-t, y)
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
-            gdg_times_v = torch.autograd.grad(
+            gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=misc.seq_mul(g_eval, noise),
                 allow_unused=True,
@@ -132,7 +132,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             )
             gdg_times_v = misc.convert_none_to_zeros(gdg_times_v, y)
 
-            dgdy = torch.autograd.grad(
+            dgdy = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=[torch.ones_like(y_) for y_ in y],
                 allow_unused=True,
@@ -140,7 +140,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             )
             dgdy = misc.convert_none_to_zeros(dgdy, y)
 
-            prod_partials_adj_y_and_params = torch.autograd.grad(
+            prod_partials_adj_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=misc.seq_mul(adj_y, noise, dgdy),
                 allow_unused=True,
@@ -152,7 +152,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             prod_partials_params = prod_partials_adj_y_and_params[n_tensors:]
             prod_partials_params = misc.flatten_convert_none_to_zeros(prod_partials_params, params)
 
-            gdg_v = torch.autograd.grad(
+            gdg_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, noise, g_eval)],
                 allow_unused=True, create_graph=True
@@ -160,7 +160,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             gdg_v = misc.convert_none_to_zeros(gdg_v, y)
             gdg_v = misc.make_seq_requires_grad_y(gdg_v, y)
 
-            mixed_partials_adj_y_and_params = torch.autograd.grad(
+            mixed_partials_adj_y_and_params = misc.grad(
                 outputs=gdg_v, inputs=y + params,
                 grad_outputs=[torch.ones_like(p) for p in gdg_v],
                 allow_unused=True,
@@ -202,7 +202,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             g_eval = sde.g(-t, y)
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
-            gdg = torch.autograd.grad(
+            gdg = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=g_eval,
                 allow_unused=True,
@@ -214,7 +214,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             f_eval_corrected = misc.seq_sub(gdg, f_eval)
             f_eval_corrected = misc.make_seq_requires_grad_y(f_eval_corrected, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=f_eval_corrected, inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
                 allow_unused=True,
@@ -225,7 +225,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             vjp_params = vjp_y_and_params[n_tensors:]
             vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
 
-            adj_times_dgdx = torch.autograd.grad(
+            adj_times_dgdx = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=adj_y,
                 allow_unused=True,
@@ -233,7 +233,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             )
             adj_times_dgdx = misc.convert_none_to_zeros(adj_times_dgdx, y)
 
-            extra_vjp_y_and_params = torch.autograd.grad(
+            extra_vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=adj_times_dgdx,
                 allow_unused=True,
@@ -250,7 +250,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
 
             log_ratio_correction = misc.make_seq_requires_grad_y(log_ratio_correction, y)
-            corr_vjp_y_and_params = torch.autograd.grad(
+            corr_vjp_y_and_params = misc.grad(
                 outputs=log_ratio_correction, inputs=y + params,
                 grad_outputs=adj_l,
                 allow_unused=True,
@@ -279,7 +279,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             minus_g_eval = [-g_ for g_ in g_eval]
             minus_g_prod_eval = misc.seq_mul(minus_g_eval, noise)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=minus_g_eval, inputs=y + params,
                 grad_outputs=[-noise_ * adj_y_ for noise_, adj_y_ in zip(noise, adj_y)],
                 allow_unused=True
@@ -303,7 +303,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             g_eval = sde.g(-t, y)
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
-            gdg_times_v = torch.autograd.grad(
+            gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=misc.seq_mul(g_eval, noise),
                 allow_unused=True,
@@ -311,7 +311,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             )
             gdg_times_v = misc.convert_none_to_zeros(gdg_times_v, y)
 
-            dgdy = torch.autograd.grad(
+            dgdy = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=[torch.ones_like(y_) for y_ in y],
                 allow_unused=True,
@@ -319,7 +319,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             )
             dgdy = misc.convert_none_to_zeros(dgdy, y)
 
-            prod_partials_adj_y_and_params = torch.autograd.grad(
+            prod_partials_adj_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=misc.seq_mul(adj_y, noise, dgdy),
                 allow_unused=True,
@@ -330,7 +330,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             prod_partials_params = prod_partials_adj_y_and_params[n_tensors:]
             prod_partials_params = misc.flatten_convert_none_to_zeros(prod_partials_params, params)
 
-            gdg_v = torch.autograd.grad(
+            gdg_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, noise, g_eval)],
                 allow_unused=True,
@@ -340,7 +340,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             gdg_v = misc.make_seq_requires_grad_y(gdg_v, y)
 
             gdg_v = [gdg_v_.sum() for gdg_v_ in gdg_v]
-            mixed_partials_adj_y_and_params = torch.autograd.grad(
+            mixed_partials_adj_y_and_params = misc.grad(
                 outputs=gdg_v, inputs=y + params,
                 allow_unused=True,
             )

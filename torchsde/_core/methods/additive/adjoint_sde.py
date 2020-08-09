@@ -41,7 +41,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
             f_eval = [-f_eval_ for f_eval_ in f_eval]
             f_eval = misc.make_seq_requires_grad_y(f_eval, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=f_eval,
                 inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
@@ -66,7 +66,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
             g_eval = [-g_ for g_ in sde.g(-t, y)]
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[
                     -noise_.unsqueeze(1) * adj_y_.unsqueeze(2)  # Convert tensors to be of size (batch_size, d, m).
@@ -111,7 +111,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             f_eval = [-f_eval_ for f_eval_ in f_eval]
             f_eval = misc.make_seq_requires_grad_y(f_eval, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=f_eval,
                 inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
@@ -132,7 +132,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             u_eval = [torch.bmm(g_inv_eval_, u_eval_) for g_inv_eval_, u_eval_ in zip(g_inv_eval, u_eval)]
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
             log_ratio_correction = misc.make_seq_requires_grad_y(log_ratio_correction, y)
-            corr_vjp_y_and_params = torch.autograd.grad(
+            corr_vjp_y_and_params = misc.grad(
                 outputs=log_ratio_correction, inputs=y + params,
                 grad_outputs=adj_l,
                 allow_unused=True,
@@ -159,7 +159,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             g_eval = [-g_ for g_ in sde.g(-t, y)]
             g_eval = misc.make_seq_requires_grad_y(g_eval, y)
 
-            vjp_y_and_params = torch.autograd.grad(
+            vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[-noise_.unsqueeze(1) * adj_y_.unsqueeze(2) for noise_, adj_y_ in zip(noise, adj_y)],
                 allow_unused=True,
