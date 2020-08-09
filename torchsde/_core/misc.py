@@ -30,7 +30,7 @@ def flatten(sequence):
 
 def flatten_convert_none_to_zeros(sequence, like_sequence):
     flat = [
-        p.reshape(-1) if p is not None else torch.zeros_like(q).flatten()
+        p.reshape(-1) if p is not None else torch.zeros_like(q).reshape(-1)
         for p, q in zip(sequence, like_sequence)
     ]
     return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
@@ -50,11 +50,6 @@ def make_seq_requires_grad(sequence):
         A list of tensors that all require gradients.
     """
     return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
-
-
-def make_seq_requires_grad_y(sequence, y):
-    zero = y[0].sum() * 0.
-    return [p if p.requires_grad else p + zero for p in sequence]
 
 
 def is_increasing(t):
@@ -103,7 +98,7 @@ def seq_sub_div(xs, ys, zs):
     return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
 
 
-def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon=1e-7):
+def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon: float = 1e-7):
     y = torch.where(
         y.abs() > epsilon,
         y,
