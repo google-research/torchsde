@@ -159,7 +159,5 @@ def grad(inputs, **kwargs):
     # Workaround for PyTorch bug #39784
     if torch.is_tensor(inputs):
         inputs = (inputs,)
-    _inputs = []
-    for input in inputs:
-        _inputs.append(torch.as_strided(input, (), ()))
+    _inputs = [torch.as_strided(input, (), ()) for input in inputs]
     return torch.autograd.grad(inputs=inputs, **kwargs)
