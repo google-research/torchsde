@@ -85,7 +85,7 @@ class BrownianTree(Brownian):
         t0, t1 = float(t0), float(t1)
 
         if w1 is None:
-            w1 = w0 + torch.randn_like(w0) * math.sqrt(t1 - t0)
+            w1 = w0 + utils.normal_like(entropy, w0) * math.sqrt(t1 - t0)
 
         self._t0 = t0
         self._t1 = t1
