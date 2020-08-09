@@ -84,8 +84,11 @@ class BrownianTree(Brownian):
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
         t0, t1 = float(t0), float(t1)
 
+        parent = SeedSequence(entropy=entropy, pool_size=pool_size)
+        w1_seed, w00_seed, w11_seed, parent = parent.spawn(4)
+
         if w1 is None:
-            w1 = w0 + utils.normal_like(entropy, w0) * math.sqrt(t1 - t0)
+            w1 = w0 + utils.normal_like(w1_seed, w0) * math.sqrt(t1 - t0)
 
         self._t0 = t0
         self._t1 = t1
@@ -104,15 +107,15 @@ class BrownianTree(Brownian):
         self._ts_prev = blist.blist()
         self._ws_prev = blist.blist()
         self._ts_prev.extend([t00, t0])
-        self._ws_prev.extend([w0 + torch.randn_like(w0) * math.sqrt(t0 - t00), w0])
+        self._ws_prev.extend([w0 + utils.normal_like(w00_seed, w0) * math.sqrt(t0 - t00), w0])
 
         self._ts_post = blist.blist()
         self._ws_post = blist.blist()
         self._ts_post.extend([t1, t11])
-        self._ws_post.extend([w1, w1 + torch.randn_like(w1) * math.sqrt(t11 - t1)])
+        self._ws_post.extend([w1, w1 + utils.normal_like(w11_seed, w1) * math.sqrt(t11 - t1)])
 
         # Cache.
-        ts, ws, seeds = _create_cache(t0=t0, t1=t1, w0=w0, w1=w1, entropy=entropy, pool_size=pool_size, k=cache_depth)
+        ts, ws, seeds = _create_cache(t0=t0, t1=t1, w0=w0, w1=w1, parent=parent, k=cache_depth)
         self._ts = ts
         self._ws = ws
         self._seeds = seeds
@@ -201,11 +204,10 @@ def _binary_search(t0, t1, w0, w1, t, parent, tol):
     return w_mid, depth
 
 
-def _create_cache(t0, t1, w0, w1, entropy, pool_size, k):
+def _create_cache(t0, t1, w0, w1, parent, k):
     ts = [t0, t1]
     ws = [w0, w1]
 
-    parent = SeedSequence(entropy=entropy, pool_size=pool_size)
     seeds = [parent]
 
     for level in range(1, k + 1):
