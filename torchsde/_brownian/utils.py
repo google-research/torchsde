@@ -75,7 +75,7 @@ def search_and_insert(ts: blist.blist, ws: blist.blist, t):
     return w
 
 
-def _normal_like(seed, ref):
+def normal_like(seed, ref):
     """Return a tensor sampled from standard Gaussian with shape that of `ref`.
 
     Randomness here is based on numpy!
@@ -90,7 +90,7 @@ def brownian_bridge(t0: float, t1: float, w0, w1, t: float, seed=None):
         mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
         std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
         if seed is not None:
-            return mean + std * _normal_like(seed, ref=mean)
+            return mean + std * normal_like(seed, ref=mean)
         return mean + std * torch.randn_like(mean)
 
 
