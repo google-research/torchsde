@@ -35,13 +35,18 @@ class HeunDiagonal(base_solver.GenericSDESolver):
         ]
         
         t1 = t0 + dt
+        I_k = [(bm_next - bm_cur).to(y1[0]) for bm_next, bm_cur in zip(self.bm(t1 + dt), self.bm(t1))]
 
-        f_eval_next_step_sum = self.sde.f(t1, y1) + f_eval
-        g_eval_next_step_sum = self.sde.g(t1, y1) + g_eval
+        f_eval_next_step_sum = [
+            a + b for a, b in zip(f_eval, self.sde.f(t1, y1))
+        ]
+        g_eval_next_step_sum = [
+            (a + b) / 2.0 for a,b in zip(g_eval, self.sde.g(t1, y1))
+        ]
         g_prod_eval_next_step = self.sde.g_prod(g_eval_next_step_sum, I_k)
         y2 = [
-            y0_i + 0.5 * (f_eval_i * dt + g_prod_eval_i)
-            for y0_i, f_eval_i, g_prod_eval_i in zip(y1, f_eval_next_step_sum, g_prod_eval_next_step)
+            y0_i + 0.5 * f_eval_i * dt + g_prod_eval_i
+            for y0_i, f_eval_i, g_prod_eval_i in zip(y0, f_eval_next_step_sum, g_prod_eval_next_step)
         ]
 
         return t1, y2
