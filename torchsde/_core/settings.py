@@ -38,3 +38,9 @@ class NOISE_TYPES(metaclass=ContainerMeta):
 class SDE_TYPES(metaclass=ContainerMeta):
     ito = 'ito'
     stratonovich = 'stratonovich'
+
+
+class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):
+    none = 'none'
+    davie = 'davie'
+    foster = 'foster'

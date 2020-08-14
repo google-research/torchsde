@@ -25,6 +25,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
+
 from . import base_brownian
 from . import utils
 
@@ -104,7 +106,7 @@ class _Interval:
 
     def increment_and_levy_area(self):
         W, H = self._increment_and_space_time_levy_area()
-        if self._top.levy_area_approximation is None:
+        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             A = None
         else:  # 'davie' or 'foster'
             if W.shape == ():
@@ -134,7 +136,7 @@ class _Interval:
             return self._parent.right_increment_and_space_time_levy_area()
 
     def left_increment_and_space_time_levy_area(self):
-        if self._top.levy_area_approximation is None:
+        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             # Don't compute space-time Levy area unless we need to
             left_W = self._brownian_bridge(self._start, self._midway)
             left_H = None
@@ -149,7 +151,7 @@ class _Interval:
         return left_W, left_H
 
     def right_increment_and_space_time_levy_area(self):
-        if self._top.levy_area_approximation is None:
+        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             # Don't compute space-time Levy area unless we need to
             right_W = self._brownian_bridge(self._midway, self._end)
             right_H = None
@@ -277,7 +279,7 @@ class _Interval:
         # TODO: spawning is slow (about half the runtime), because of the tuple addition to create the child's
         #  spawn_key: our spawn_key + (index,). Find a clever solution?
         left_W_generator, right_W_generator = self._W_generator.spawn(2)
-        if self._top.levy_area_approximation is None:
+        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             # creating generators actually has nontrivial overhead so we avoid it if possible
             left_H_generator = right_H_generator = left_a_generator = right_a_generator = None
         else:
@@ -327,7 +329,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  entropy: Optional[int] = None,
                  dt: Optional[Union[float, torch.Tensor]] = None,
                  cachesize: Optional[int] = 45,
-                 levy_area_approximation: Optional[str] = None,
+                 levy_area_approximation: str = 'none',
                  W: Optional[torch.Tensor] = None,
                  H: Optional[torch.Tensor] = None
                  ):
@@ -349,7 +351,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 close to optimum: smaller values imply more recalculation, whilst larger values imply more time spent
                 keeping track of the cache.
             levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either None, 'davie' or 'foster', corresponding to approximation type. This is needed for some
+                either 'none', 'davie' or 'foster', corresponding to approximation type. This is needed for some
                 higher-order SDE solvers.
             W: The increment of the Brownian motion over the interval [t0, t1]. Will be generated randomly if not
                 provided.
@@ -446,8 +448,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             _assert_floating_tensor('H', H)
         self._w_h = (W, H)
 
-        if levy_area_approximation not in (None, 'davie', 'foster'):
-            raise ValueError("`levy_area_approximation` must be either None, 'davie' or 'foster'.")
+        if levy_area_approximation not in LEVY_AREA_APPROXIMATIONS:
+            raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}.")
 
         self._dt = None
         self._cachesize = cachesize
@@ -482,7 +484,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
         if ta == tb:
             W = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
-            if self.levy_area_approximation is not None:
+            if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
                 H = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
                 return W, H
             else:
@@ -505,19 +507,19 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
             # Clone to avoid modifying the W, H, A that may exist in the cache
             W = W.clone()
-            if self.levy_area_approximation is not None:
+            if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
                 H = H.clone()
                 A = A.clone()
 
             for interval in intervals[1:]:
                 Wi, Hi, Ai = interval.increment_and_levy_area()
-                if self.levy_area_approximation is not None:
+                if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
                     H += Hi + (interval.end - interval.start) * W
                     if self.shape != ():
                         A += Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
                 W += Wi
 
-        if self.levy_area_approximation is None:
+        if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             return W
         return W, H, A
 

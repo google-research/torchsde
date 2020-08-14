@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .base_brownian import BaseBrownian
 from .brownian_interval import BrownianInterval
 from .brownian_path import BrownianPath
 from .brownian_tree import BrownianTree
+from .modified import ReverseBrownian, TupleBrownian
 
 BrownianInterval.__init__.__annotations__ = {}
 BrownianPath.__init__.__annotations__ = {}

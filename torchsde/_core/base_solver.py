@@ -25,7 +25,7 @@ from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
-from .settings import NOISE_TYPES
+from .settings import NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -44,11 +44,12 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         assert sde.noise_type in self.noise_types, (f"SDE has noise type {sde.noise_type} but solver only supports "
                                                     f"noise types {self.noise_types}")
         if self.levy_area:
-            assert bm.levy_area_approximation is not None, ("SDE solver requires Levy area; the Brownian object must "
-                                                            "provide this.")
+            assert bm.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none, ("SDE solver requires Levy area; the "
+                                                                                 "Brownian object must provide this.")
         else:
-            assert bm.levy_area_approximation is None, ("SDE solver does not require Levy area; the Brownian object "
-                                                        "should not provide this.")
+            assert bm.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none, ("SDE solver does not require Levy "
+                                                                                 "area; the Brownian object should not "
+                                                                                 f"provide this. {type(bm)} {bm.levy_area_approximation}")
         if sde.noise_type == NOISE_TYPES.scalar and torch.Size(bm.shape[1:]).numel() != 1:
             raise ValueError('The Brownian motion for scalar SDEs must of dimension 1.')
 

@@ -22,11 +22,11 @@ from typing import Optional, Dict, Any
 import torch
 
 try:
-    from torchsde.brownian_lib import BrownianPath
+    from ..brownian_lib import BrownianPath
 except Exception:  # noqa
-    from torchsde._brownian.brownian_path import BrownianPath  # noqa
+    from torchsde._brownian import BrownianPath  # noqa
+from .._brownian import BaseBrownian, TupleBrownian  # noqa
 
-from torchsde._brownian.base_brownian import BaseBrownian  # noqa
 from . import base_sde
 from . import methods
 from .settings import SDE_TYPES, NOISE_TYPES, METHODS
@@ -98,8 +98,7 @@ def sdeint(sde,
     if tensor_input:
         sde = base_sde.TupleSDE(sde)
         y0 = (y0,)
-        bm_ = bm
-        bm = lambda t: (bm_(t),)  # noqa
+        bm = TupleBrownian(bm)
 
     sde = base_sde.ForwardSDEIto(sde)
     results = integrate(

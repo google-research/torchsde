@@ -44,7 +44,7 @@ class BrownianTree(base_brownian.BaseBrownian):
     """
 
     # TODO: add support for Levy area approximation
-    levy_area_approximation = None
+    levy_area_approximation = 'none'
 
     def __init__(self,
                  t0: Union[float, torch.Tensor],

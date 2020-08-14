@@ -22,16 +22,16 @@ import torch
 from torch import nn
 
 try:
-    from torchsde.brownian_lib import BrownianPath
+    from ..brownian_lib import BrownianPath
 except Exception:  # noqa
-    from torchsde._brownian.brownian_path import BrownianPath  # noqa
+    from .._brownian import BrownianPath  # noqa
+from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian  # noqa
 
-from torchsde._brownian.base_brownian import BaseBrownian  # noqa
-from torchsde._core import base_sde
-from torchsde._core import methods
-from torchsde._core import misc
-from torchsde._core.types import TensorOrTensors, Scalar, Vector
-from torchsde._core import sdeint
+from . import base_sde
+from . import methods
+from . import misc
+from . import sdeint
+from .types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -73,7 +73,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         # TODO: Make use of `adjoint_method`.
-        aug_bm = lambda ta, tb: [-bmi for bmi in bm(-tb, -ta)]  # noqa
+        aug_bm = ReverseBrownian(bm)
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
             sde=sde, params=params, adaptive=adaptive
         )
@@ -272,8 +272,7 @@ def sdeint_adjoint(sde,
     if tensor_input:
         sde = base_sde.TupleSDE(sde)
         y0 = (y0,)
-        bm_ = bm
-        bm = lambda t: (bm_(t),)  # noqa
+        bm = TupleBrownian(bm)
 
     flat_params = misc.flatten(sde.parameters())
     if logqp:

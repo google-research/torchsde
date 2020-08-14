@@ -35,6 +35,9 @@ class BrownianPath(base_brownian.BaseBrownian):
             [-0.3889]])
     """
 
+    # TODO: add support for Levy area approximation
+    levy_area_approximation = 'none'
+
     def __init__(self,
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
