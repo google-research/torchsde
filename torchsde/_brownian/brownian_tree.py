@@ -138,7 +138,9 @@ class BrownianTree(base_brownian.BaseBrownian):
 
         self._last_depth = None
 
-    def __call__(self, ta, tb):
+    def __call__(self, ta, tb=None):
+        if tb is None:
+            return self.call(ta)
         return self.call(tb) - self.call(ta)
 
     def call(self, t):

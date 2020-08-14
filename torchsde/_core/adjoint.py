@@ -209,6 +209,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
                 *adj_y)
 
 
+# TODO: reorder arguments - put all the adjoint_* next to each other?
 def sdeint_adjoint(sde,
                    y0: TensorOrTensors,
                    ts: Vector,
