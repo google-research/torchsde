@@ -19,6 +19,7 @@ from .diagonal.adjoint_sde import AdjointSDEDiagonal, AdjointSDEDiagonalLogqp
 from .scalar.adjoint_sde import AdjointSDEScalar, AdjointSDEScalarLogqp
 
 from .euler import AdditiveEuler, GeneralEuler
+from .midpoint import Midpoint
 from .milstein import Milstein
 from .srk import AdditiveSRK, DiagonalSRK
 
@@ -36,5 +37,7 @@ def select(method, noise_type):
             return AdditiveSRK
         else:
             return DiagonalSRK
+    elif method == METHODS.midpoint:
+        return Midpoint
     else:
         raise ValueError

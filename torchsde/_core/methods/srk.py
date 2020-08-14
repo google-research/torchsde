@@ -27,7 +27,7 @@ import torch
 
 from .. import base_solver
 from .. import misc
-from ..settings import SDE_TYPES, NOISE_TYPES
+from ..settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 from .tableaus import sra1, srid2
 
@@ -36,7 +36,7 @@ class BaseSRK(base_solver.BaseSDESolver):
     strong_order = 1.5
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
-    levy_area = True
+    levy_area_approximation = LEVY_AREA_APPROXIMATIONS.spacetime
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSRK, self).__init__(sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol,
@@ -52,7 +52,7 @@ class DiagonalSRK(BaseSRK):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-        I_k, I_k0, _ = self.bm(t0, t0 + dt)
+        I_k, I_k0 = self.bm(t0, t0 + dt)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
@@ -95,7 +95,7 @@ class AdditiveSRK(BaseSRK):
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
-        I_k, I_k0, _ = self.bm(t0, t0 + dt)
+        I_k, I_k0 = self.bm(t0, t0 + dt)
 
         t1, y1 = t0 + dt, y0
         H0 = []

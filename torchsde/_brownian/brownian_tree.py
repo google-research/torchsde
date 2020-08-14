@@ -25,6 +25,8 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
+
 from . import base_brownian
 from . import utils
 
@@ -55,7 +57,9 @@ class BrownianTree(base_brownian.BaseBrownian):
                  tol: float = 1e-6,
                  pool_size: int = 24,
                  cache_depth: int = 9,
-                 safety: Optional[float] = None):
+                 safety: Optional[float] = None,
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
+                 **kwargs):
         """Initialize the Brownian tree.
 
         The random value generation process exploits the parallel random number paradigm and uses
@@ -75,8 +79,11 @@ class BrownianTree(base_brownian.BaseBrownian):
                 In practice, we don't let t0 and t1 of the Brownian tree be the start and terminal times of the
                 solutions. This is to avoid issues related to 1) finite precision, and 2) adaptive solver querying time
                 points beyond initial and terminal times.
+            levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
+                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
+                some higher-order SDE solvers.
         """
-        super(BrownianTree, self).__init__()
+        super(BrownianTree, self).__init__(**kwargs)
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
         if t1 is None:
@@ -85,6 +92,11 @@ class BrownianTree(base_brownian.BaseBrownian):
             raise ValueError('Terminal time t1 should be a float or 0-d torch.Tensor.')
         if t0 > t1:
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
+
+        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
+                             "'none'.")
+
         t0, t1 = float(t0), float(t1)
 
         parent = SeedSequence(entropy=entropy, pool_size=pool_size)
@@ -100,6 +112,7 @@ class BrownianTree(base_brownian.BaseBrownian):
         self._tol = tol
         self._pool_size = pool_size
         self._cache_depth = cache_depth
+        self.levy_area_approximation = levy_area_approximation
 
         # Boundary guards.
         if safety is None:

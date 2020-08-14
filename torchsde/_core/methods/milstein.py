@@ -17,7 +17,7 @@ from __future__ import division
 from __future__ import print_function
 
 from .. import base_solver
-from ..settings import SDE_TYPES, NOISE_TYPES
+from ..settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
 class Milstein(base_solver.BaseSDESolver):
@@ -25,7 +25,7 @@ class Milstein(base_solver.BaseSDESolver):
     weak_order = 1.0
     sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-    levy_area = False
+    levy_area = LEVY_AREA_APPROXIMATIONS.none
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)

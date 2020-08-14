@@ -23,6 +23,8 @@ import numpy as np
 import torch
 from numpy.random import default_rng
 
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
+
 
 def search(ts: blist.blist, ws: blist.blist, t):
     """Search for the state value that corresponds to the time.
@@ -100,3 +102,36 @@ def is_scalar(x):
 
 def blist_to(l, *args, **kwargs):  # noqa
     return blist.blist([li.to(*args, **kwargs) for li in l])  # noqa
+
+
+_rsqrt3 = 1 / math.sqrt(3)
+
+
+def space_time_levy_area(W, h, levy_area_approximation, get_noise):
+    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+                                   LEVY_AREA_APPROXIMATIONS.davie,
+                                   LEVY_AREA_APPROXIMATIONS.foster):
+        return h / 2. * (W + get_noise() * math.sqrt(h) * _rsqrt3)
+    else:
+        return None
+
+
+def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
+    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.spacetime):
+        return None
+    elif W.shape == ():
+        return torch.zeros_like(W)
+    else:
+        # Davie's approximation to the Levy area from space-time Levy area
+        A = H.unsqueeze(-1) * W.unsqueeze(-2) - W.unsqueeze(-1) * H.unsqueeze(-2)
+        if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.foster:
+            # Foster's additional correction to Davie's approximation
+            tenth_h = 0.1 * h
+            H_squared = H ** 2
+            var = tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))
+            noise = get_noise()
+            noise = noise - noise.transpose(-1, -2)
+            # noise is skew symmetric of variance 2
+            a_tilde = math.sqrt(var) * noise
+            A += a_tilde
+        return A

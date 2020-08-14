@@ -20,8 +20,11 @@ from .. import base_solver
 from ..settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
-class BaseEuler(base_solver.BaseSDESolver):
-    sde_type = SDE_TYPES.ito
+class Midpoint(base_solver.BaseSDESolver):
+    strong_order = 1.0
+    weak_order = 1.0
+    sde_type = SDE_TYPES.stratonovich
+    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
     levy_area = LEVY_AREA_APPROXIMATIONS.none
 
     def step(self, t0, y0, dt):
@@ -34,21 +37,20 @@ class BaseEuler(base_solver.BaseSDESolver):
         f_eval = self.sde.f(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
 
-        y1 = [
-            y0_ + f_eval_ * dt + g_prod_eval_
+        half_dt = 0.5 * dt
+
+        t0_prime = t0 + half_dt
+        y0_prime = [
+            y0_ + half_dt * f_eval_ + 0.5 * g_prod_eval_
             for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval, g_prod_eval)
         ]
 
+        f_eval_prime = self.sde.f(t0_prime, y0_prime)
+        g_prod_eval_prime = self.sde.g_prod(t0_prime, y0_prime, I_k)
+
+        y1 = [
+            y0_ + dt * f_eval_ + g_prod_eval_
+            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval_prime, g_prod_eval_prime)
+        ]
+
         return t1, y1
-
-
-class GeneralEuler(BaseEuler):
-    strong_order = 0.5
-    weak_order = 1.0
-    noise_types = (NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
-
-
-class AdditiveEuler(BaseEuler):
-    strong_order = 1.0
-    weak_order = 1.0
-    noise_types = (NOISE_TYPES.additive,)

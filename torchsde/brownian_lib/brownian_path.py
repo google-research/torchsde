@@ -18,7 +18,9 @@ import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
 from .._brownian import utils  # noqa
-from .._brownian import base_brownian # noqa
+from .._brownian import base_brownian  # noqa
+
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
 
 
 class BrownianPath(base_brownian.BaseBrownian):
@@ -35,17 +37,21 @@ class BrownianPath(base_brownian.BaseBrownian):
             [-0.3889]])
     """
 
-    # TODO: add support for Levy area approximation
-    levy_area_approximation = 'none'
-
     def __init__(self,
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  **kwargs):  # noqa
-        super(BrownianPath, self).__init__()
+        super(BrownianPath, self).__init__(**kwargs)
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
+
+        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
+                             "'none'.")
+
         self._bm = _BrownianPath(t0=t0, w0=w0)
+        self.levy_area_approximation = levy_area_approximation
 
     def __call__(self, ta, tb):
         return self.call(tb) - self.call(ta)

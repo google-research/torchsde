@@ -24,6 +24,7 @@ import torch
 
 from . import base_brownian
 from . import utils
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
 
 from typing import Union
 
@@ -42,20 +43,29 @@ class BrownianPath(base_brownian.BaseBrownian):
             [-0.3889]])
     """
 
-    # TODO: add support for Levy area approximation
-    levy_area_approximation = 'none'
-
-    def __init__(self, t0: Union[float, torch.Tensor], w0: torch.Tensor, window_size: int = 8):
+    def __init__(self,
+                 t0: Union[float, torch.Tensor],
+                 w0: torch.Tensor,
+                 window_size: int = 8,
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
+                 **kwargs):
         """Initialize Brownian path.
 
         Args:
             t0: Initial time.
             w0: Initial state.
             window_size: Size of the window around the last query for local search.
+            levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
+                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
+                some higher-order SDE solvers.
         """
-        super(BrownianPath, self).__init__()
+        super(BrownianPath, self).__init__(**kwargs)
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
+
+        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
+                             "'none'.")
 
         t0 = float(t0)
         self._ts = blist.blist()
@@ -65,6 +75,7 @@ class BrownianPath(base_brownian.BaseBrownian):
 
         self._last_idx = 0
         self._window_size = window_size
+        self.levy_area_approximation = levy_area_approximation
 
     def __call__(self, ta, tb):
         return self.call(tb) - self.call(ta)

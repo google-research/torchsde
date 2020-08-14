@@ -106,24 +106,8 @@ class _Interval:
 
     def increment_and_levy_area(self):
         W, H = self._increment_and_space_time_levy_area()
-        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            A = None
-        else:  # 'davie' or 'foster'
-            if W.shape == ():
-                A = torch.zeros_like(W)
-            else:
-                # Davie's approximation to the Levy area from space-time Levy area
-                A = H.unsqueeze(-1) * W.unsqueeze(-2) - W.unsqueeze(-1) * H.unsqueeze(-2)
-                if self._top.levy_area_approximation == 'foster':
-                    # Foster's additional correction to Davie's approximation
-                    tenth_h = 0.1 * (self._end - self._start)
-                    H_squared = H ** 2
-                    var = tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))
-                    noise = self._randn('a')
-                    noise = noise - noise.transpose(-1, -2)
-                    # noise is skew symmetric of variance 2
-                    a_tilde = math.sqrt(var) * noise
-                    A += a_tilde
+        A = utils.davie_foster_approximation(W, H, self._end - self._start, self._top.levy_area_approximation,
+                                             lambda: self._randn('a'))
         return W, H, A
 
     def _increment_and_space_time_levy_area(self):
@@ -329,10 +313,10 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  entropy: Optional[int] = None,
                  dt: Optional[Union[float, torch.Tensor]] = None,
                  cachesize: Optional[int] = 45,
-                 levy_area_approximation: str = 'none',
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[torch.Tensor] = None,
-                 H: Optional[torch.Tensor] = None
-                 ):
+                 H: Optional[torch.Tensor] = None,
+                 **kwargs):
         """Initialize the Brownian interval.
 
         Args:
@@ -351,8 +335,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 close to optimum: smaller values imply more recalculation, whilst larger values imply more time spent
                 keeping track of the cache.
             levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either 'none', 'davie' or 'foster', corresponding to approximation type. This is needed for some
-                higher-order SDE solvers.
+                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
+                some higher-order SDE solvers.
             W: The increment of the Brownian motion over the interval [t0, t1]. Will be generated randomly if not
                 provided.
             H: The space-time Levy area of the Brownian motion over the interval [t0, t1]. Will be generated randomly if
@@ -436,7 +420,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                                                top=self,
                                                W_generator=W_generator,
                                                H_generator=H_generator,
-                                               a_generator=a_generator)
+                                               a_generator=a_generator,
+                                               **kwargs)
 
         if W is None:
             W = self._randn('W') * math.sqrt(t1 - t0)
@@ -504,20 +489,29 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
             # Clone to avoid modifying the W, H, A that may exist in the cache
             W = W.clone()
-            if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+                                                LEVY_AREA_APPROXIMATIONS.davie,
+                                                LEVY_AREA_APPROXIMATIONS.foster):
                 H = H.clone()
+            if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
+                                                LEVY_AREA_APPROXIMATIONS.foster):
                 A = A.clone()
 
             for interval in intervals[1:]:
                 Wi, Hi, Ai = interval.increment_and_levy_area()
-                if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+                if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+                                                    LEVY_AREA_APPROXIMATIONS.davie,
+                                                    LEVY_AREA_APPROXIMATIONS.foster):
                     H += Hi + (interval.end - interval.start) * W
-                    if self.shape != ():
+                    if self.shape != () and self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
+                                                                             LEVY_AREA_APPROXIMATIONS.foster):
                         A += Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
                 W += Wi
 
         if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             return W
+        elif self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.spacetime:
+            return W, H
         return W, H, A
 
     def _create_dependency_tree(self, dt):

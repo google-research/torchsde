@@ -18,6 +18,8 @@ from typing import Union, Optional
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
+
 from .._brownian import utils  # noqa
 from .._brownian import base_brownian  # noqa
 
@@ -48,8 +50,9 @@ class BrownianTree(base_brownian. BaseBrownian):
                  tol: float = 1e-6,
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
+                 levy_area_approximation: str = None,
                  **kwargs):  # noqa
-        super(BrownianTree, self).__init__()
+        super(BrownianTree, self).__init__(**kwargs)
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
 
@@ -59,6 +62,11 @@ class BrownianTree(base_brownian. BaseBrownian):
             raise ValueError('Terminal time t1 should be a float or 0-d torch.Tensor.')
         if t0 > t1:
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
+
+        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
+                             "'none'.")
+
         t0, t1 = float(t0), float(t1)
 
         if safety is None:
@@ -96,6 +104,7 @@ class BrownianTree(base_brownian. BaseBrownian):
         self.tol = tol
         self.cache_depth = cache_depth
         self.safety = safety
+        self.levy_area_approximation = levy_area_approximation
 
     def __call__(self, ta, tb):
         return self.call(tb) - self.call(ta)

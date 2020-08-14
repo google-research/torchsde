@@ -25,7 +25,7 @@ from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
-from .settings import NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
+from .settings import NOISE_TYPES
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -35,21 +35,18 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     weak_order = better_abc.abstract_attribute()
     sde_type = better_abc.abstract_attribute()
     noise_types = better_abc.abstract_attribute()
-    levy_area = better_abc.abstract_attribute()
+    levy_area_approximation = better_abc.abstract_attribute()
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
         assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
-        assert sde.noise_type in self.noise_types, (f"SDE has noise type {sde.noise_type} but solver only supports "
-                                                    f"noise types {self.noise_types}")
-        if self.levy_area:
-            assert bm.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none, ("SDE solver requires Levy area; the "
-                                                                                 "Brownian object must provide this.")
-        else:
-            assert bm.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none, ("SDE solver does not require Levy "
-                                                                                 "area; the Brownian object should not "
-                                                                                 f"provide this. {type(bm)} {bm.levy_area_approximation}")
+        assert sde.noise_type in self.noise_types, (
+            f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
+        )
+        assert bm.levy_area_approximation == self.levy_area_approximation, (
+            f"SDE solver requires levy_area_approximation='{self.levy_area_approximation}' set on the Brownian motion."
+        )
         if sde.noise_type == NOISE_TYPES.scalar and torch.Size(bm.shape[1:]).numel() != 1:
             raise ValueError('The Brownian motion for scalar SDEs must of dimension 1.')
 
