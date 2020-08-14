@@ -21,7 +21,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 from . import base_brownian
 from . import utils
@@ -301,13 +302,13 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  '_last_interval', 'increment_and_space_time_levy_area_cache')
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
-                 t1: Union[float, torch.Tensor],
+                 t0: Scalar,
+                 t1: Scalar,
                  shape: Optional[Tuple[int, ...]] = None,
                  dtype: Optional[torch.dtype] = None,
                  device: Optional[Union[str, torch.device]] = None,
                  entropy: Optional[int] = None,
-                 dt: Optional[Union[float, torch.Tensor]] = None,
+                 dt: Optional[Scalar] = None,
                  cachesize: Optional[int] = 45,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[torch.Tensor] = None,

@@ -22,13 +22,13 @@ try:
 except Exception:  # noqa
     from .._brownian import BrownianPath
 from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian
+from ..settings import NOISE_TYPES
+from ..types import TensorOrTensors, Scalar, Vector
 
 from . import adjoint_sdes
 from . import base_sde
 from . import misc
 from . import sdeint
-from .settings import NOISE_TYPES
-from ..types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):

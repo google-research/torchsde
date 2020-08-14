@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..settings import LEVY_AREA_APPROXIMATIONS
+
 from . import base_brownian
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
 
 
 class _ModifiedBrownian(base_brownian.BaseBrownian):

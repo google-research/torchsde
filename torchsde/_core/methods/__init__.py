@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..settings import METHODS, NOISE_TYPES
+from ...settings import METHODS, NOISE_TYPES
 
 from .euler import AdditiveEuler, GeneralEuler
 from .midpoint import Midpoint

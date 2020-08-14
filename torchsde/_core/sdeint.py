@@ -22,11 +22,11 @@ try:
 except Exception:  # noqa
     from torchsde._brownian import BrownianPath  # noqa
 from .._brownian import BaseBrownian, TupleBrownian
+from ..settings import SDE_TYPES, NOISE_TYPES, METHODS
+from ..types import TensorOrTensors, Scalar, Vector
 
 from . import base_sde
 from . import methods
-from .settings import SDE_TYPES, NOISE_TYPES, METHODS
-from ..types import TensorOrTensors, Scalar, Vector
 
 
 def sdeint(sde,

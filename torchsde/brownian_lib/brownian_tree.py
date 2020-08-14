@@ -18,10 +18,9 @@ from typing import Union, Optional
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
-
 from .._brownian import utils  # noqa
 from .._brownian import base_brownian  # noqa
+from ..settings import LEVY_AREA_APPROXIMATIONS
 
 
 class BrownianTree(base_brownian. BaseBrownian):
@@ -38,9 +37,6 @@ class BrownianTree(base_brownian. BaseBrownian):
             [-0.3889]])
     """
 
-    # TODO: add support for Levy area approximation
-    levy_area_approximation = 'none'
-
     def __init__(self,
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
@@ -50,7 +46,7 @@ class BrownianTree(base_brownian. BaseBrownian):
                  tol: float = 1e-6,
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
-                 levy_area_approximation: str = None,
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  **kwargs):  # noqa
         super(BrownianTree, self).__init__(**kwargs)
         if not utils.is_scalar(t0):

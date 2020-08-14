@@ -19,8 +19,7 @@ from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
 from .._brownian import utils  # noqa
 from .._brownian import base_brownian  # noqa
-
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
+from ..settings import LEVY_AREA_APPROXIMATIONS
 
 
 class BrownianPath(base_brownian.BaseBrownian):

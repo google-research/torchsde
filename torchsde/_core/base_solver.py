@@ -17,11 +17,12 @@ import warnings
 
 import torch
 
+from ..settings import NOISE_TYPES
+
 from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
-from .settings import NOISE_TYPES
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):

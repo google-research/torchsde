@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from numpy.random import default_rng
 
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
+from ..settings import LEVY_AREA_APPROXIMATIONS
 
 
 def search(ts: blist.blist, ws: blist.blist, t):

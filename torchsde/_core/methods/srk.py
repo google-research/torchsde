@@ -22,9 +22,10 @@ import math
 
 import torch
 
+from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
+
 from .. import base_solver
 from .. import misc
-from ..settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 from .tableaus import sra1, srid2
 

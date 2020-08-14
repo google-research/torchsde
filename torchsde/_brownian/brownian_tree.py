@@ -21,10 +21,11 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
+
 from . import base_brownian
 from . import utils
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
 
 
 class BrownianTree(base_brownian.BaseBrownian):
@@ -40,9 +41,6 @@ class BrownianTree(base_brownian.BaseBrownian):
             [ 0.1872],
             [-0.3889]])
     """
-
-    # TODO: add support for Levy area approximation
-    levy_area_approximation = 'none'
 
     def __init__(self,
                  t0: Scalar,

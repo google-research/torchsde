@@ -18,10 +18,11 @@ import blist
 import numpy as np
 import torch
 
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
+
 from . import base_brownian
 from . import utils
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
 
 
 class BrownianPath(base_brownian.BaseBrownian):
