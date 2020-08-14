@@ -474,12 +474,9 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
     def __call__(self, ta, tb):
         ta = float(ta)
         tb = float(tb)
-        if not self._start <= ta <= self._end:
-            raise RuntimeError(f"Query times {ta:.3f} and {tb:.3f} must lie between "
-                               f"t0={self._start:.3f} and t1={self._end:.3f}.")
-        if not self._start <= tb <= self._end:
-            raise RuntimeError(f"Query times {ta:.3f} and {tb:.3f} must lie between "
-                               f"t0={self._start:.3f} and t1={self._end:.3f}.")
+        # Can get queries just inside and outside the specified region in SDE solvers; we just clamp.
+        ta = min(self.start, max(ta, self.end))
+        tb = min(self.start, max(tb, self.end))
         if ta > tb:
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
         if ta == tb:

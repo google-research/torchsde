@@ -249,7 +249,7 @@ def solver_access(func=_time_sdeint):
         _time_sdeint_adjoint: 'sdeint-backprop-adjoint'
     }[func]
 
-    img_path = os.path.join('.', 'benchmarks', 'plots', f'{name}.png')
+    img_path = os.path.join('.', f'benchmarks-{device}', 'plots', f'{name}.png')
     if not os.path.exists(os.path.dirname(img_path)):
         os.makedirs(os.path.dirname(img_path))
 
