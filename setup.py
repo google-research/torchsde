@@ -52,7 +52,7 @@ else:
 
 setuptools.setup(
     name="torchsde",
-    version="0.1.1",
+    version="0.2.0",
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
@@ -68,6 +68,7 @@ setuptools.setup(
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
     install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0'],
+    python_requires='~=3.6',
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
