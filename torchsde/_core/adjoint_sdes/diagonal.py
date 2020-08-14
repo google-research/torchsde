@@ -19,8 +19,8 @@ from __future__ import print_function
 
 import torch
 
-from torchsde._core import base_sde
-from torchsde._core import misc
+from .. import base_sde
+from .. import misc
 
 
 class AdjointSDEDiagonal(base_sde.AdjointSDEIto):

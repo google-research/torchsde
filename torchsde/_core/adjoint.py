@@ -27,23 +27,28 @@ except Exception:  # noqa
     from .._brownian import BrownianPath  # noqa
 from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian  # noqa
 
+from . import adjoint_sdes
 from . import base_sde
-from . import methods
 from . import misc
 from . import sdeint
+from .settings import NOISE_TYPES
 from .types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, *args):
-        assert len(args) >= 14, 'Internal error: all arguments required.'
-        y0 = args[:-13]
-        (sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min, options,
-         adjoint_options) = args[-13:]
-        (ctx.sde, ctx.dt, ctx.bm, ctx.adjoint_method, ctx.adaptive, ctx.rtol, ctx.atol, ctx.dt_min,
-         ctx.adjoint_options) = sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options
+    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,
+                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, *y0):
+        ctx.sde = sde
+        ctx.dt = dt
+        ctx.bm = bm
+        ctx.adjoint_method = adjoint_method
+        ctx.adjoint_adaptive = adjoint_adaptive
+        ctx.adjoint_rtol = adjoint_rtol
+        ctx.adjoint_atol = adjoint_atol
+        ctx.dt_min = dt_min
+        ctx.adjoint_options = adjoint_options
 
         sde = base_sde.ForwardSDEIto(sde)
         ans = sdeint.integrate(
@@ -65,18 +70,15 @@ class _SdeintAdjointMethod(torch.autograd.Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         ts, flat_params, *ans = ctx.saved_tensors
-        sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options = (
+        sde, dt, bm, adjoint_method, adjoint_adaptive, adjoint_rtol, adjoint_atol, dt_min, adjoint_options = (
             ctx.sde, ctx.dt, ctx.bm, ctx.adjoint_method, ctx.adaptive, ctx.rtol, ctx.atol, ctx.dt_min,
             ctx.adjoint_options
         )
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        # TODO: Make use of `adjoint_method`.
         aug_bm = ReverseBrownian(bm)
-        adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
-            sde=sde, params=params, adaptive=adaptive
-        )
+        adjoint_sde = _get_adjoint_sde(sde=sde, params=params)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -94,8 +96,8 @@ class _SdeintAdjointMethod(torch.autograd.Function):
                 method=adjoint_method,
                 dt=dt,
                 adaptive=adjoint_adaptive,
-                rtol=rtol,
-                atol=atol,
+                rtol=adjoint_rtol,
+                atol=adjoint_atol,
                 dt_min=dt_min,
                 options=adjoint_options
             )
@@ -110,19 +112,24 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
             del aug_y0, aug_ans
 
-        return (*adj_y, None, None, adj_params, None, None, None, None, None, None, None, None, None, None)
+        return (None, None, adj_params, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                *adj_y)
 
 
 class _SdeintLogqpAdjointMethod(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, *args):
-        assert len(args) >= 14, 'Internal error: all arguments required.'
-        y0 = args[:-13]
-        (sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min, options,
-         adjoint_options) = args[-13:]
-        (ctx.sde, ctx.dt, ctx.bm, ctx.adjoint_method, ctx.adaptive, ctx.rtol, ctx.atol, ctx.dt_min,
-         ctx.adjoint_options) = sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options
+    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,
+                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, *y0):
+        ctx.sde = sde
+        ctx.dt = dt
+        ctx.bm = bm
+        ctx.adjoint_method = adjoint_method
+        ctx.adjoint_adaptive = adjoint_adaptive
+        ctx.adjoint_rtol = adjoint_rtol
+        ctx.adjoint_atol = adjoint_atol
+        ctx.dt_min = dt_min
+        ctx.adjoint_options = adjoint_options
 
         sde = base_sde.ForwardSDEIto(sde)
         ans_and_logqp = sdeint.integrate(
@@ -148,18 +155,21 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         ts, flat_params, *ans = ctx.saved_tensors
-        sde, dt, bm, adjoint_method, adaptive, rtol, atol, dt_min, adjoint_options = (
-            ctx.sde, ctx.dt, ctx.bm, ctx.adjoint_method, ctx.adaptive, ctx.rtol, ctx.atol, ctx.dt_min,
-            ctx.adjoint_options
-        )
+        sde = ctx.sde
+        dt = ctx.dt
+        bm = ctx.bm
+        adjoint_method = ctx.adjoint_method
+        adjoint_adaptive = ctx.adjoint_adaptive
+        adjoint_rtol = ctx.adjoint_rtol
+        adjoint_atol = ctx.adjoint_atol
+        dt_min = ctx.dt_min
+        adjoint_options = ctx.adjoint_options
+
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        # TODO: Make use of `adjoint_method`.
-        aug_bm = lambda ta, tb: [-bmi for bmi in bm(-tb, -ta)]  # noqa
-        adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
-            sde=sde, params=params, adaptive=adaptive, logqp=True
-        )
+        aug_bm = ReverseBrownian(bm)
+        adjoint_sde = _get_adjoint_sde(sde=sde, params=params, logqp=True)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
@@ -178,8 +188,8 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
                 method=adjoint_method,
                 dt=dt,
                 adaptive=adjoint_adaptive,
-                rtol=rtol,
-                atol=atol,
+                rtol=adjoint_rtol,
+                atol=adjoint_atol,
                 dt_min=dt_min,
                 options=adjoint_options
             )
@@ -195,7 +205,8 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
 
             del aug_y0, aug_ans
 
-        return (*adj_y, None, None, adj_params, None, None, None, None, None, None, None, None, None, None)
+        return (None, None, adj_params, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                *adj_y)
 
 
 def sdeint_adjoint(sde,
@@ -207,8 +218,11 @@ def sdeint_adjoint(sde,
                    adjoint_method: Optional[str] = 'milstein',
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
+                   adjoint_adaptive: Optional[bool] = False,
                    rtol: Optional[float] = 1e-5,
+                   adjoint_rtol: Optional[float] = 1e-5,
                    atol: Optional[float] = 1e-4,
+                   adjoint_atol: Optional[float] = 1e-4,
                    dt_min: Optional[Scalar] = 1e-5,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
@@ -236,8 +250,14 @@ def sdeint_adjoint(sde,
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
+        adjoint_adaptive (bool, optional): If `True`, use adaptive time-stepping
+            for the backward adjoint solve.
         rtol (float, optional): Relative tolerance.
+        adjoint_rtol (float, optional): Relative tolerance for backward adjoint
+            solve.
         atol (float, optional): Absolute tolerance.
+        adjoint_atol (float, optional): Absolute tolerance for backward adjoint
+            solve.
         dt_min (float, optional): Minimum step size during integration.
         options (dict, optional): Dict of options for the integration method.
         adjoint_options (dict, optional): Dict of options for the integration
@@ -277,48 +297,35 @@ def sdeint_adjoint(sde,
     flat_params = misc.flatten(sde.parameters())
     if logqp:
         return _SdeintLogqpAdjointMethod.apply(  # noqa
-            *y0, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min,
-            options, adjoint_options
+            sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
+            adjoint_atol, dt_min, options, adjoint_options, *y0
         )
 
     ys = _SdeintAdjointMethod.apply(  # noqa
-        *y0, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, rtol, atol, dt_min,
-        options, adjoint_options
+        sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
+        adjoint_atol, dt_min, options, adjoint_options, *y0
     )
     return ys[0] if tensor_input else ys
 
 
-def _get_adjoint_params(sde, params, adaptive, logqp=False):
-    if sde.noise_type == "diagonal":
+def _get_adjoint_sde(sde, params, logqp=False):
+    if sde.noise_type == NOISE_TYPES.diagonal:
         if logqp:
-            adjoint_sde = methods.AdjointSDEDiagonalLogqp(sde, params=params)
+            return adjoint_sdes.AdjointSDEDiagonalLogqp(sde, params=params)
         else:
-            adjoint_sde = methods.AdjointSDEDiagonal(sde, params=params)
+            return adjoint_sdes.AdjointSDEDiagonal(sde, params=params)
 
-        adjoint_method = "milstein"
-
-    elif sde.noise_type == "scalar":
+    elif sde.noise_type == NOISE_TYPES.scalar:
         if logqp:
-            adjoint_sde = methods.AdjointSDEScalarLogqp(sde, params=params)
+            return adjoint_sdes.AdjointSDEScalarLogqp(sde, params=params)
         else:
-            adjoint_sde = methods.AdjointSDEScalar(sde, params=params)
+            return adjoint_sdes.AdjointSDEScalar(sde, params=params)
 
-        adjoint_method = "euler"
-
-    elif sde.noise_type == "additive":
+    elif sde.noise_type == NOISE_TYPES.additive:
         if logqp:
-            adjoint_sde = methods.AdjointSDEAdditiveLogqp(sde, params=params)
+            return adjoint_sdes.AdjointSDEAdditiveLogqp(sde, params=params)
         else:
-            adjoint_sde = methods.AdjointSDEAdditive(sde, params=params)
-
-        adjoint_method = "euler"
+            return adjoint_sdes.AdjointSDEAdditive(sde, params=params)
 
     else:
         raise ValueError('Adjoint mode for general noise SDEs not supported.')
-
-    if adjoint_method in ('milstein', 'srk') and adaptive:  # Need method with strong order >= 1.0.
-        adjoint_adaptive = True
-    else:
-        adjoint_adaptive = False
-
-    return adjoint_sde, adjoint_method, adjoint_adaptive
