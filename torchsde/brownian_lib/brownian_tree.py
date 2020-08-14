@@ -106,7 +106,9 @@ class BrownianTree(base_brownian. BaseBrownian):
         self.safety = safety
         self.levy_area_approximation = levy_area_approximation
 
-    def __call__(self, ta, tb):
+    def __call__(self, ta, tb=None):
+        if tb is None:
+            return self.call(ta)
         return self.call(tb) - self.call(ta)
 
     def call(self, t):

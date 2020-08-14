@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Strong order 1.5 scheme for diagonal noise SDEs from
+"""Strong order 1.5 scheme from
 
 Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions of stochastic differential
 equations." SIAM Journal on Numerical Analysis 48, no. 3 (2010): 922-952.
