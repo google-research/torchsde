@@ -24,7 +24,7 @@ class MilsteinDiagonal(base_solver.GenericSDESolver):
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
-        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
+        I_k = self.bm(t0, t0 + dt)
         v = [delta_bm_ ** 2. - dt for delta_bm_ in I_k]
 
         f_eval = self.sde.f(t0, y0)

@@ -53,7 +53,7 @@ class SRKDiagonal(base_solver.GenericSDESolver):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-        I_k = [(bm_next - bm_cur).to(y0[0]) for bm_next, bm_cur in zip(self.bm(t0 + dt), self.bm(t0))]
+        I_k = self.bm(t0, t0 + dt)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_k0 = (
             utils.compute_trapezoidal_approx(
