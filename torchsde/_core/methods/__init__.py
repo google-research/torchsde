@@ -12,15 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..settings import METHODS, NOISE_TYPES
+
 from .additive.adjoint_sde import AdjointSDEAdditive, AdjointSDEAdditiveLogqp
-from .additive.euler import EulerAdditive
-from .additive.srk import SRKAdditive
 from .diagonal.adjoint_sde import AdjointSDEDiagonal, AdjointSDEDiagonalLogqp
-from .diagonal.euler import EulerDiagonal
-from .diagonal.milstein import MilsteinDiagonal
-from .diagonal.srk import SRKDiagonal
-from .general.euler import EulerGeneral
 from .scalar.adjoint_sde import AdjointSDEScalar, AdjointSDEScalarLogqp
-from .scalar.euler import EulerScalar
-from .scalar.milstein import MilsteinScalar
-from .scalar.srk import SRKScalar
+
+from .euler import AdditiveEuler, GeneralEuler
+from .milstein import Milstein
+from .srk import AdditiveSRK, DiagonalSRK
+
+
+def select(method, noise_type):
+    if method == METHODS.euler:
+        if noise_type == NOISE_TYPES.additive:
+            return AdditiveEuler
+        else:
+            return GeneralEuler
+    elif method == METHODS.milstein:
+        return Milstein
+    elif method == METHODS.srk:
+        if noise_type == NOISE_TYPES.additive:
+            return AdditiveSRK
+        else:
+            return DiagonalSRK
+    else:
+        raise ValueError

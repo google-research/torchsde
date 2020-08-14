@@ -26,7 +26,7 @@ try:
 except Exception:  # noqa
     from torchsde._brownian.brownian_path import BrownianPath  # noqa
 
-from torchsde._brownian.base_brownian import Brownian  # noqa
+from torchsde._brownian.base_brownian import BaseBrownian  # noqa
 from torchsde._core import base_sde
 from torchsde._core import methods
 from torchsde._core import misc
@@ -201,7 +201,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
 def sdeint_adjoint(sde,
                    y0: TensorOrTensors,
                    ts: Vector,
-                   bm: Optional[Brownian] = None,
+                   bm: Optional[BaseBrownian] = None,
                    logqp: Optional[bool] = False,
                    method: Optional[str] = 'srk',
                    adjoint_method: Optional[str] = 'milstein',

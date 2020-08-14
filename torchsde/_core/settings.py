@@ -16,20 +16,25 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-METHODS = (
-    'euler',
-    'milstein',
-    'srk'
-)
 
-NOISE_TYPES = (
-    'general',
-    'diagonal',
-    'scalar',
-    'additive'
-)
+class ContainerMeta(type):
+    def __contains__(cls, item):
+        return item in cls.__dict__.values()
 
-SDE_TYPES = (
-    'ito',
-    'stratonovich'
-)
+
+class METHODS(metaclass=ContainerMeta):
+    euler = 'euler'
+    milstein = 'milstein'
+    srk = 'srk'
+
+
+class NOISE_TYPES(metaclass=ContainerMeta):
+    general = 'general'
+    diagonal = 'diagonal'
+    scalar = 'scalar'
+    additive = 'additive'
+
+
+class SDE_TYPES(metaclass=ContainerMeta):
+    ito = 'ito'
+    stratonovich = 'stratonovich'

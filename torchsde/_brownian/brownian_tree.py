@@ -25,11 +25,11 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
-from torchsde._brownian import utils
-from torchsde._brownian.base_brownian import Brownian
+from . import base_brownian
+from . import utils
 
 
-class BrownianTree(Brownian):
+class BrownianTree(base_brownian.BaseBrownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.

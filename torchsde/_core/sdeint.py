@@ -26,17 +26,17 @@ try:
 except Exception:  # noqa
     from torchsde._brownian.brownian_path import BrownianPath  # noqa
 
-from torchsde._brownian.base_brownian import Brownian  # noqa
+from torchsde._brownian.base_brownian import BaseBrownian  # noqa
 from . import base_sde
 from . import methods
-from . import settings
+from .settings import SDE_TYPES, NOISE_TYPES, METHODS
 from .types import TensorOrTensors, Scalar, Vector
 
 
 def sdeint(sde,
            y0: TensorOrTensors,
            ts: Vector,
-           bm: Optional[Brownian] = None,
+           bm: Optional[BaseBrownian] = None,
            logqp: Optional[bool] = False,
            method: Optional[str] = 'srk',
            dt: Optional[Scalar] = 1e-3,
@@ -138,28 +138,28 @@ def check_contract(sde, method, logqp, adjoint_method=None):
     if not hasattr(sde, 'noise_type'):
         raise ValueError(f'sde does not have the attribute noise_type.')
 
-    if sde.noise_type not in settings.NOISE_TYPES:
-        raise ValueError(f'Expected noise type in {settings.NOISE_TYPES}, but found {sde.noise_type}.')
+    if sde.noise_type not in NOISE_TYPES:
+        raise ValueError(f'Expected noise type in {NOISE_TYPES}, but found {sde.noise_type}.')
 
     if not hasattr(sde, 'sde_type'):
         raise ValueError(f'sde does not have the attribute sde_type.')
 
-    if sde.sde_type not in settings.SDE_TYPES:
-        raise ValueError(f'Expected sde type in {settings.SDE_TYPES}, but found {sde.sde_type}.')
+    if sde.sde_type not in SDE_TYPES:
+        raise ValueError(f'Expected sde type in {SDE_TYPES}, but found {sde.sde_type}.')
 
-    if method not in settings.METHODS:
-        raise ValueError(f'Expected method in {settings.METHODS}, but found {method}.')
+    if method not in METHODS:
+        raise ValueError(f'Expected method in {METHODS}, but found {method}.')
 
     if adjoint_method is not None:
-        if adjoint_method not in settings.METHODS:
-            raise ValueError(f'Expected adjoint_method in {settings.METHODS}, but found {method}.')
+        if adjoint_method not in METHODS:
+            raise ValueError(f'Expected adjoint_method in {METHODS}, but found {method}.')
 
 
 def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):
     if options is None:
         options = {}
 
-    solver_fn = _select(method=method, noise_type=sde.noise_type)
+    solver_fn = methods.select(method=method, noise_type=sde.noise_type)
     solver = solver_fn(
         sde=sde,
         bm=bm,
@@ -177,32 +177,3 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
     if logqp:
         return solver.integrate_logqp(ts)
     return solver.integrate(ts)
-
-
-def _select(method, noise_type):
-    if noise_type == 'diagonal':
-        return {
-            'euler': methods.EulerDiagonal,
-            'milstein': methods.MilsteinDiagonal,
-            'srk': methods.SRKDiagonal
-        }[method]
-    elif noise_type == "general":
-        if method != 'euler':
-            raise ValueError('For SDEs with general noise only the Euler method is supported.')
-        return {
-            'euler': methods.EulerGeneral,
-        }[method]
-    elif noise_type == "additive":
-        return {
-            'euler': methods.EulerAdditive,
-            'milstein': methods.EulerAdditive,
-            'srk': methods.SRKAdditive,
-        }[method]
-    elif noise_type == "scalar":
-        return {
-            'euler': methods.EulerScalar,
-            'milstein': methods.MilsteinScalar,
-            'srk': methods.SRKScalar,
-        }[method]
-    else:
-        exit(1)

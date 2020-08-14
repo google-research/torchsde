@@ -18,10 +18,10 @@ from __future__ import print_function
 
 import abc
 
-from torchsde._brownian import better_abc
+from .._core import better_abc
 
 
-class Brownian(metaclass=better_abc.ABCMeta):
+class BaseBrownian(metaclass=better_abc.ABCMeta):
     @abc.abstractmethod
     def __call__(self, ta, tb):
         raise NotImplementedError
@@ -37,6 +37,7 @@ class Brownian(metaclass=better_abc.ABCMeta):
     dtype = better_abc.abstract_attribute()
     device = better_abc.abstract_attribute()
     shape = better_abc.abstract_attribute()
+    levy_area_approximation = better_abc.abstract_attribute()
 
     def size(self):
         return self.shape

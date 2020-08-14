@@ -18,11 +18,11 @@ from typing import Union, Optional
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
-from torchsde._brownian import utils  # noqa
-from torchsde._brownian.base_brownian import Brownian  # noqa
+from .._brownian import utils  # noqa
+from .._brownian import base_brownian  # noqa
 
 
-class BrownianTree(Brownian):
+class BrownianTree(base_brownian. BaseBrownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.
@@ -94,7 +94,10 @@ class BrownianTree(Brownian):
         self.cache_depth = cache_depth
         self.safety = safety
 
-    def __call__(self, t):
+    def __call__(self, ta, tb):
+        return self.call(tb) - self.call(ta)
+
+    def call(self, t):
         return self._bm(t)
 
     def __repr__(self):
@@ -129,9 +132,6 @@ class BrownianTree(Brownian):
     @property
     def shape(self):
         return self._bm.get_w0().shape
-
-    def size(self):
-        return self._bm.get_w0().size()
 
     def get_cache(self):
         return self._bm.get_cache()

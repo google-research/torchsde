@@ -16,10 +16,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde._core import base_solver
+from .. import base_solver
+from ..settings import SDE_TYPES, NOISE_TYPES
 
 
-class EulerDiagonal(base_solver.GenericSDESolver):
+class BaseEuler(base_solver.BaseSDESolver):
+    sde_type = SDE_TYPES.ito
+    levy_area = False
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
@@ -28,17 +31,23 @@ class EulerDiagonal(base_solver.GenericSDESolver):
 
         f_eval = self.sde.f(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+
         y1 = [
-            y0_i + f_eval_i * dt + g_prod_eval_i
-            for y0_i, f_eval_i, g_prod_eval_i in zip(y0, f_eval, g_prod_eval)
+            y0_ + f_eval_ * dt + g_prod_eval_
+            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval, g_prod_eval)
         ]
+
         t1 = t0 + dt
         return t1, y1
 
-    @property
-    def strong_order(self):
-        return 0.5
 
-    @property
-    def weak_order(self):
-        return 1.0
+class GeneralEuler(BaseEuler):
+    strong_order = 0.5
+    weak_order = 1.0
+    noise_types = (NOISE_TYPES.general, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
+
+
+class AdditiveEuler(BaseEuler):
+    strong_order = 1.0
+    weak_order = 1.0
+    noise_types = (NOISE_TYPES.additive,)

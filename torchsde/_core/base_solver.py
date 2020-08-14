@@ -22,26 +22,35 @@ import warnings
 import torch
 
 from . import adaptive_stepping
+from . import better_abc
 from . import interp
 from . import misc
+from .settings import NOISE_TYPES
 
 
-class BaseSDESolver(metaclass=abc.ABCMeta):
+class BaseSDESolver(metaclass=better_abc.ABCMeta):
     """API for solvers with possibly adaptive time stepping."""
 
-    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
-        super(BaseSDESolver, self).__init__()
+    strong_order = better_abc.abstract_attribute()
+    weak_order = better_abc.abstract_attribute()
+    sde_type = better_abc.abstract_attribute()
+    noise_types = better_abc.abstract_attribute()
+    levy_area = better_abc.abstract_attribute()
+
+    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
+        super(BaseSDESolver, self).__init__(**kwargs)
         assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
         assert sde.noise_type in self.noise_types, (f"SDE has noise type {sde.noise_type} but solver only supports "
                                                     f"noise types {self.noise_types}")
         if self.levy_area:
             assert bm.levy_area_approximation is not None, ("SDE solver requires Levy area; the Brownian object must "
-                                                            "be one that provides this.")
+                                                            "provide this.")
         else:
-            if self.levy_area:
-                assert bm.levy_area_approximation is None, ("SDE solver does not require Levy area; the Brownian "
-                                                            "object should not provide this.")
+            assert bm.levy_area_approximation is None, ("SDE solver does not require Levy area; the Brownian object "
+                                                        "should not provide this.")
+        if sde.noise_type == NOISE_TYPES.scalar and torch.Size(bm.shape[1:]).numel() != 1:
+            raise ValueError('The Brownian motion for scalar SDEs must of dimension 1.')
 
         self.sde = sde
         self.bm = bm
@@ -52,22 +61,6 @@ class BaseSDESolver(metaclass=abc.ABCMeta):
         self.atol = atol
         self.dt_min = dt_min
         self.options = options
-
-    def __init_subclass__(cls, sde_type, noise_types, levy_area, **kwargs):
-        super(BaseSDESolver, cls).__init_subclass__(**kwargs)
-        cls.sde_type = sde_type
-        cls.noise_types = noise_types
-        cls.levy_area = levy_area
-
-    @property
-    @abc.abstractmethod
-    def strong_order(self):
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def weak_order(self):
-        raise NotImplementedError
 
     def __repr__(self):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'

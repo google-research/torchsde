@@ -17,11 +17,11 @@ from typing import Union
 import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
-from torchsde._brownian import utils  # noqa
-from torchsde._brownian.base_brownian import Brownian  # noqa
+from .._brownian import utils  # noqa
+from .._brownian import base_brownian # noqa
 
 
-class BrownianPath(Brownian):
+class BrownianPath(base_brownian.BaseBrownian):
     """Fast Brownian motion with all queries stored in a std::map and uses local search.
 
     Trades in memory for speed.
@@ -44,7 +44,10 @@ class BrownianPath(Brownian):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
         self._bm = _BrownianPath(t0=t0, w0=w0)
 
-    def __call__(self, t):
+    def __call__(self, ta, tb):
+        return self.call(tb) - self.call(ta)
+
+    def call(self, t):
         return self._bm(t)
 
     def __repr__(self):
@@ -70,9 +73,6 @@ class BrownianPath(Brownian):
     @property
     def shape(self):
         return self._bm.get_w_head().shape
-
-    def size(self):
-        return self._bm.get_w_head().size()
 
     def get_cache(self):
         return self._bm.get_cache()

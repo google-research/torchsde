@@ -16,10 +16,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from torchsde._core import base_solver
+from .. import base_solver
+from ..settings import SDE_TYPES, NOISE_TYPES
 
 
-class MilsteinDiagonal(base_solver.GenericSDESolver):
+class Milstein(base_solver.BaseSDESolver):
+    strong_order = 1.0
+    weak_order = 1.0
+    sde_type = SDE_TYPES.ito
+    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
+    levy_area = False
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
@@ -29,18 +35,13 @@ class MilsteinDiagonal(base_solver.GenericSDESolver):
 
         f_eval = self.sde.f(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
-        gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
+        if self.sde.noise_type == NOISE_TYPES.additive:
+            gdg_prod_eval = [0] * len(g_prod_eval)
+        else:
+            gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
         y1 = [
             y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
             for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
         ]
         t1 = t0 + dt
         return t1, y1
-
-    @property
-    def strong_order(self):
-        return 1.0
-
-    @property
-    def weak_order(self):
-        return 1.0

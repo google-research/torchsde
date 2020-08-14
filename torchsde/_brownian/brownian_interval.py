@@ -25,8 +25,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 
-from torchsde._brownian.base_brownian import Brownian
-from torchsde._brownian import utils
+from . import base_brownian
+from . import utils
 
 
 _rsqrt3 = 1 / math.sqrt(3)
@@ -301,7 +301,7 @@ class _Interval:
                                       a_generator=right_a_generator)
 
 
-class BrownianInterval(_Interval, Brownian):
+class BrownianInterval(_Interval, base_brownian.BaseBrownian):
     """Brownian interval with fixed entropy.
 
     Computes increments (and optionally Levy area).

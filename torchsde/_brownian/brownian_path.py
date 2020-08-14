@@ -22,13 +22,13 @@ import blist
 import numpy as np
 import torch
 
-from torchsde._brownian import utils
-from torchsde._brownian.base_brownian import Brownian
+from . import base_brownian
+from . import utils
 
 from typing import Union
 
 
-class BrownianPath(Brownian):
+class BrownianPath(base_brownian.BaseBrownian):
     """Fast Brownian motion with all queries stored in a list and uses local search.
 
     Trades in memory for speed.
