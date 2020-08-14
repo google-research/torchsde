@@ -28,7 +28,8 @@ class EulerScalar(base_solver.GenericSDESolver):
             sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
         self._euler_diagonal = euler.EulerDiagonal(
             sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol, dt_min=dt_min, options=options)
-        utils.check_scalar_bm(bm(0.0))  # Brownian motion of size (batch_size, 1).
+        # TODO: this assumes that t0=0
+        utils.check_scalar_bm(bm(0.0, 0.0))  # Brownian motion of size (batch_size, 1).
 
     def step(self, t0, y0, dt):
         return self._euler_diagonal.step(t0, y0, dt)  # Relies on broadcasting.
