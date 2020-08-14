@@ -26,20 +26,23 @@ from . import interp
 from . import misc
 
 
-class SDESolver(abc.ABC):
-    """Abstract class specifying the methods that must be implemented for any solver."""
-
-    @abc.abstractmethod
-    def integrate(self, ts):
-        pass
-
-
-class GenericSDESolver(SDESolver):
+class BaseSDESolver(metaclass=abc.ABCMeta):
     """API for solvers with possibly adaptive time stepping."""
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options):
-        super(GenericSDESolver, self).__init__()
+        super(BaseSDESolver, self).__init__()
         assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
+        assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
+        assert sde.noise_type in self.noise_types, (f"SDE has noise type {sde.noise_type} but solver only supports "
+                                                    f"noise types {self.noise_types}")
+        if self.levy_area:
+            assert bm.levy_area_approximation is not None, ("SDE solver requires Levy area; the Brownian object must "
+                                                            "be one that provides this.")
+        else:
+            if self.levy_area:
+                assert bm.levy_area_approximation is None, ("SDE solver does not require Levy area; the Brownian "
+                                                            "object should not provide this.")
+
         self.sde = sde
         self.bm = bm
         self.y0 = y0
@@ -50,15 +53,21 @@ class GenericSDESolver(SDESolver):
         self.dt_min = dt_min
         self.options = options
 
+    def __init_subclass__(cls, sde_type, noise_types, levy_area, **kwargs):
+        super(BaseSDESolver, cls).__init_subclass__(**kwargs)
+        cls.sde_type = sde_type
+        cls.noise_types = noise_types
+        cls.levy_area = levy_area
+
     @property
     @abc.abstractmethod
     def strong_order(self):
-        pass
+        raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def weak_order(self):
-        pass
+        raise NotImplementedError
 
     def __repr__(self):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'
@@ -76,7 +85,7 @@ class GenericSDESolver(SDESolver):
             (t1, y1), where t1 is a float or torch.Tensor of size (,)
             and y1 is a torch.Tensor of size (batch_size, d).
         """
-        pass
+        raise NotImplementedError
 
     def step_logqp(self, t, y, dt, logqp0):
         t1, y1 = self.step(t, y, dt)
@@ -104,6 +113,7 @@ class GenericSDESolver(SDESolver):
             ]
         return t1, y1, logqp1
 
+    # TODO: unify integrate and integrate_logqp? My IDE spits out so many warnings about duplicate code.
     def integrate(self, ts):
         """Integrate along trajectory.
 
