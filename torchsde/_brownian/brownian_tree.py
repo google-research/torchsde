@@ -36,7 +36,7 @@ class BrownianTree(Brownian):
 
     To use:
     >>> bm = BrownianTree(t0=0.0, w0=torch.zeros(4, 1))
-    >>> bm(0.5)
+    >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
             [ 0.1872],
@@ -122,7 +122,10 @@ class BrownianTree(Brownian):
 
         self._last_depth = None
 
-    def __call__(self, t):
+    def __call__(self, ta, tb):
+        return self.call(tb) - self.call(ta)
+
+    def call(self, t):
         t = float(t)
         if t <= self._t0:
             return utils.search_and_insert(ts=self._ts_prev, ws=self._ws_prev, t=t)
@@ -165,9 +168,6 @@ class BrownianTree(Brownian):
 
     @property
     def shape(self):
-        return self._ws[0].size()
-
-    def size(self):
         return self._ws[0].size()
 
     def __len__(self):

@@ -18,39 +18,25 @@ from __future__ import print_function
 
 import abc
 
+from torchsde._brownian import better_abc
 
-class Brownian(abc.ABC):
 
-    def __init__(self):
-        pass
-
+class Brownian(metaclass=better_abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, *args, **kwargs):
-        pass
+    def __call__(self, ta, tb):
+        raise NotImplementedError
 
     @abc.abstractmethod
     def __repr__(self):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def to(self, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
-    @property
-    @abc.abstractmethod
-    def dtype(self):
-        pass
+    dtype = better_abc.abstract_attribute()
+    device = better_abc.abstract_attribute()
+    shape = better_abc.abstract_attribute()
 
-    @property
-    @abc.abstractmethod
-    def device(self):
-        pass
-
-    @property
-    @abc.abstractmethod
-    def shape(self):
-        pass
-
-    @abc.abstractmethod
     def size(self):
-        pass
+        return self.shape

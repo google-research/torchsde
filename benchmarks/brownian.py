@@ -59,8 +59,8 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
 def _time_query(bm, ts):
     now = time.perf_counter()
     for _ in range(reps):
-        for t in ts:
-            bm(t)
+        for ta, tb in zip(ts[:-1], ts[1:]):
+            bm(ta, tb)
     return time.perf_counter() - now
 
 

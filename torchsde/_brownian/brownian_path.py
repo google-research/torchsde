@@ -17,7 +17,6 @@ from __future__ import division
 from __future__ import print_function
 
 import math
-from typing import Union
 
 import blist
 import numpy as np
@@ -25,6 +24,8 @@ import torch
 
 from torchsde._brownian import utils
 from torchsde._brownian.base_brownian import Brownian
+
+from typing import Union
 
 
 class BrownianPath(Brownian):
@@ -34,7 +35,7 @@ class BrownianPath(Brownian):
 
     To use:
     >>> bm = BrownianPath(t0=0.0, w0=torch.zeros(4, 1))
-    >>> bm(0.5)
+    >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
             [ 0.1872],
@@ -62,7 +63,10 @@ class BrownianPath(Brownian):
         self._last_idx = 0
         self._window_size = window_size
 
-    def __call__(self, t):
+    def __call__(self, ta, tb):
+        return self.call(tb) - self.call(ta)
+
+    def call(self, t):
         t = float(t)
         if t == self._ts[-1]:
             idx = len(self._ts) - 1
@@ -148,9 +152,6 @@ class BrownianPath(Brownian):
 
     @property
     def shape(self):
-        return self._ws[0].size()
-
-    def size(self):
         return self._ws[0].size()
 
     def __len__(self):

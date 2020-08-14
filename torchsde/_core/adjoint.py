@@ -73,7 +73,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         # TODO: Make use of `adjoint_method`.
-        aug_bm = lambda t: [-bmi for bmi in bm(-t)]  # noqa
+        aug_bm = lambda ta, tb: [-bmi for bmi in bm(-tb, -ta)]  # noqa
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
             sde=sde, params=params, adaptive=adaptive
         )
@@ -156,7 +156,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         # TODO: Make use of `adjoint_method`.
-        aug_bm = lambda t: [-bmi for bmi in bm(-t)]  # noqa
+        aug_bm = lambda ta, tb: [-bmi for bmi in bm(-tb, -ta)]  # noqa
         adjoint_sde, adjoint_method, adjoint_adaptive = _get_adjoint_params(
             sde=sde, params=params, adaptive=adaptive, logqp=True
         )

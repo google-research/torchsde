@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from . import brownian_lib
-from ._brownian import BrownianPath, BrownianTree
+from ._brownian import BrownianInterval, BrownianPath, BrownianTree
 from ._core.adjoint import sdeint_adjoint
 from ._core.base_sde import SDEIto, SDEStratonovich
 from ._core.sdeint import sdeint
