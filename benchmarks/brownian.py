@@ -105,7 +105,7 @@ def sequential_access():
     bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts,
                                                                                       msg="huge sequential access")
 
-    img_path = os.path.join('.', 'benchmarks', 'plots', 'sequential_access.png')
+    img_path = os.path.join('.', 'benchmarks', f'plots-{device}', 'sequential_access.png')
     if not os.path.exists(os.path.dirname(img_path)):
         os.makedirs(os.path.dirname(img_path))
 
@@ -142,7 +142,7 @@ def random_access():
     w0 = torch.zeros(huge_batch_size, huge_d).to(device)
     bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts, msg="huge random access")
 
-    img_path = os.path.join('.', 'benchmarks', 'plots', 'random_access.png')
+    img_path = os.path.join('.', 'benchmarks', f'plots-{device}', 'random_access.png')
     if not os.path.exists(os.path.dirname(img_path)):
         os.makedirs(os.path.dirname(img_path))
 
@@ -249,7 +249,7 @@ def solver_access(func=_time_sdeint):
         _time_sdeint_adjoint: 'sdeint-backprop-adjoint'
     }[func]
 
-    img_path = os.path.join('.', f'benchmarks-{device}', 'plots', f'{name}.png')
+    img_path = os.path.join('.', 'benchmarks', f'plots-{device}', f'{name}.png')
     if not os.path.exists(os.path.dirname(img_path)):
         os.makedirs(os.path.dirname(img_path))
 
