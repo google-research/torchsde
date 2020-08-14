@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import warnings
 from typing import Optional, Dict, Any
 
@@ -25,7 +21,7 @@ try:
     from ..brownian_lib import BrownianPath
 except Exception:  # noqa
     from torchsde._brownian import BrownianPath  # noqa
-from .._brownian import BaseBrownian, TupleBrownian  # noqa
+from .._brownian import BaseBrownian, TupleBrownian
 
 from . import base_sde
 from . import methods

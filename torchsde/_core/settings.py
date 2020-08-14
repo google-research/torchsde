@@ -12,11 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-
 class ContainerMeta(type):
     def __str__(cls):
         return str(tuple(cls.__dict__.values()))
@@ -32,20 +27,20 @@ class METHODS(metaclass=ContainerMeta):
     midpoint = 'midpoint'
 
 
-class NOISE_TYPES(metaclass=ContainerMeta):
+class NOISE_TYPES(metaclass=ContainerMeta):  # noqa
     general = 'general'
     diagonal = 'diagonal'
     scalar = 'scalar'
     additive = 'additive'
 
 
-class SDE_TYPES(metaclass=ContainerMeta):
+class SDE_TYPES(metaclass=ContainerMeta):  # noqa
     ito = 'ito'
     stratonovich = 'stratonovich'
 
 
-class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):
-    none = 'none'             # Don't compute any Levy area approximation
+class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):  # noqa
+    none = 'none'  # Don't compute any Levy area approximation
     spacetime = 'space-time'  # Only compute an (exact) space-time Levy area
-    davie = 'davie'           # Compute Davie's approximation to Levy area
-    foster = 'foster'         # Compute Foster's correction to Davie's approximation to Levy area
+    davie = 'davie'  # Compute Davie's approximation to Levy area
+    foster = 'foster'  # Compute Foster's correction to Davie's approximation to Levy area

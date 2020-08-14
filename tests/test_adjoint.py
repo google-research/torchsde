@@ -13,10 +13,6 @@
 # limitations under the License.
 
 """Compare gradients computed with adjoint vs analytical solution."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 
 sys.path = sys.path[1:]  # A hack so that we always import the installed library.

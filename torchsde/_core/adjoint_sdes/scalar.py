@@ -13,9 +13,6 @@
 # limitations under the License.
 
 """Define the class of the adjoint SDE when the original forward SDE has scalar noise."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from .. import base_sde
 

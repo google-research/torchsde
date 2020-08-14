@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 # Useful trick adapted from https://stackoverflow.com/a/50381071/12254339
 # Allows one to define abstract instance attributes
 

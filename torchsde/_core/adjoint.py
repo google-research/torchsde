@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from typing import Optional, Dict, Any
 
 import torch
@@ -24,8 +20,8 @@ from torch import nn
 try:
     from ..brownian_lib import BrownianPath
 except Exception:  # noqa
-    from .._brownian import BrownianPath  # noqa
-from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian  # noqa
+    from .._brownian import BrownianPath
+from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian
 
 from . import adjoint_sdes
 from . import base_sde
@@ -38,7 +34,7 @@ from .types import TensorOrTensors, Scalar, Vector
 class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,
+    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,  # noqa
                 adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, *y0):
         ctx.sde = sde
         ctx.dt = dt
@@ -119,7 +115,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 class _SdeintLogqpAdjointMethod(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,
+    def forward(ctx, sde, ts, flat_params, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,  # noqa
                 adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, *y0):
         ctx.sde = sde
         ctx.dt = dt

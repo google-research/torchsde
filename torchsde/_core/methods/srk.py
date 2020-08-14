@@ -17,9 +17,6 @@
 Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions of stochastic differential
 equations." SIAM Journal on Numerical Analysis 48, no. 3 (2010): 922-952.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import math
 
@@ -88,7 +85,6 @@ class DiagonalSRK(BaseSRK):
         return t1, y1
 
 
-# TODO: unify with DiagonalSRK?
 class AdditiveSRK(BaseSRK):
     noise_types = (NOISE_TYPES.additive,)
 
