@@ -26,7 +26,7 @@ from .._brownian import BaseBrownian, TupleBrownian
 from . import base_sde
 from . import methods
 from .settings import SDE_TYPES, NOISE_TYPES, METHODS
-from .types import TensorOrTensors, Scalar, Vector
+from ..types import TensorOrTensors, Scalar, Vector
 
 
 def sdeint(sde,

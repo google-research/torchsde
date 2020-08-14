@@ -28,7 +28,7 @@ from . import base_sde
 from . import misc
 from . import sdeint
 from .settings import NOISE_TYPES
-from .types import TensorOrTensors, Scalar, Vector
+from ..types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):

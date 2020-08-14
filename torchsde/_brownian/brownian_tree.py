@@ -14,17 +14,17 @@
 
 import copy
 import math
-from typing import Union, Optional
+from typing import Optional
 
 import blist
 import numpy as np
 import torch
 from numpy.random import SeedSequence
 
-from .._core.settings import LEVY_AREA_APPROXIMATIONS
-
 from . import base_brownian
 from . import utils
+from .._core.settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 
 class BrownianTree(base_brownian.BaseBrownian):
@@ -45,9 +45,9 @@ class BrownianTree(base_brownian.BaseBrownian):
     levy_area_approximation = 'none'
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
+                 t0: Scalar,
                  w0: torch.Tensor,
-                 t1: Optional[Union[float, torch.Tensor]] = None,
+                 t1: Optional[Scalar] = None,
                  w1: Optional[torch.Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
@@ -67,17 +67,23 @@ class BrownianTree(base_brownian.BaseBrownian):
             t1: Terminal time.
             w1: Terminal state.
             entropy: Global seed, defaults to `None` for random entropy.
-            tol: Error tolerance before the binary search is terminated; the search depth ~ log2(tol).
-            pool_size: Size of the pooled entropy; should be larger than max depth of queries.
-                This parameter affects the query speed significantly.
-            cache_depth: Depth of the tree to cache values. This parameter affects the query speed significantly.
-            safety: Small float representing some time increment before t0 and after t1.
-                In practice, we don't let t0 and t1 of the Brownian tree be the start and terminal times of the
-                solutions. This is to avoid issues related to 1) finite precision, and 2) adaptive solver querying time
-                points beyond initial and terminal times.
-            levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
-                some higher-order SDE solvers.
+            tol: Error tolerance before the binary search is terminated;
+                the search depth ~ log2(tol).
+            pool_size: Size of the pooled entropy; should be larger than max
+                depth of queries. This parameter affects the query speed
+                significantly.
+            cache_depth: Depth of the tree to cache values. This parameter
+                affects the query speed significantly.
+            safety: Small float representing some time increment before t0 and
+                after t1. In practice, we don't let t0 and t1 of the Brownian
+                tree be the start and terminal times of the solutions. This
+                is to avoid issues related to 1) finite precision, and 2)
+                adaptive solver querying time points beyond initial and
+                terminal times.
+            levy_area_approximation: Whether to also approximate Levy area.
+                Defaults to None. Valid options are either 'none', 'spacetime',
+                'davie' or 'foster', corresponding to approximation type. This
+                is needed for some higher-order SDE solvers.
         """
         super(BrownianTree, self).__init__(**kwargs)
         if not utils.is_scalar(t0):

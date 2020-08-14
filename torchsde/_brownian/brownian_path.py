@@ -21,8 +21,7 @@ import torch
 from . import base_brownian
 from . import utils
 from .._core.settings import LEVY_AREA_APPROXIMATIONS
-
-from typing import Union
+from ..types import Scalar
 
 
 class BrownianPath(base_brownian.BaseBrownian):
@@ -40,7 +39,7 @@ class BrownianPath(base_brownian.BaseBrownian):
     """
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
+                 t0: Scalar,
                  w0: torch.Tensor,
                  window_size: int = 8,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
