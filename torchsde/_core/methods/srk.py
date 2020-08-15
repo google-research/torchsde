@@ -38,15 +38,13 @@ class SRK(base_solver.BaseSDESolver):
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
     levy_area_approximation = LEVY_AREA_APPROXIMATIONS.spacetime
 
-    def __init__(self, sde, options, **kwargs):
+    def __init__(self, sde, **kwargs):
         if sde.noise_type == NOISE_TYPES.additive:
             self.step = self.additive_step
         else:
             self.step = self.diagonal_or_scalar_step
 
-        super(SRK, self).__init__(sde=sde, options=options, **kwargs)
-        self.dt1_min = self.options.get('dt1_min', 0.01)
-        self.dt1_div_dt = self.options.get('dt1_div_dt', 10)
+        super(SRK, self).__init__(sde=sde, **kwargs)
 
     def diagonal_or_scalar_step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
