@@ -51,7 +51,7 @@ class DiagonalSRK(BaseSRK):
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
         I_k, H = self.bm(t0, t0 + dt)
-        I_k0 = dt * H + 0.5 * dt**2 * I_k
+        I_k0 = dt * (H + 0.5 * I_k)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
