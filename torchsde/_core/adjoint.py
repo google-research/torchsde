@@ -79,7 +79,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        aug_bm = ReverseBrownian(bm)
+        reverse_bm = ReverseBrownian(bm)
         adjoint_sde = _get_adjoint_sde(sde=sde, params=params)
 
         T = ans[0].size(0)
@@ -94,7 +94,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
                 sde=adjoint_sde,
                 y0=aug_y0,
                 ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
-                bm=aug_bm,
+                bm=reverse_bm,
                 method=adjoint_method,
                 dt=dt,
                 adaptive=adjoint_adaptive,
@@ -170,7 +170,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
-        aug_bm = ReverseBrownian(bm)
+        reverse_bm = ReverseBrownian(bm)
         adjoint_sde = _get_adjoint_sde(sde=sde, params=params, logqp=True)
 
         T = ans[0].size(0)
@@ -186,7 +186,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
                 sde=adjoint_sde,
                 y0=aug_y0,
                 ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
-                bm=aug_bm,
+                bm=reverse_bm,
                 method=adjoint_method,
                 dt=dt,
                 adaptive=adjoint_adaptive,
