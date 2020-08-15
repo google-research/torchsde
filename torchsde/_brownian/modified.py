@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..settings import LEVY_AREA_APPROXIMATIONS
-
 from . import base_brownian
 
 
@@ -48,18 +46,21 @@ class _ModifiedBrownian(base_brownian.BaseBrownian):
 # TODO: these checks are very inelegant. Is there a better interface to Brownian motion?
 class ReverseBrownian(_ModifiedBrownian):
     def __call__(self, ta, tb, return_U=False, return_A=False):
-        # TODO: double-check that this is the correct way to reverse each of
-        #  these objects
+        # TODO: double-check if U and A need reversing
         if return_U:
             if return_A:
-                tuple((-W, U, A) for W, U, A in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+                W, U, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), U, A
             else:
-                tuple((-W, U) for W, U in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+                W, U = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), U
         else:
             if return_A:
-                tuple((-W, A) for W, A in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+                W, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), A
             else:
-                tuple(-W for W in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+                W = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W)
 
 
 class TupleBrownian(_ModifiedBrownian):
