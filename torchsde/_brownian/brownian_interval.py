@@ -99,7 +99,8 @@ class _Interval:
     # left or right of our parent and dispatches to the parent.
     #
     # left_increment_and_space_time_levy_area and right_increment_and_space_time_levy_area then really do the
-    # calculation. As helper functions, they have _brownian_bridge and _values that factor out their common code.
+    # calculation. As helper functions, they have _brownian_bridge and _common_levy_computation that factor out their
+    # common code.
 
     def increment_and_levy_area(self):
         W, H = self._increment_and_space_time_levy_area()
@@ -117,33 +118,33 @@ class _Interval:
             return self._parent.right_increment_and_space_time_levy_area()
 
     def left_increment_and_space_time_levy_area(self):
-        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            # Don't compute space-time Levy area unless we need to
-            left_W = self._brownian_bridge(self._start, self._midway)
-            left_H = None
-        else:
-            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._values()
+        if self._top.have_H:
+            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._common_levy_computation()
 
             first_coeff = left_diff * h_reciprocal
             second_coeff = 6 * first_coeff * right_diff * h_reciprocal
 
             left_W = first_coeff * W + second_coeff * H + third_coeff * X1
             left_H = first_coeff**2 * H - a * X1 + c * right_diff * X2
+        else:
+            # Don't compute space-time Levy area unless we need to
+            left_W = self._brownian_bridge(self._start, self._midway)
+            left_H = None
         return left_W, left_H
 
     def right_increment_and_space_time_levy_area(self):
-        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            # Don't compute space-time Levy area unless we need to
-            right_W = self._brownian_bridge(self._midway, self._end)
-            right_H = None
-        else:
-            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._values()
+        if self._top.have_H:
+            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._common_levy_computation()
 
             first_coeff = right_diff * h_reciprocal
             second_coeff = 6 * first_coeff * left_diff * h_reciprocal
 
             right_W = first_coeff * W - second_coeff * H - third_coeff * X1
             right_H = first_coeff**2 * H - b * X1 - c * left_diff * X2
+        else:
+            # Don't compute space-time Levy area unless we need to
+            right_W = self._brownian_bridge(self._midway, self._end)
+            right_H = None
         return right_W, right_H
 
     def _brownian_bridge(self, ta, tb):
@@ -154,7 +155,7 @@ class _Interval:
         noise = self._randn('W')
         return mean + math.sqrt(var) * noise
 
-    def _values(self):
+    def _common_levy_computation(self):
         W, H = self._increment_and_space_time_levy_area()
 
         left_diff = self._midway - self._start
@@ -260,11 +261,11 @@ class _Interval:
         # TODO: spawning is slow (about half the runtime), because of the tuple addition to create the child's
         #  spawn_key: our spawn_key + (index,). Find a clever solution?
         left_W_generator, right_W_generator = self._W_generator.spawn(2)
-        if self._top.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            # creating generators actually has nontrivial overhead so we avoid it if possible
-            left_H_generator = right_H_generator = left_a_generator = right_a_generator = None
-        else:
+        left_H_generator = right_H_generator = left_a_generator = right_a_generator = None
+        # creating generators actually has nontrivial overhead so we avoid it if possible
+        if self._top.have_H:
             left_H_generator, right_H_generator = self._H_generator.spawn(2)
+        if self._top.have_A:
             left_a_generator, right_a_generator = self._a_generator.spawn(2)
         self._left_child = _Interval(start=self._start,
                                      end=midway,
@@ -298,7 +299,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             [-0.3889]], device='cuda:0')
     """
 
-    __slots__ = ('shape', 'dtype', 'device', '_w_h', '_entropy', '_dt', '_cachesize', 'levy_area_approximation',
+    __slots__ = ('shape', 'dtype', 'device', '_w_h', '_entropy', '_dt', '_cache_size', 'levy_area_approximation',
                  '_last_interval', 'increment_and_space_time_levy_area_cache')
 
     def __init__(self,
@@ -309,7 +310,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  device: Optional[Union[str, torch.device]] = None,
                  entropy: Optional[int] = None,
                  dt: Optional[Scalar] = None,
-                 cachesize: Optional[int] = 45,
+                 cache_size: Optional[int] = 45,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[torch.Tensor] = None,
                  H: Optional[torch.Tensor] = None,
@@ -319,25 +320,31 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         Args:
             t0: Initial time.
             t1: Terminal time.
-            shape: The shape of each Brownian sample. The last dimension is treated as the channel dimension and any/all
-                preceding dimensions are treated as batch dimensions.
+            shape: The shape of each Brownian sample. The last dimension is
+                treated as the channel dimension and any/all preceding
+                dimensions are treated as batch dimensions.
             dtype: The dtype of each Brownian sample.
             device: The device of each Brownian sample.
             entropy: Global seed, defaults to `None` for random entropy.
-            dt: The expected average step size of the SDE solver. Set it if you know it (e.g. when using a fixed
-                solver); else it will default to equal the first step this is evaluated with. This allows us to set up
-                a structure that should be efficient to query at these intervals.
-            cachesize: How big a cache of recent calculations to use. (As new calculations depend on old calculations,
-                this speeds things up dramatically, rather than recomputing things.) The default is set to be pretty
-                close to optimum: smaller values imply more recalculation, whilst larger values imply more time spent
+            dt: The expected average step size of the SDE solver. Set it if you
+                know it (e.g. when using a fixed solver); else it will default
+                to equal the first step this is evaluated with. This allows us
+                to set up a structure that should be efficient to query at these
+                intervals.
+            cache_size: How big a cache of recent calculations to use. (As new
+                calculations depend on old calculations, this speeds things up
+                dramatically, rather than recomputing things.) The default is
+                set to be pretty close to optimum: smaller values imply more
+                recalculation, whilst larger values imply more time spent
                 keeping track of the cache.
-            levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
-                some higher-order SDE solvers.
-            W: The increment of the Brownian motion over the interval [t0, t1]. Will be generated randomly if not
-                provided.
-            H: The space-time Levy area of the Brownian motion over the interval [t0, t1]. Will be generated randomly if
-                not provided.
+            levy_area_approximation: Whether to also approximate Levy area.
+                Defaults to None. Valid options are either 'none', 'space-time',
+                'davie' or 'foster', corresponding to approximation type. This
+                is needed for some higher-order SDE solvers.
+            W: The increment of the Brownian motion over the interval [t0, t1].
+                Will be generated randomly if not provided.
+            H: The space-time Levy area of the Brownian motion over the interval
+                [t0, t1]. Will be generated randomly if not provided.
         """
 
         if not utils.is_scalar(t0):
@@ -401,7 +408,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
         # The central piece of our implementation: an LRU cache on the calculations for increments and space-time Levy
         # area.
-        @ft.lru_cache(cachesize)
+        @ft.lru_cache(cache_size)
         def increment_and_space_time_levy_area_cache(interval):
             return interval.increment_and_space_time_levy_area_uncached()
 
@@ -434,8 +441,15 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}.")
 
         self._dt = None
-        self._cachesize = cachesize
+        self._cache_size = cache_size
         self.levy_area_approximation = levy_area_approximation
+
+        # Precompute these as we don't want to spend lots of time checking strings in hot loops.
+        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+                                                       LEVY_AREA_APPROXIMATIONS.davie,
+                                                       LEVY_AREA_APPROXIMATIONS.foster)
+        self.have_A = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
+                                                       LEVY_AREA_APPROXIMATIONS.foster)
 
         # This is another nice trick.
         # We keep track of the most recently queried interval, and start searching for the next interval from that
@@ -445,8 +459,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         if dt is not None:  # We'll take dt = first step if it's not passed here
             # We pre-create a binary tree dependency between the points. If we don't do this then the forward pass is
             # still efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1],
-            # making the backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and `cachesize`
-            # we can instead make both directions O(N log N).
+            # making the backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and
+            # `cache_size` we can instead make both directions O(N log N).
             self._create_dependency_tree(dt)
 
     # Effectively permanently store our increment and space-time Levy area in the cache.
@@ -461,65 +475,66 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         tb = min(self.start, max(tb, self.end))
         if ta > tb:
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
+
         if ta == tb:
             W = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
-            if self.levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            H = None
+            A = None
+            if self.have_H:
                 H = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
-                return W, H
-            else:
-                return W
+            if self.have_A:
+                shape = (*self.shape, *self.shape[-1:])  # not self.shape[-1] as that may not exist
+                A = torch.zeros(shape, dtype=self.dtype, device=self.device)
+        else:
+            if self._dt is None:
+                # If 'dt' wasn't specified, then take the first step as an estimate of the expected average step size
+                self._create_dependency_tree(tb - ta)
 
-        if self._dt is None:
-            # If 'dt' wasn't specified, then take the first step as an estimate of the expected average step size
-            self._create_dependency_tree(tb - ta)
+            # Find the intervals that correspond to the query. We start our search at the last interval we accessed in
+            # the binary tree, as it's likely that the next query will come nearby.
+            intervals = self._last_interval.loc(ta, tb)
+            # Ideally we'd keep track of intervals[0] on the backward pass. Practically speaking len(intervals) tends to
+            # be 1 or 2 almost always so this isn't a huge deal.
+            self._last_interval = intervals[-1]
 
-        # Find the intervals that correspond to the query. We start our search at the last interval we accessed in the
-        # binary tree, as it's likely that the next query will come nearby.
-        intervals = self._last_interval.loc(ta, tb)
-        # Ideally we'd keep track of intervals[0] on the backward pass. Practically speaking len(intervals) tends to be
-        # 1 or 2 almost always so this isn't a huge deal.
-        self._last_interval = intervals[-1]
+            W, H, A = intervals[0].increment_and_levy_area()
+            if len(intervals) > 1:
+                # If we have multiple intervals then add up their increments and Levy areas.
 
-        W, H, A = intervals[0].increment_and_levy_area()
-        if len(intervals) > 1:
-            # If we have multiple intervals then add up their increments and Levy areas.
+                # Clone to avoid modifying the W, H, A that may exist in the cache
+                W = W.clone()
+                if self.have_H:
+                    H = H.clone()
+                if self.have_A:
+                    A = A.clone()
 
-            # Clone to avoid modifying the W, H, A that may exist in the cache
-            W = W.clone()
-            if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
-                                                LEVY_AREA_APPROXIMATIONS.davie,
-                                                LEVY_AREA_APPROXIMATIONS.foster):
-                H = H.clone()
-            if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
-                                                LEVY_AREA_APPROXIMATIONS.foster):
-                A = A.clone()
-
-            for interval in intervals[1:]:
-                Wi, Hi, Ai = interval.increment_and_levy_area()
-                if self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
-                                                    LEVY_AREA_APPROXIMATIONS.davie,
-                                                    LEVY_AREA_APPROXIMATIONS.foster):
-                    H += Hi + (interval.end - interval.start) * W
-                    if self.shape != () and self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
-                                                                             LEVY_AREA_APPROXIMATIONS.foster):
+                for interval in intervals[1:]:
+                    Wi, Hi, Ai = interval.increment_and_levy_area()
+                    if self.have_H:
+                        H += Hi + (interval.end - interval.start) * W
+                    if self.have_A and self.shape != ():
                         A += Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
-                W += Wi
+                    W += Wi
+
+        U = None
+        if self.have_H:
+            U = (tb - ta) * (H + 0.5 * W)
 
         if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             return W
         elif self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.spacetime:
-            return W, H
-        return W, H, A
+            return W, U
+        return W, U, A
 
     def _create_dependency_tree(self, dt):
         self._dt = dt
 
-        if self._cachesize is not None:  # cachesize=None corresponds to infinite cache.
+        if self._cache_size is not None:  # cache_size=None corresponds to infinite cache.
 
-            # Rationale: We are prepared to hold `cachesize` many things in memory, so when making steps of size `dt`
-            # then we can afford to have the intervals at the bottom of our binary tree be of size `dt * cachesize`. For
-            # safety we then make this a bit smaller by multiplying by 0.8.
-            piece_length = dt * self._cachesize * 0.8
+            # Rationale: We are prepared to hold `cache_size` many things in memory, so when making steps of size `dt`
+            # then we can afford to have the intervals at the bottom of our binary tree be of size `dt * cache_size`.
+            # For safety we then make this a bit smaller by multiplying by 0.8.
+            piece_length = dt * self._cache_size * 0.8
 
             def _set_t_cache(interval):
                 start = interval._start
@@ -545,7 +560,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f"device={self.device}, "
                 f"entropy={self._entropy}, "
                 f"dt={dt}, "
-                f"cachesize={self._cachesize}, "
+                f"cache_size={self._cache_size}, "
                 f"levy_area_approximation={self.levy_area_approximation}"
                 f")")
 

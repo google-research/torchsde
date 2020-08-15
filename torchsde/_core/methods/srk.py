@@ -14,8 +14,9 @@
 
 """Strong order 1.5 scheme from
 
-Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions of stochastic differential
-equations." SIAM Journal on Numerical Analysis 48, no. 3 (2010): 922-952.
+Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions
+of stochastic differential equations." SIAM Journal on Numerical Analysis 48,
+no. 3 (2010): 922-952.
 """
 
 import math
@@ -30,28 +31,26 @@ from .. import misc
 from .tableaus import sra1, srid2
 
 
-class BaseSRK(base_solver.BaseSDESolver):
+class SRK(base_solver.BaseSDESolver):
     strong_order = 1.5
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
+    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
     levy_area_approximation = LEVY_AREA_APPROXIMATIONS.spacetime
 
-    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
-        super(BaseSRK, self).__init__(sde=sde, bm=bm, y0=y0, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol,
-                                      dt_min=dt_min, options=options, **kwargs)
-        self.dt1_min = self.options.get('dt1_min', 0.01)
-        self.dt1_div_dt = self.options.get('dt1_div_dt', 10)
+    def __init__(self, sde, **kwargs):
+        if sde.noise_type == NOISE_TYPES.additive:
+            self.step = self.additive_step
+        else:
+            self.step = self.diagonal_or_scalar_step
 
+        super(SRK, self).__init__(sde=sde, **kwargs)
 
-class DiagonalSRK(BaseSRK):
-    noise_types = (NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-
-    def step(self, t0, y0, dt):
+    def diagonal_or_scalar_step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-        I_k, H = self.bm(t0, t0 + dt)
-        I_k0 = dt * (H + 0.5 * I_k)
+        I_k, I_k0 = self.bm(t0, t0 + dt)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
@@ -86,11 +85,7 @@ class DiagonalSRK(BaseSRK):
             ]
         return t1, y1
 
-
-class AdditiveSRK(BaseSRK):
-    noise_types = (NOISE_TYPES.additive,)
-
-    def step(self, t0, y0, dt):
+    def additive_step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         I_k, I_k0 = self.bm(t0, t0 + dt)
