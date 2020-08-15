@@ -66,10 +66,16 @@ class _SdeintAdjointMethod(torch.autograd.Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         ts, flat_params, *ans = ctx.saved_tensors
-        sde, dt, bm, adjoint_method, adjoint_adaptive, adjoint_rtol, adjoint_atol, dt_min, adjoint_options = (
-            ctx.sde, ctx.dt, ctx.bm, ctx.adjoint_method, ctx.adaptive, ctx.rtol, ctx.atol, ctx.dt_min,
-            ctx.adjoint_options
-        )
+        sde = ctx.sde
+        dt = ctx.dt
+        bm = ctx.bm
+        adjoint_method = ctx.adjoint_method
+        adjoint_adaptive = ctx.adjoint_adaptive
+        adjoint_rtol = ctx.adjoint_rtol
+        adjoint_atol = ctx.adjoint_atol
+        dt_min = ctx.dt_min
+        adjoint_options = ctx.adjoint_options
+
         params = misc.make_seq_requires_grad(sde.parameters())
         n_tensors, n_params = len(ans), len(params)
 
