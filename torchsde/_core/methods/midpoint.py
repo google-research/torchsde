@@ -22,7 +22,7 @@ class Midpoint(base_solver.BaseSDESolver):
     weak_order = 1.0
     sde_type = SDE_TYPES.stratonovich
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
-    levy_area = LEVY_AREA_APPROXIMATIONS.none
+    levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
