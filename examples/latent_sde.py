@@ -82,16 +82,15 @@ class LatentSDE(SDEIto):
         py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
         logqp0 = kl_divergence(qy0, py0).sum(1).mean(0)  # KL(time=0).
 
-        # `trapezoidal_approx` is for SRK. Disabling it gives better performance.
         if args.adjoint:
             zs, logqp = sdeint_adjoint(
                 self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
+                atol=args.atol
             )
         else:
             zs, logqp = sdeint(
                 self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
+                atol=args.atol
             )
         logqp = logqp.sum(0).mean(0)
         log_ratio = logqp0 + logqp  # KL(time=0) + KL(path).

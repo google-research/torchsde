@@ -29,7 +29,7 @@ class BrownianPath(base_brownian.BaseBrownian):
 
     To use:
     >>> bm = BrownianPath(t0=0.0, w0=torch.zeros(4, 1))
-    >>> bm(0.5)
+    >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
             [ 0.1872],
@@ -52,10 +52,24 @@ class BrownianPath(base_brownian.BaseBrownian):
         self._bm = _BrownianPath(t0=t0, w0=w0)
         self.levy_area_approximation = levy_area_approximation
 
-    def __call__(self, ta, tb=None):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
-            return self.call(ta)
-        return self.call(tb) - self.call(ta)
+            W = self.call(ta)
+        else:
+            W = self.call(tb) - self.call(ta)
+        U = None
+        A = None
+
+        if return_U:
+            if return_A:
+                return W, U, A
+            else:
+                return W, U
+        else:
+            if return_A:
+                return W, A
+            else:
+                return W
 
     def call(self, t):
         return self._bm(t)

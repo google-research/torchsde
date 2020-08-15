@@ -79,7 +79,7 @@ class BrownianTree(base_brownian.BaseBrownian):
                 adaptive solver querying time points beyond initial and
                 terminal times.
             levy_area_approximation: Whether to also approximate Levy area.
-                Defaults to None. Valid options are either 'none', 'spacetime',
+                Defaults to None. Valid options are either 'none', 'space-time',
                 'davie' or 'foster', corresponding to approximation type. This
                 is needed for some higher-order SDE solvers.
         """
@@ -138,10 +138,24 @@ class BrownianTree(base_brownian.BaseBrownian):
 
         self._last_depth = None
 
-    def __call__(self, ta, tb=None):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
-            return self.call(ta)
-        return self.call(tb) - self.call(ta)
+            W = self.call(ta)
+        else:
+            W = self.call(tb) - self.call(ta)
+        U = None
+        A = None
+
+        if return_U:
+            if return_A:
+                return W, U, A
+            else:
+                return W, U
+        else:
+            if return_A:
+                return W, A
+            else:
+                return W
 
     def call(self, t):
         t = float(t)

@@ -32,11 +32,14 @@ from .tableaus import sra1, srid2
 
 
 class SRK(base_solver.BaseSDESolver):
+    # TODO: should the strong order be 2.0 for additive noise? Numerically it looks like it.
     strong_order = 1.5
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-    levy_area_approximation = LEVY_AREA_APPROXIMATIONS.spacetime
+    levy_area_approximations = [LEVY_AREA_APPROXIMATIONS.spacetime,
+                                LEVY_AREA_APPROXIMATIONS.davie,
+                                LEVY_AREA_APPROXIMATIONS.foster]
 
     def __init__(self, sde, **kwargs):
         if sde.noise_type == NOISE_TYPES.additive:
@@ -46,11 +49,15 @@ class SRK(base_solver.BaseSDESolver):
 
         super(SRK, self).__init__(sde=sde, **kwargs)
 
+    def step(self, t, y, dt):
+        # Just to make @abstractmethod happy, as we assign during __init__.
+        raise RuntimeError
+
     def diagonal_or_scalar_step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-        I_k, I_k0 = self.bm(t0, t0 + dt)
+        I_k, I_k0 = self.bm(t0, t0 + dt, return_U=True)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
@@ -88,7 +95,7 @@ class SRK(base_solver.BaseSDESolver):
     def additive_step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
-        I_k, I_k0 = self.bm(t0, t0 + dt)
+        I_k, I_k0 = self.bm(t0, t0 + dt, return_U=True)
 
         t1, y1 = t0 + dt, y0
         H0 = []

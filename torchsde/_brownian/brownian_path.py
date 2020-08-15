@@ -52,8 +52,8 @@ class BrownianPath(base_brownian.BaseBrownian):
             w0: Initial state.
             window_size: Size of the window around the last query for local search.
             levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
-                some higher-order SDE solvers.
+                either 'none', 'space-time', 'davie' or 'foster', corresponding to approximation type. This is needed
+                for some higher-order SDE solvers.
         """
         super(BrownianPath, self).__init__(**kwargs)
         if not utils.is_scalar(t0):
@@ -73,10 +73,24 @@ class BrownianPath(base_brownian.BaseBrownian):
         self._window_size = window_size
         self.levy_area_approximation = levy_area_approximation
 
-    def __call__(self, ta, tb=None):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
-            return self.call(ta)
-        return self.call(tb) - self.call(ta)
+            W = self.call(ta)
+        else:
+            W = self.call(tb) - self.call(ta)
+        U = None
+        A = None
+
+        if return_U:
+            if return_A:
+                return W, U, A
+            else:
+                return W, U
+        else:
+            if return_A:
+                return W, A
+            else:
+                return W
 
     def call(self, t):
         t = float(t)

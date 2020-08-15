@@ -14,11 +14,14 @@
 
 
 class ContainerMeta(type):
+    def all(cls):
+        return sorted(getattr(cls, x) for x in dir(cls) if not x.startswith('__'))
+
     def __str__(cls):
-        return str(tuple(cls.__dict__.values()))
+        return str(cls.all())
 
     def __contains__(cls, item):
-        return item in cls.__dict__.values()
+        return item in cls.all()
 
 # TODO: consider moving all these enums into some appropriate section of the code, rather than having them be global
 #  like this. (e.g. instead set METHODS = {'euler': Euler, ...} in methods/__init__.py)

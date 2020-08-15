@@ -45,15 +45,36 @@ class _ModifiedBrownian(base_brownian.BaseBrownian):
         return self.base_brownian.levy_area_approximation
 
 
+# TODO: these checks are very inelegant. Is there a better interface to Brownian motion?
 class ReverseBrownian(_ModifiedBrownian):
-    def __call__(self, ta, tb):
-        if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            return tuple(-b for b in self.base_brownian(-tb, -ta))
+    def __call__(self, ta, tb, return_U=False, return_A=False):
+        # TODO: double-check that this is the correct way to reverse each of
+        #  these objects
+        if return_U:
+            if return_A:
+                tuple((-W, U, A) for W, U, A in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+            else:
+                tuple((-W, U) for W, U in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
         else:
-            return tuple((-b, -h, a) for b, h, a in self.base_brownian(-tb, -ta))
+            if return_A:
+                tuple((-W, A) for W, A in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
+            else:
+                tuple(-W for W in self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A))
 
 
 class TupleBrownian(_ModifiedBrownian):
-    def __call__(self, ta, tb):
-        return (self.base_brownian(ta, tb),)
-
+    def __call__(self, ta, tb, return_U=False, return_A=False):
+        if return_U:
+            if return_A:
+                W, U, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (U,), (A,)
+            else:
+                W, U = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (U,)
+        else:
+            if return_A:
+                W, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (A,)
+            else:
+                W = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,)
