@@ -17,9 +17,18 @@ from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 from .. import base_solver
 
 
-class BaseEuler(base_solver.BaseSDESolver):
+class Euler(base_solver.BaseSDESolver):
+    weak_order = 1.0
     sde_type = SDE_TYPES.ito
+    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
     levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
+
+    def __init__(self, sde, **kwargs):
+        if sde.noise_type == NOISE_TYPES.additive:
+            self.strong_order = 1.0
+        else:
+            self.strong_order = 0.5
+        super(Euler, self).__init__(sde=sde, **kwargs)
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
@@ -37,15 +46,3 @@ class BaseEuler(base_solver.BaseSDESolver):
         ]
 
         return t1, y1
-
-
-class GeneralEuler(BaseEuler):
-    strong_order = 0.5
-    weak_order = 1.0
-    noise_types = (NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
-
-
-class AdditiveEuler(BaseEuler):
-    strong_order = 1.0
-    weak_order = 1.0
-    noise_types = (NOISE_TYPES.additive,)

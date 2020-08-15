@@ -154,7 +154,7 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
     if options is None:
         options = {}
 
-    solver_fn = methods.select(method=method, noise_type=sde.noise_type)
+    solver_fn = methods.select(method=method)
     solver = solver_fn(
         sde=sde,
         bm=bm,

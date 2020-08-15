@@ -12,28 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...settings import METHODS, NOISE_TYPES
+from ...settings import METHODS
 
-from .euler import AdditiveEuler, GeneralEuler
+from .euler import Euler
 from .midpoint import Midpoint
 from .milstein import Milstein
-from .srk import AdditiveSRK, DiagonalSRK
+from .srk import SRK
 
 
-def select(method, noise_type):
+def select(method):
     if method == METHODS.euler:
-        if noise_type == NOISE_TYPES.additive:
-            return AdditiveEuler
-        else:
-            return GeneralEuler
+        return Euler
     elif method == METHODS.milstein:
         return Milstein
     elif method == METHODS.srk:
-        if noise_type == NOISE_TYPES.additive:
-            return AdditiveSRK
-        else:
-            return DiagonalSRK
+        return SRK
     elif method == METHODS.midpoint:
         return Midpoint
     else:
-        raise ValueError("Internal error: method does not match any known method.")
+        raise ValueError(f"Method '{method}' does not match any known method.")
