@@ -36,4 +36,4 @@ def select(method, noise_type):
     elif method == METHODS.midpoint:
         return Midpoint
     else:
-        raise ValueError
+        raise ValueError("Internal error: method does not match any known method.")

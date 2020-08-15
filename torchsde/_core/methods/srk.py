@@ -14,8 +14,9 @@
 
 """Strong order 1.5 scheme from
 
-Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions of stochastic differential
-equations." SIAM Journal on Numerical Analysis 48, no. 3 (2010): 922-952.
+Rößler, Andreas. "Runge–Kutta methods for the strong approximation of solutions
+of stochastic differential equations." SIAM Journal on Numerical Analysis 48,
+no. 3 (2010): 922-952.
 """
 
 import math
@@ -50,8 +51,7 @@ class DiagonalSRK(BaseSRK):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
         sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-        I_k, H = self.bm(t0, t0 + dt)
-        I_k0 = dt * (H + 0.5 * I_k)
+        I_k, I_k0 = self.bm(t0, t0 + dt)
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
