@@ -211,7 +211,6 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
                 *adj_y)
 
 
-# TODO: reorder arguments - put all the adjoint_* next to each other?
 def sdeint_adjoint(sde,
                    y0: TensorOrTensors,
                    ts: Vector,
@@ -229,7 +228,7 @@ def sdeint_adjoint(sde,
                    dt_min: Optional[Scalar] = 1e-5,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
-                   names: Optional[Dict[str, str]] = None):
+                   names: Optional[Dict[str, str]] = None) -> TensorOrTensors:
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:
