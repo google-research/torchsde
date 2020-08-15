@@ -15,8 +15,14 @@
 import functools
 import operator
 import types
+import warnings
 
 import torch
+
+
+def handle_unused_kwargs(obj, unused_kwargs):
+    if len(unused_kwargs) > 0:
+        warnings.warn(f'{obj.__class__.__name__}: Unexpected arguments {unused_kwargs}')
 
 
 def flatten(sequence):

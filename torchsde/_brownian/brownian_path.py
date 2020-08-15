@@ -18,11 +18,11 @@ import blist
 import numpy as np
 import torch
 
-from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
-
 from . import base_brownian
 from . import utils
+from .._core.misc import handle_unused_kwargs
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 
 class BrownianPath(base_brownian.BaseBrownian):
@@ -44,24 +44,31 @@ class BrownianPath(base_brownian.BaseBrownian):
                  w0: torch.Tensor,
                  window_size: int = 8,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                 **kwargs):
+                 **unused_kwargs):
         """Initialize Brownian path.
 
         Args:
-            t0: Initial time.
-            w0: Initial state.
-            window_size: Size of the window around the last query for local search.
-            levy_area_approximation: Whether to also approximate Levy area. Defaults to None. Valid options are
-                either 'none', 'spacetime', 'davie' or 'foster', corresponding to approximation type. This is needed for
-                some higher-order SDE solvers.
+            t0 (float or Tensor): Initial time.
+            w0 (sequence of Tensor): Initial state.
+            window_size (int): Size of the window around last query for local
+                search.
+            levy_area_approximation (str): Whether to also approximate Levy
+                area. Defaults to None. Valid options are either 'none',
+                'space-time', 'davie' or 'foster', corresponding to
+                approximation type. This is needed for some higher-order SDE
+                solvers.
         """
-        super(BrownianPath, self).__init__(**kwargs)
+        handle_unused_kwargs(self, unused_kwargs)
+        del unused_kwargs
+
+        super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
 
         if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
-            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
-                             "'none'.")
+            raise ValueError(
+                "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
+            )
 
         t0 = float(t0)
         self._ts = blist.blist()

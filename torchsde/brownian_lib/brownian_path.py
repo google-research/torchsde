@@ -17,8 +17,9 @@ from typing import Union
 import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
 
-from .._brownian import utils  # noqa
-from .._brownian import base_brownian  # noqa
+from .._brownian import base_brownian
+from .._brownian import utils
+from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
 
 
@@ -40,8 +41,11 @@ class BrownianPath(base_brownian.BaseBrownian):
                  t0: Union[float, torch.Tensor],
                  w0: torch.Tensor,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                 **kwargs):  # noqa
-        super(BrownianPath, self).__init__(**kwargs)
+                 **unused_kwargs):
+        handle_unused_kwargs(self, unused_kwargs)
+        del unused_kwargs
+
+        super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
 
