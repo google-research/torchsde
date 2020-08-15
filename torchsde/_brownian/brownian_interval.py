@@ -372,11 +372,11 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             dtypes.append(H.dtype)
             devices.append(H.device)
         if len(shapes) == 0:
-            raise ValueError("Must either specify `shape` or pass in `W` or `H` to implicity define the shape.")
+            raise ValueError("Must either specify `shape` or pass in `W` or `H` to implicitly define the shape.")
         if len(dtypes) == 0:
-            raise ValueError("Must either specify `dtype` or pass in `W` or `H` to implicity define the dtype.")
+            raise ValueError("Must either specify `dtype` or pass in `W` or `H` to implicitly define the dtype.")
         if len(devices) == 0:
-            raise ValueError("Must either specify `device` or pass in `W` or `H` to implicity define the device.")
+            raise ValueError("Must either specify `device` or pass in `W` or `H` to implicitly define the device.")
         # Make sure the reduce actually does a comparison, to get a bool datatype
         shapes.append(shapes[-1])
         dtypes.append(dtypes[-1])
