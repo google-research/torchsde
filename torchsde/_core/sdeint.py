@@ -37,7 +37,7 @@ def sdeint(sde: [base_sde.BaseSDE],
            atol: Optional[float] = 1e-4,
            dt_min: Optional[Scalar] = 1e-5,
            options: Optional[Dict[str, Any]] = None,
-           names: Optional[Dict[str, str]] = None):
+           names: Optional[Dict[str, str]] = None) -> TensorOrTensors:
     """Numerically integrate an Itô SDE.
 
     Args:

@@ -21,11 +21,11 @@ import numpy as np
 import torch
 from numpy.random import SeedSequence
 
-from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
-
 from . import base_brownian
 from . import utils
+from .._core.misc import handle_unused_kwargs
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 
 class BrownianTree(base_brownian.BaseBrownian):
@@ -53,37 +53,42 @@ class BrownianTree(base_brownian.BaseBrownian):
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                 **kwargs):
+                 **unused_kwargs):
         """Initialize the Brownian tree.
 
-        The random value generation process exploits the parallel random number paradigm and uses
-        `numpy.random.SeedSequence`. The default generator is PCG64 (used by `default_rng`).
+        The random value generation process exploits the parallel random number
+        paradigm and uses `numpy.random.SeedSequence`. The default generator is
+        PCG64 (used by `default_rng`).
 
         Args:
-            t0: Initial time.
-            w0: Initial state.
-            t1: Terminal time.
-            w1: Terminal state.
-            entropy: Global seed, defaults to `None` for random entropy.
-            tol: Error tolerance before the binary search is terminated;
-                the search depth ~ log2(tol).
-            pool_size: Size of the pooled entropy; should be larger than max
-                depth of queries. This parameter affects the query speed
+            t0 (float or Tensor): Initial time.
+            w0 (sequence of Tensor): Initial state.
+            t1 (float or Tensor): Terminal time.
+            w1 (sequence of Tensor): Terminal state.
+            entropy (int): Global seed, defaults to `None` for random entropy.
+            tol (float or Tensor): Error tolerance before the binary search is
+                terminated; the search depth ~ log2(tol).
+            pool_size (int): Size of the pooled entropy; should be larger than
+                max depth of queries. This parameter affects the query speed
                 significantly.
-            cache_depth: Depth of the tree to cache values. This parameter
+            cache_depth (int): Depth of the tree to cache values. This parameter
                 affects the query speed significantly.
-            safety: Small float representing some time increment before t0 and
-                after t1. In practice, we don't let t0 and t1 of the Brownian
-                tree be the start and terminal times of the solutions. This
-                is to avoid issues related to 1) finite precision, and 2)
+            safety (float): Small float representing some time increment before
+                t0 and after t1. In practice, we don't let t0 and t1 of the
+                Brownian tree be the start and terminal times of the solutions.
+                This is to avoid issues related to 1) finite precision, and 2)
                 adaptive solver querying time points beyond initial and
                 terminal times.
-            levy_area_approximation: Whether to also approximate Levy area.
-                Defaults to None. Valid options are either 'none', 'space-time',
-                'davie' or 'foster', corresponding to approximation type. This
-                is needed for some higher-order SDE solvers.
+            levy_area_approximation (str): Whether to also approximate Levy
+                area. Defaults to None. Valid options are either 'none',
+                'space-time', 'davie' or 'foster', corresponding to
+                approximation type. This is needed for some higher-order SDE
+                solvers.
         """
-        super(BrownianTree, self).__init__(**kwargs)
+        handle_unused_kwargs(self, unused_kwargs)
+        del unused_kwargs
+
+        super(BrownianTree, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
         if t1 is None:
@@ -94,8 +99,9 @@ class BrownianTree(base_brownian.BaseBrownian):
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
 
         if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
-            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
-                             "'none'.")
+            raise ValueError(
+                "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
+            )
 
         t0, t1 = float(t0), float(t1)
 

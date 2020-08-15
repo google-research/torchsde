@@ -13,17 +13,19 @@
 # limitations under the License.
 
 import random
-from typing import Union, Optional
+from typing import Optional
 
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
-from .._brownian import utils  # noqa
-from .._brownian import base_brownian  # noqa
+from .._brownian import base_brownian
+from .._brownian import utils
+from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 
-class BrownianTree(base_brownian. BaseBrownian):
+class BrownianTree(base_brownian.BaseBrownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.
@@ -38,17 +40,20 @@ class BrownianTree(base_brownian. BaseBrownian):
     """
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
+                 t0: Scalar,
                  w0: torch.Tensor,
-                 t1: Optional[Union[float, torch.Tensor]] = None,
+                 t1: Optional[Scalar] = None,
                  w1: Optional[torch.Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                 **kwargs):  # noqa
-        super(BrownianTree, self).__init__(**kwargs)
+                 **unused_kwargs):
+        handle_unused_kwargs(self, unused_kwargs)
+        del unused_kwargs
+
+        super(BrownianTree, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
 
@@ -60,8 +65,9 @@ class BrownianTree(base_brownian. BaseBrownian):
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
 
         if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
-            raise ValueError("Only BrownianInterval currently supports levy_area_approximation for values other than "
-                             "'none'.")
+            raise ValueError(
+                "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
+            )
 
         t0, t1 = float(t0), float(t1)
 
