@@ -15,12 +15,13 @@
 """Define the class of the adjoint SDE when the original forward SDE has scalar noise."""
 
 from .. import base_sde
+from ... import settings
 
 
 class AdjointSDEScalar(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
-        super(AdjointSDEScalar, self).__init__(sde, noise_type="scalar")
+        super(AdjointSDEScalar, self).__init__(sde, noise_type=settings.NOISE_TYPES.scalar)
         self.params = params
 
     def f(self, t, y_aug):
@@ -42,7 +43,7 @@ class AdjointSDEScalar(base_sde.AdjointSDE):
 class AdjointSDEScalarLogqp(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
-        super(AdjointSDEScalarLogqp, self).__init__(sde, noise_type="scalar")
+        super(AdjointSDEScalarLogqp, self).__init__(base_sde=sde, noise_type=settings.NOISE_TYPES.scalar)
         self.params = params
 
     def f(self, t, y_aug):

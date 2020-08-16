@@ -18,12 +18,13 @@ import torch
 
 from .. import base_sde
 from .. import misc
+from ... import settings
 
 
 class AdjointSDEAdditive(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
-        super(AdjointSDEAdditive, self).__init__(sde, noise_type="general")
+        super(AdjointSDEAdditive, self).__init__(base_sde=sde, noise_type=settings.NOISE_TYPES.additive)
         self.params = params
 
     def f(self, t, y_aug):
@@ -50,7 +51,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
 
         return (*f_eval, *vjp_y, vjp_params)
 
-    def g_prod(self, t, y_aug, noise):
+    def g_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 2
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
@@ -62,8 +63,8 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[
-                    -noise_.unsqueeze(1) * adj_y_.unsqueeze(2)  # Convert tensors to be of size (batch_size, d, m).
-                    for noise_, adj_y_ in zip(noise, adj_y)
+                    -v_.unsqueeze(1) * adj_y_.unsqueeze(2)  # Convert tensors to be of size (batch_size, d, m).
+                    for v_, adj_y_ in zip(v, adj_y)
                 ],
                 allow_unused=True,
             )
@@ -72,7 +73,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
 
             vjp_params = vjp_y_and_params[n_tensors:]
             vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
-            g_prod_eval = misc.seq_batch_mvp(g_eval, noise)
+            g_prod_eval = misc.seq_batch_mvp(g_eval, v)
 
         return (*g_prod_eval, *vjp_y, vjp_params)
 
@@ -83,12 +84,12 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
         raise NotImplementedError("This method shouldn't be called.")
 
     def gdg_prod(self, t, y, v):
-        raise NotImplementedError("This method shouldn't be called.")
+        return [0.] * len(y)
 
 
 class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
     def __init__(self, sde, params):
-        super(AdjointSDEAdditiveLogqp, self).__init__(sde, noise_type="general")
+        super(AdjointSDEAdditiveLogqp, self).__init__(base_sde=sde, noise_type=settings.NOISE_TYPES.additive)
         self.params = params
 
     def f(self, t, y_aug):
@@ -137,7 +138,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
 
         return (*f_eval, *vjp_y, *vjp_l, vjp_params)
 
-    def g_prod(self, t, y_aug, noise):
+    def g_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 3
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
         vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
@@ -149,7 +150,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
             g_eval = [-g_ for g_ in sde.g(-t, y)]
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=[-noise_.unsqueeze(1) * adj_y_.unsqueeze(2) for noise_, adj_y_ in zip(noise, adj_y)],
+                grad_outputs=[-v_.unsqueeze(1) * adj_y_.unsqueeze(2) for v_, adj_y_ in zip(v, adj_y)],
                 allow_unused=True,
             )
             vjp_y = vjp_y_and_params[:n_tensors]
@@ -157,7 +158,7 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
 
             vjp_params = vjp_y_and_params[n_tensors:]
             vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
-            g_prod_eval = misc.seq_batch_mvp(g_eval, noise)
+            g_prod_eval = misc.seq_batch_mvp(g_eval, v)
 
         return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
 
@@ -168,4 +169,4 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
         raise NotImplementedError("This method shouldn't be called.")
 
     def gdg_prod(self, t, y, v):
-        raise NotImplementedError("This method shouldn't be called.")
+        return [0.] * len(y)

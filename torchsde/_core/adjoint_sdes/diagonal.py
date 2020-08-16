@@ -17,12 +17,13 @@ import torch
 
 from .. import base_sde
 from .. import misc
+from ... import settings
 
 
 class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
-        super(AdjointSDEDiagonal, self).__init__(sde, noise_type="diagonal")
+        super(AdjointSDEDiagonal, self).__init__(base_sde=sde, noise_type=settings.NOISE_TYPES.diagonal)
         self.params = params
 
     def f(self, t, y_aug):
@@ -81,7 +82,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
         return (*f_eval_corrected, *vjp_y, vjp_params)
 
-    def g_prod(self, t, y_aug, noise):
+    def g_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 2
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
@@ -92,7 +93,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
             g_eval = [-g_ for g_ in sde.g(-t, y)]
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=[-noise_ * adj_y_ for noise_, adj_y_ in zip(noise, adj_y)],
+                grad_outputs=[-v_ * adj_y_ for v_, adj_y_ in zip(v, adj_y)],
                 allow_unused=True,
             )
             vjp_y = vjp_y_and_params[:n_tensors]
@@ -100,11 +101,11 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
             vjp_params = vjp_y_and_params[n_tensors:]
             vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
-            g_prod_eval = misc.seq_mul(g_eval, noise)
+            g_prod_eval = misc.seq_mul(g_eval, v)
 
         return (*g_prod_eval, *vjp_y, vjp_params)
 
-    def gdg_prod(self, t, y_aug, noise):
+    def gdg_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 2
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
@@ -115,7 +116,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
             g_eval = sde.g(-t, y)
             gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
-                grad_outputs=misc.seq_mul(g_eval, noise),
+                grad_outputs=misc.seq_mul(g_eval, v),
                 allow_unused=True,
                 create_graph=True,
             )
@@ -131,7 +132,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
             prod_partials_adj_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=misc.seq_mul(adj_y, noise, dgdy),
+                grad_outputs=misc.seq_mul(adj_y, v, dgdy),
                 allow_unused=True,
                 create_graph=True,
             )
@@ -143,7 +144,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
             gdg_v = misc.grad(
                 outputs=g_eval, inputs=y,
-                grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, noise, g_eval)],
+                grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, v, g_eval)],
                 allow_unused=True, create_graph=True
             )
             gdg_v = misc.convert_none_to_zeros(gdg_v, y)
@@ -174,7 +175,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
-        super(AdjointSDEDiagonalLogqp, self).__init__(sde, noise_type="diagonal")
+        super(AdjointSDEDiagonalLogqp, self).__init__(base_sde=sde, noise_type=settings.NOISE_TYPES.diagonal)
         self.params = params
 
     def f(self, t, y_aug):
@@ -246,7 +247,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
         return (*f_eval_corrected, *vjp_y, *vjp_l, vjp_params)
 
-    def g_prod(self, t, y_aug, noise):
+    def g_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 3
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
         vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
@@ -257,11 +258,11 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
             g_eval = sde.g(-t, y)
             minus_g_eval = [-g_ for g_ in g_eval]
-            minus_g_prod_eval = misc.seq_mul(minus_g_eval, noise)
+            minus_g_prod_eval = misc.seq_mul(minus_g_eval, v)
 
             vjp_y_and_params = misc.grad(
                 outputs=minus_g_eval, inputs=y + params,
-                grad_outputs=[-noise_ * adj_y_ for noise_, adj_y_ in zip(noise, adj_y)],
+                grad_outputs=[-v_ * adj_y_ for v_, adj_y_ in zip(v, adj_y)],
                 allow_unused=True
             )
             vjp_y = vjp_y_and_params[:n_tensors]
@@ -271,7 +272,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
         return (*minus_g_prod_eval, *vjp_y, *vjp_l, vjp_params)
 
-    def gdg_prod(self, t, y_aug, noise):
+    def gdg_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 3
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
         vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
@@ -283,7 +284,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
             g_eval = sde.g(-t, y)
             gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
-                grad_outputs=misc.seq_mul(g_eval, noise),
+                grad_outputs=misc.seq_mul(g_eval, v),
                 allow_unused=True,
                 create_graph=True,
             )
@@ -299,7 +300,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
             prod_partials_adj_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
-                grad_outputs=misc.seq_mul(adj_y, noise, dgdy),
+                grad_outputs=misc.seq_mul(adj_y, v, dgdy),
                 allow_unused=True,
                 create_graph=True,
             )
@@ -310,7 +311,7 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
             gdg_v = misc.grad(
                 outputs=g_eval, inputs=y,
-                grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, noise, g_eval)],
+                grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, v, g_eval)],
                 allow_unused=True,
                 create_graph=True,
             )
