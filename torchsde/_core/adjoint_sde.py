@@ -90,7 +90,7 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*minus_f, *vjp_y, vjp_params)
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
-        # TODO: Write this!
+        # TODO: This requires 2 corrections: One in the forward, and the other in backward.
         raise NotImplementedError
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.

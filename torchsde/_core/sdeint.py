@@ -99,7 +99,7 @@ def sdeint(sde: [base_sde.BaseSDE],
     return results
 
 
-def check_contract(sde, method, logqp, ts, y0, bm, names, adjoint_method=None):
+def check_contract(sde, method, logqp, ts, y0, bm, names):
     if names is None:
         names_to_change = {}
     else:
@@ -201,10 +201,6 @@ def check_contract(sde, method, logqp, ts, y0, bm, names, adjoint_method=None):
                               device=y0[0].device, levy_area_approximation=levy_area_approximation)
     if tensor_input:
         bm = TupleBrownian(bm)
-
-    if adjoint_method is not None:
-        if adjoint_method not in METHODS:
-            raise ValueError(f'Expected adjoint_method in {METHODS}, but found {method}.')
 
     return sde, y0, bm, tensor_input
 
