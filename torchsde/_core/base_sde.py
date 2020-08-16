@@ -17,8 +17,8 @@ import abc
 import torch
 from torch import nn
 
-from . import misc
 from torchsde import settings
+from . import misc
 
 
 class BaseSDE(abc.ABC, nn.Module):
