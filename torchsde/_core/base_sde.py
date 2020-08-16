@@ -50,20 +50,28 @@ class BaseSDE(nn.Module, metaclass=abc.ABCMeta):
 # TODO: Lint error "Class SDEIto must implement all abstract methods" comes from changes in torch==1.6.0.
 #  Should be gone in future version. See https://github.com/pytorch/pytorch/issues/42305 for more.
 class SDEIto(BaseSDE):
-
     def __init__(self, noise_type):
         super(SDEIto, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.ito)
 
 
-class ForwardSDEIto(SDEIto):
+class SDEStratonovich(BaseSDE):
+    def __init__(self, noise_type):
+        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.stratonovich)
+
+
+class ForwardSDE(BaseSDE):
     """Wrapper SDE for the forward pass.
 
     `g_prod` and `gdg_prod` are additional functions that high-order solvers will call.
     """
 
     def __init__(self, base_sde):
-        super(ForwardSDEIto, self).__init__(noise_type=base_sde.noise_type)
+        super(ForwardSDE, self).__init__(sde_type=base_sde.sde_type,
+                                         noise_type=base_sde.noise_type)
         self._base_sde = base_sde
+        self.f = self._base_sde.f
+        self.g = self._base_sde.g
+        self.h = self._base_sde.h
         if self.noise_type == NOISE_TYPES.diagonal:
             self.g_prod = self.g_prod_diagonal
         elif self.noise_type == NOISE_TYPES.scalar:
@@ -72,13 +80,12 @@ class ForwardSDEIto(SDEIto):
             self.g_prod = self.g_prod_general_or_additive
 
     def f(self, t, y):
-        return self._base_sde.f(t, y)
+        # Make abstractmethod not complain, as we assign as an instance attribute instead
+        raise RuntimeError
 
     def g(self, t, y):
-        return self._base_sde.g(t, y)
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y)
+        # Make abstractmethod not complain, as we assign as an instance attribute instead
+        raise RuntimeError
 
     def g_prod_diagonal(self, t, y, v):
         return misc.seq_mul(self._base_sde.g(t, y), v)
@@ -112,29 +119,23 @@ class AdjointSDEIto(SDEIto):
 
     @abc.abstractmethod
     def f(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def g(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def h(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def g_prod(self, t, y, v):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def gdg_prod(self, t, y, v):
-        pass
-
-
-class SDEStratonovich(BaseSDE):
-
-    def __init__(self, noise_type):
-        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.stratonovich)
+        raise NotImplementedError
 
 
 class TupleSDE(BaseSDE):
@@ -162,3 +163,11 @@ class RenameMethodsSDE(BaseSDE):
         self.g = getattr(base_sde, diffusion)
         if hasattr(base_sde, prior_drift):
             self.h = getattr(base_sde, prior_drift)
+
+    def f(self, t, y):
+        # Make abstractmethod not complain, as we assign as an instance attribute instead
+        raise RuntimeError
+
+    def g(self, t, y):
+        # Make abstractmethod not complain, as we assign as an instance attribute instead
+        raise RuntimeError

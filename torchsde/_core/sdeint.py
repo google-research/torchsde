@@ -80,7 +80,7 @@ def sdeint(sde: [base_sde.BaseSDE],
     """
     sde, y0, bm, tensor_input = check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm, names=names)
 
-    sde = base_sde.ForwardSDEIto(sde)
+    sde = base_sde.ForwardSDE(sde)
     results = integrate(
         sde=sde,
         y0=y0,
