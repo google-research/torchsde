@@ -20,7 +20,7 @@ from .. import base_sde
 from .. import misc
 
 
-class AdjointSDEAdditive(base_sde.AdjointSDEIto):
+class AdjointSDEAdditive(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEAdditive, self).__init__(sde, noise_type="general")
@@ -36,8 +36,6 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
 
             f_eval = sde.f(-t, y)
             f_eval = [-f_eval_ for f_eval_ in f_eval]
-            f_eval = misc.make_seq_requires_grad(f_eval)
-
             vjp_y_and_params = misc.grad(
                 outputs=f_eval,
                 inputs=y + params,
@@ -61,8 +59,6 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = [-g_ for g_ in sde.g(-t, y)]
-            g_eval = misc.make_seq_requires_grad(g_eval)
-
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[
@@ -90,7 +86,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
         raise NotImplementedError("This method shouldn't be called.")
 
 
-class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
+class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
     def __init__(self, sde, params):
         super(AdjointSDEAdditiveLogqp, self).__init__(sde, noise_type="general")
         self.params = params
@@ -106,8 +102,6 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
 
             f_eval = sde.f(-t, y)
             f_eval = [-f_eval_ for f_eval_ in f_eval]
-            f_eval = misc.make_seq_requires_grad(f_eval)
-
             vjp_y_and_params = misc.grad(
                 outputs=f_eval,
                 inputs=y + params,
@@ -128,7 +122,6 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             u_eval = misc.seq_sub(f_eval, h_eval)
             u_eval = [torch.bmm(g_inv_eval_, u_eval_) for g_inv_eval_, u_eval_ in zip(g_inv_eval, u_eval)]
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
-            log_ratio_correction = misc.make_seq_requires_grad(log_ratio_correction)
             corr_vjp_y_and_params = misc.grad(
                 outputs=log_ratio_correction, inputs=y + params,
                 grad_outputs=adj_l,
@@ -154,8 +147,6 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = [-g_ for g_ in sde.g(-t, y)]
-            g_eval = misc.make_seq_requires_grad(g_eval)
-
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[-noise_.unsqueeze(1) * adj_y_.unsqueeze(2) for noise_, adj_y_ in zip(noise, adj_y)],

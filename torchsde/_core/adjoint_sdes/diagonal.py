@@ -19,7 +19,7 @@ from .. import base_sde
 from .. import misc
 
 
-class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
+class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEDiagonal, self).__init__(sde, noise_type="diagonal")
@@ -34,8 +34,6 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = sde.g(-t, y)
-            g_eval = misc.make_seq_requires_grad(g_eval)
-
             gdg = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=g_eval,
@@ -45,10 +43,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             gdg = misc.convert_none_to_zeros(gdg, y)
 
             f_eval = sde.f(-t, y)
-
             f_eval_corrected = misc.seq_sub(gdg, f_eval)  # Stratonovich correction for reverse-time.
-            f_eval_corrected = misc.make_seq_requires_grad(f_eval_corrected)
-
             vjp_y_and_params = misc.grad(
                 outputs=f_eval_corrected,
                 inputs=y + params,
@@ -95,7 +90,6 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = [-g_ for g_ in sde.g(-t, y)]
-            g_eval = misc.make_seq_requires_grad(g_eval)
             vjp_y_and_params = misc.grad(
                 outputs=g_eval, inputs=y + params,
                 grad_outputs=[-noise_ * adj_y_ for noise_, adj_y_ in zip(noise, adj_y)],
@@ -119,7 +113,6 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach().requires_grad_(True) for adj_y_ in adj_y]
 
             g_eval = sde.g(-t, y)
-            g_eval = misc.make_seq_requires_grad(g_eval)
             gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=misc.seq_mul(g_eval, noise),
@@ -154,8 +147,6 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
                 allow_unused=True, create_graph=True
             )
             gdg_v = misc.convert_none_to_zeros(gdg_v, y)
-            gdg_v = misc.make_seq_requires_grad(gdg_v)
-
             mixed_partials_adj_y_and_params = misc.grad(
                 outputs=gdg_v, inputs=y + params,
                 grad_outputs=[torch.ones_like(p) for p in gdg_v],
@@ -180,7 +171,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
         raise NotImplementedError("This method shouldn't be called.")
 
 
-class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
+class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEDiagonalLogqp, self).__init__(sde, noise_type="diagonal")
@@ -196,8 +187,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = sde.g(-t, y)
-            g_eval = misc.make_seq_requires_grad(g_eval)
-
             gdg = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=g_eval,
@@ -208,8 +197,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
 
             f_eval = sde.f(-t, y)
             f_eval_corrected = misc.seq_sub(gdg, f_eval)
-            f_eval_corrected = misc.make_seq_requires_grad(f_eval_corrected)
-
             vjp_y_and_params = misc.grad(
                 outputs=f_eval_corrected, inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
@@ -244,8 +231,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             h_eval = sde.h(-t, y)
             u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
-
-            log_ratio_correction = misc.make_seq_requires_grad(log_ratio_correction)
             corr_vjp_y_and_params = misc.grad(
                 outputs=log_ratio_correction, inputs=y + params,
                 grad_outputs=adj_l,
@@ -271,7 +256,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = sde.g(-t, y)
-            g_eval = misc.make_seq_requires_grad(g_eval)
             minus_g_eval = [-g_ for g_ in g_eval]
             minus_g_prod_eval = misc.seq_mul(minus_g_eval, noise)
 
@@ -297,8 +281,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
             adj_y = [adj_y_.detach().requires_grad_(True) for adj_y_ in adj_y]
 
             g_eval = sde.g(-t, y)
-            g_eval = misc.make_seq_requires_grad(g_eval)
-
             gdg_times_v = misc.grad(
                 outputs=g_eval, inputs=y,
                 grad_outputs=misc.seq_mul(g_eval, noise),
@@ -333,8 +315,6 @@ class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
                 create_graph=True,
             )
             gdg_v = misc.convert_none_to_zeros(gdg_v, y)
-            gdg_v = misc.make_seq_requires_grad(gdg_v)
-
             gdg_v = [gdg_v_.sum() for gdg_v_ in gdg_v]
             mixed_partials_adj_y_and_params = misc.grad(
                 outputs=gdg_v, inputs=y + params,

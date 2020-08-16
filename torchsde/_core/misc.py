@@ -152,9 +152,23 @@ def batch_mvp(m, v):
     return mvp
 
 
-def grad(inputs, **kwargs):
+def grad(outputs, inputs, **kwargs):
     # Workaround for PyTorch bug #39784
+    outputs = make_seq_requires_grad(outputs)
     if torch.is_tensor(inputs):
         inputs = (inputs,)
     _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
-    return torch.autograd.grad(inputs=inputs, **kwargs)
+    return torch.autograd.grad(outputs, inputs, **kwargs)
+
+
+def jvp(outputs, inputs, grad_inputs=None, **kwargs):
+    # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
+    # The present implementation avoids this.
+    outputs = make_seq_requires_grad(outputs)
+    if torch.is_tensor(inputs):
+        inputs = (inputs,)
+    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
+
+    dummy = [torch.zeros_like(o, requires_grad=True) for o in outputs]
+    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy, **kwargs)
+    return torch.autograd.grad(vjp, dummy, grad_outputs=grad_inputs, **kwargs)

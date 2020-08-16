@@ -172,7 +172,7 @@ def check_contract(sde, method, logqp, ts, y0, bm, names, adjoint_method=None):
             if noise_channels != 1:
                 raise ValueError(f"Scalar noise must have only one channel; the diffusion has {noise_channels} noise "
                                  f"channels.")
-    else:   # sde.noise_type == NOISE_TYPES.diagonal
+    else:  # sde.noise_type == NOISE_TYPES.diagonal
         batch_dimensions = diffusion_shape[0][:-1]
         for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
             drift_shape_ = tuple(drift_shape_)

@@ -17,7 +17,7 @@
 from .. import base_sde
 
 
-class AdjointSDEScalar(base_sde.AdjointSDEIto):
+class AdjointSDEScalar(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEScalar, self).__init__(sde, noise_type="scalar")
@@ -39,7 +39,7 @@ class AdjointSDEScalar(base_sde.AdjointSDEIto):
         raise NotImplementedError("This method shouldn't be called.")
 
 
-class AdjointSDEScalarLogqp(base_sde.AdjointSDEIto):
+class AdjointSDEScalarLogqp(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEScalarLogqp, self).__init__(sde, noise_type="scalar")
