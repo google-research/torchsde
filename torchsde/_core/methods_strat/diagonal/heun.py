@@ -35,7 +35,6 @@ class HeunDiagonal(base_solver.GenericSDESolver):
         ]
         
         t1 = t0 + dt
-        I_k = [(bm_next - bm_cur).to(y1[0]) for bm_next, bm_cur in zip(self.bm(t1 + dt), self.bm(t1))]
 
         f_eval_next_step_sum = [
             a + b for a, b in zip(f_eval, self.sde.f(t1, y1))
