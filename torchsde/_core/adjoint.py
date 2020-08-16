@@ -21,8 +21,9 @@ try:
     from ..brownian_lib import BrownianPath
 except Exception:  # noqa
     from .._brownian import BrownianPath
-from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian
+from .._brownian import BaseBrownian, ReverseBrownian
 from ..types import TensorOrTensors, Scalar, Vector
+from .adjoint_sde import AdjointSDE  # Directly import to avoid conflicting names.
 
 from . import base_sde
 from . import misc
@@ -78,7 +79,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _adjoint_select(sde=sde, params=params, adjoint_method=adjoint_method)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -169,7 +170,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _adjoint_select(sde=sde, params=params, adjoint_method=adjoint_method, logqp=True)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, logqp=True)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
@@ -295,8 +296,3 @@ def sdeint_adjoint(sde,
         adjoint_atol, dt_min, options, adjoint_options, *y0
     )
     return ys[0] if tensor_input else ys
-
-
-def _adjoint_select(sde, params, adjoint_method=None, logqp=False):
-    # TODO: Write this!
-    raise NotImplementedError

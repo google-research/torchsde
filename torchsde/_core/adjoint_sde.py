@@ -22,7 +22,7 @@ from ..settings import SDE_TYPES, NOISE_TYPES
 
 class AdjointSDE(base_sde.BaseSDE):
 
-    def __init__(self, forward_sde, params, logqp):
+    def __init__(self, forward_sde, params, logqp=False):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
@@ -292,7 +292,7 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*f_eval, *vjp_y, *vjp_l, vjp_params)
 
     def f_corrected_default_logqp(self, t, y_aug):
-        # TODO: Write this!
+        # TODO: This requires 2 corrections: One in the forward, and the other in backward.
         raise NotImplementedError
 
     def f_corrected_diagonal_logqp(self, t, y_aug):
