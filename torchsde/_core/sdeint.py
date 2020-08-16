@@ -195,7 +195,7 @@ def check_contract(sde, method, logqp, ts, y0, bm, names, adjoint_method=None):
 
     if bm is None:
         if method == METHODS.srk:
-            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.spacetime
+            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
         else:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0[0].dtype,

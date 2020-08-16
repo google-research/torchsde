@@ -39,7 +39,7 @@ def inspect_sample():
 
     with torch.no_grad():
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
-                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.spacetime)
+                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
         ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
         ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
         ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
@@ -82,7 +82,7 @@ def inspect_strong_order():
 
     with torch.no_grad():
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
-                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.spacetime)
+                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         for dt in tqdm.tqdm(dts):
             # Only take end value.

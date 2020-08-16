@@ -37,7 +37,7 @@ class SRK(base_solver.BaseSDESolver):
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-    levy_area_approximations = [LEVY_AREA_APPROXIMATIONS.spacetime,
+    levy_area_approximations = [LEVY_AREA_APPROXIMATIONS.space_time,
                                 LEVY_AREA_APPROXIMATIONS.davie,
                                 LEVY_AREA_APPROXIMATIONS.foster]
 

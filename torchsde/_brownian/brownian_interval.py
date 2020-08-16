@@ -446,7 +446,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         self.levy_area_approximation = levy_area_approximation
 
         # Precompute these as we don't want to spend lots of time checking strings in hot loops.
-        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.space_time,
                                                        LEVY_AREA_APPROXIMATIONS.davie,
                                                        LEVY_AREA_APPROXIMATIONS.foster)
         self.have_A = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
