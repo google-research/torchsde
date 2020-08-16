@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Strong order 1.0 scheme from
+
+Burrage K., Burrage P. M. and Tian T. 2004 "Numerical methods for strong solutions 
+of stochastic differential equations: an overview" Proc. R. Soc. Lond. A. 460: 373–402.
+"""
+
 from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 from .. import base_solver
@@ -49,7 +55,7 @@ class Heun(base_solver.BaseSDESolver):
         g_prod_eval_prime = self.sde.g_prod(t1, y0_prime, I_k)
 
         y1 = [
-            y0_ + (dt * (f_eval_ + f_eval_prime_) + (g_prod_eval_ + g_prod_eval_prime_)) * 0.5
+            y0_ + (dt * (f_eval_ + f_eval_prime_) + g_prod_eval_ + g_prod_eval_prime_) * 0.5
             for y0_, f_eval_, f_eval_prime_, g_prod_eval_, g_prod_eval_prime_ in zip(y0, f_eval, f_eval_prime, g_prod_eval, g_prod_eval_prime)
         ]
 
