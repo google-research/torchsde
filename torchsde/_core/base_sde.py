@@ -44,10 +44,10 @@ class AdjointSDE(BaseSDE):
     Each forward SDE with different noise type has a different adjoint SDE.
     """
 
-    def __init__(self, base_sde, noise_type):
+    def __init__(self, sde, noise_type):
         # `noise_type` must be supplied! Since the adjoint might have a different noise type than the original SDE.
-        super(AdjointSDE, self).__init__(sde_type=base_sde.sde_type, noise_type=noise_type)
-        self._base_sde = base_sde
+        super(AdjointSDE, self).__init__(sde_type=sde.sde_type, noise_type=noise_type)
+        self._base_sde = sde
 
     @abc.abstractmethod
     def f(self, t, y):
@@ -72,29 +72,30 @@ class AdjointSDE(BaseSDE):
 
 class ForwardSDE(BaseSDE):
 
-    def __init__(self, base_sde):
-        super(ForwardSDE, self).__init__(sde_type=base_sde.sde_type, noise_type=base_sde.noise_type)
-        self._base_sde = base_sde
+    def __init__(self, sde):
+        super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
+        self._base_sde = sde
 
         # Register the core function. This avoids polluting the codebase with if-statements.
         self.g_prod = {
             NOISE_TYPES.diagonal: self.g_prod_diagonal,
-            NOISE_TYPES.additive: self.g_prod_additive,
+            NOISE_TYPES.additive: self.g_prod_additive_or_general,
             NOISE_TYPES.scalar: self.g_prod_scalar,
-            NOISE_TYPES.general: self.g_prod_general
-        }[base_sde.noise_type]
+            NOISE_TYPES.general: self.g_prod_additive_or_general
+        }[sde.noise_type]
         self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+            NOISE_TYPES.diagonal: self.gdg_prod_diagonal_or_scalar,
             NOISE_TYPES.additive: self._skip,
-            NOISE_TYPES.scalar: self.gdg_prod_scalar,
+            NOISE_TYPES.scalar: self.gdg_prod_diagonal_or_scalar,
             NOISE_TYPES.general: self.gdg_prod_general
         }
-        self.gdg_jvp = {
+        self.gdg_jvp_column_sum = {
             NOISE_TYPES.diagonal: self._skip,
             NOISE_TYPES.additive: self._skip,
             NOISE_TYPES.scalar: self._skip,
-            NOISE_TYPES.general: self.gdg_jvp_v2
-        }[base_sde.noise_type]
+            NOISE_TYPES.general: self.gdg_jvp_column_sum_v2
+        }[sde.noise_type]
+        # TODO: Assign `gdg_jacobian_contraction`.
 
     def f(self, t, y):
         return self._base_sde.f(t, y)
@@ -109,24 +110,21 @@ class ForwardSDE(BaseSDE):
     def g_prod_diagonal(self, t, y, v):
         return misc.seq_mul(self._base_sde.g(t, y), v)
 
-    def g_prod_additive(self, t, y, v):
-        return self.g_prod_general(t, y, v)
-
     def g_prod_scalar(self, t, y, v):
         return misc.seq_mul_bc(self._base_sde.g(t, y), v)
 
-    def g_prod_general(self, t, y, v):
+    def g_prod_additive_or_general(self, t, y, v):
         return misc.seq_batch_mvp(ms=self._base_sde.g(t, y), vs=v)
 
     # gdg_prod functions.
     def gdg_prod_general(self, t, y, v):
-        # TODO: Write this!
-        raise NotImplemented
+        # This function is used for Milstein. For general noise, Levy areas need to be supplied.
+        raise NotImplemented("This function should not be called.")
 
-    def gdg_prod_diagonal(self, t, y, v):
+    def gdg_prod_diagonal_or_scalar(self, t, y, v):
         requires_grad = torch.is_grad_enabled()  # BP through solver.
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
+            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
             val = self._base_sde.g(t, y)
             vjp_val = misc.grad(
                 outputs=val,
@@ -137,15 +135,13 @@ class ForwardSDE(BaseSDE):
             )
         return misc.convert_none_to_zeros(vjp_val, y)
 
-    def gdg_prod_scalar(self, t, y, v):
-        return self.gdg_prod_diagonal(t, y, v)
-
-    # gdg_jvp functions.
-    def gdg_jvp_compute(self, t, y, a):
+    # gdg_jvp_column_sum functions.
+    # Computes: sum_{j,k,l} d sigma_{i,l} / d x_j sigma_{j,k} A_{k,l}.
+    def gdg_jvp_column_sum_v1(self, t, y, a):
         # Assumes `a` is anti-symmetric and `base_sde` is not of diagonal noise.
         requires_grad = torch.is_grad_enabled()  # BP through solver.
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
+            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
             g_eval = self._base_sde.g(t, y)
             v = [torch.bmm(g_eval_, a_) for g_eval_, a_ in zip(g_eval, a)]
             gdg_jvp_eval = [
@@ -162,11 +158,11 @@ class ForwardSDE(BaseSDE):
             gdg_jvp_eval = misc.seq_add(*gdg_jvp_eval)
         return misc.convert_none_to_zeros(gdg_jvp_eval, y)
 
-    def gdg_jvp_v2(self, t, y, a):
-        # Just like `gdg_jvp_compute`, but faster and more memory intensive.
+    def gdg_jvp_column_sum_v2(self, t, y, a):
+        # Faster, but more memory intensive.
         requires_grad = torch.is_grad_enabled()  # BP through solver.
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
+            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
             g_eval = self._base_sde.g(t, y)
             v = [torch.bmm(g_eval_, a_) for g_eval_, a_ in zip(g_eval, a)]
 
@@ -188,9 +184,9 @@ class ForwardSDE(BaseSDE):
 
 class TupleSDE(BaseSDE):
 
-    def __init__(self, base_sde):
-        super(TupleSDE, self).__init__(noise_type=base_sde.noise_type, sde_type=base_sde.sde_type)
-        self._base_sde = base_sde
+    def __init__(self, sde):
+        super(TupleSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
+        self._base_sde = sde
 
     def f(self, t, y):
         return self._base_sde.f(t, y[0]),
@@ -204,13 +200,13 @@ class TupleSDE(BaseSDE):
 
 class RenameMethodsSDE(BaseSDE):
 
-    def __init__(self, base_sde, drift='f', diffusion='g', prior_drift='h'):
-        super(RenameMethodsSDE, self).__init__(noise_type=base_sde.noise_type, sde_type=base_sde.sde_type)
-        self._base_sde = base_sde
-        self.f = getattr(base_sde, drift)
-        self.g = getattr(base_sde, diffusion)
-        if hasattr(base_sde, prior_drift):
-            self.h = getattr(base_sde, prior_drift)
+    def __init__(self, sde, drift='f', diffusion='g', prior_drift='h'):
+        super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
+        self._base_sde = sde
+        self.f = getattr(sde, drift)
+        self.g = getattr(sde, diffusion)
+        if hasattr(sde, prior_drift):
+            self.h = getattr(sde, prior_drift)
 
 
 class SDEIto(BaseSDE):
