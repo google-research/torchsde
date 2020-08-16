@@ -16,6 +16,7 @@ import functools as ft
 import math
 import operator
 import random
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -184,12 +185,15 @@ class _Interval:
         # This means that if we drop out of the cache, then we'll create the same random noise next time, as we still
         # have the generator.
         if key == 'W':
+            shape = self._top.shape
             generator = self._W_generator
         elif key == 'H':
+            shape = self._top.shape
             generator = self._H_generator
         else:  # key == 'a'
+            shape = (*self._top.shape, *self._top.shape[-1:])
             generator = self._a_generator
-        return _randn(self._top.shape, self._top.dtype, self._top.device, generator.generate_state(1).item())
+        return _randn(shape, self._top.dtype, self._top.device, generator.generate_state(1).item())
 
     ########################################
     # Locate an interval in the hierarchy  #
@@ -468,17 +472,26 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
     def _increment_and_space_time_levy_area(self):
         return self._w_h
 
-    # TODO: pick better names for return_U, return_A. A is clearly 'levy_area', but U?
+    # TODO: pick better names for return_U, return_A. A should be called 'levy_area', but what about U?
     def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
             ta, tb = self.start, ta
         ta = float(ta)
         tb = float(tb)
-        # Can get queries just inside and outside the specified region in SDE solvers; we just clamp.
-        ta = max(self.start, min(ta, self.end))
-        tb = max(self.start, min(tb, self.end))
         if ta > tb:
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
+        if ta < self.start:
+            warnings.warn(f"Should have ta>=t0 but got ta={ta} and t0={self.start}.")
+            ta = self.start
+        if tb < self.start:
+            warnings.warn(f"Should have tb>=t0 but got tb={tb} and t0={self.start}.")
+            tb = self.start
+        if ta > self.end:
+            warnings.warn(f"Should have ta<=t1 but got ta={ta} and t1={self.end}.")
+            ta = self.end
+        if tb > self.end:
+            warnings.warn(f"Should have tb<=t1 but got tb={tb} and t1={self.end}.")
+            tb = self.end
 
         if ta == tb:
             W = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
@@ -545,16 +558,16 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             # For safety we then make this a bit smaller by multiplying by 0.8.
             piece_length = dt * self._cache_size * 0.8
 
-            def _set_t_cache(interval):
+            def _set_points(interval):
                 start = interval._start
                 end = interval._end
                 if end - start > piece_length:
                     midway = (end + start) / 2
                     interval.loc(start, midway)
-                    _set_t_cache(interval._left_child)
-                    _set_t_cache(interval._right_child)
+                    _set_points(interval._left_child)
+                    _set_points(interval._right_child)
 
-            _set_t_cache(self)
+            _set_points(self)
 
     def __repr__(self):
         if self._dt is None:
@@ -574,4 +587,9 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f")")
 
     def to(self, *args, **kwargs):
+        # TODO: would be nice to actually move across the items in the cache without just deleting them. Would need to
+        #  use a custom LRU cache implementation to do that, though
+        self.increment_and_space_time_levy_area_cache.cache_clear()
         self._w_h = tuple(v.to(*args, **kwargs) for v in self._w_h)
+        self.dtype = self._w_h[0].dtype
+        self.device = self._w_h[0].device

@@ -30,7 +30,7 @@ import itertools
 import torchsde
 import pytest
 
-torch.manual_seed(0)
+torch.manual_seed(2147483647)
 torch.set_default_dtype(torch.float64)
 
 D = 3
@@ -97,3 +97,24 @@ def test_normality(brownian_class, device):
 
         _, pval = kstest(samples_, ref_dist.cdf)
         assert pval >= ALPHA
+
+
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("random_order", [False, True])
+def test_continuity(device, random_order):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    ts = torch.linspace(0., 1., 10000, device=device)
+    bm = torchsde.BrownianPath(t0=ts[0], t1=ts[-1], w0=torch.randn((), dtype=ts.dtype, device=device))
+    vals = torch.empty_like(ts)
+    i_ = torch.arange(len(ts), device=device)
+    if random_order:
+        i_ = i_[torch.randperm(len(ts), device=device)]
+    for i in i_:
+        t = ts[i]
+        vals[i] = bm(t)
+    last_val = vals[0]
+    for val in vals[1:]:
+        assert (val - last_val).abs().max() < 5e-2
+        last_val = val

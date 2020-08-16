@@ -129,7 +129,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
     torch.set_default_dtype(torch.float64)
-    torch.manual_seed(0)
+    torch.manual_seed(2147483647)
 
     inspect_sample()
     inspect_strong_order()

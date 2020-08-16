@@ -64,7 +64,7 @@ def main():
 
 if __name__ == "__main__":
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    torch.manual_seed(0)
+    torch.manual_seed(2147483647)
 
     reps = 500
     b, d = 512, 10
