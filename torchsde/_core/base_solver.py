@@ -32,7 +32,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     weak_order = better_abc.abstract_attribute()
     sde_type = better_abc.abstract_attribute()
     noise_types = better_abc.abstract_attribute()
-    levy_area_approximation = better_abc.abstract_attribute()
+    levy_area_approximations = better_abc.abstract_attribute()
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
@@ -41,8 +41,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         assert sde.noise_type in self.noise_types, (
             f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
         )
-        assert bm.levy_area_approximation == self.levy_area_approximation, (
-            f"SDE solver requires levy_area_approximation='{self.levy_area_approximation}' set on the Brownian motion."
+        assert bm.levy_area_approximation in self.levy_area_approximations, (
+            f"SDE solver requires one of {self.levy_area_approximations} set as the `levy_area_approximation` on the "
+            f"Brownian motion."
         )
         if sde.noise_type == NOISE_TYPES.scalar and torch.Size(bm.shape[1:]).numel() != 1:
             raise ValueError('The Brownian motion for scalar SDEs must of dimension 1.')

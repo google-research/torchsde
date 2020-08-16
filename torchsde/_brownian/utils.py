@@ -104,7 +104,7 @@ _rsqrt3 = 1 / math.sqrt(3)
 
 
 def space_time_levy_area(W, h, levy_area_approximation, get_noise):
-    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.space_time,
                                    LEVY_AREA_APPROXIMATIONS.davie,
                                    LEVY_AREA_APPROXIMATIONS.foster):
         return h / 2. * (W + get_noise() * math.sqrt(h) * _rsqrt3)
@@ -113,7 +113,7 @@ def space_time_levy_area(W, h, levy_area_approximation, get_noise):
 
 
 def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
-    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.spacetime):
+    if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
         return None
     elif W.shape == ():
         return torch.zeros_like(W)
