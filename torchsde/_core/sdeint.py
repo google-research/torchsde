@@ -17,19 +17,14 @@ from typing import Optional, Dict, Any
 
 import torch
 
-try:
-    from ..brownian_lib import BrownianPath
-except Exception:  # noqa
-    from torchsde._brownian import BrownianPath  # noqa
-from .._brownian import BaseBrownian, TupleBrownian
-from ..settings import SDE_TYPES, NOISE_TYPES, METHODS
-from ..types import TensorOrTensors, Scalar, Vector
-
 from . import base_sde
 from . import methods
+from .._brownian import BaseBrownian, TupleBrownian, BrownianInterval
+from ..settings import SDE_TYPES, NOISE_TYPES, METHODS, LEVY_AREA_APPROXIMATIONS
+from ..types import TensorOrTensors, Scalar, Vector
 
 
-def sdeint(sde,
+def sdeint(sde: [base_sde.BaseSDE],
            y0: TensorOrTensors,
            ts: Vector,
            bm: Optional[BaseBrownian] = None,
@@ -45,7 +40,7 @@ def sdeint(sde,
     """Numerically integrate an Itô SDE.
 
     Args:
-        sde (object): Object with methods `f` and `g` representing the drift and
+        sde: Object with methods `f` and `g` representing the drift and
             diffusion. The output of `g` should be a single (or a tuple of)
             tensor(s) of size (batch_size, d) for diagonal noise SDEs or
             (batch_size, d, m) for SDEs of other noise types; d is the
@@ -54,10 +49,10 @@ def sdeint(sde,
         y0 (sequence of Tensor): Tensors for initial state.
         ts (Tensor or sequence of float): Query times in non-descending order.
             The state at the first time of `ts` should be `y0`.
-        bm (Brownian, optional): A `BrownianPath` or `BrownianTree` object.
-            Should return tensors of size (batch_size, m) for `__call__`.
-            Defaults to `BrownianPath` for diagonal noise on CPU.
-            Currently does not support tuple outputs yet.
+        bm (Brownian, optional): A 'BrownianInterval', `BrownianPath` or
+            `BrownianTree` object. Should return tensors of size (batch_size, m)
+            for `__call__`. Defaults to `BrownianInterval`. Currently does not
+            support tuple outputs yet.
         logqp (bool, optional): If `True`, also return the log-ratio penalty.
         method (str, optional): Name of numerical integration method.
         dt (float, optional): The constant step size or initial step size for
@@ -80,21 +75,9 @@ def sdeint(sde,
 
     Raises:
         ValueError: An error occurred due to unrecognized noise type/method,
-            or `sde` is missing required methods.
+            or if `sde` is missing required methods.
     """
-    names_to_change = get_names_to_change(names)
-    if len(names_to_change) > 0:
-        sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-    check_contract(sde=sde, method=method, logqp=logqp)
-
-    if bm is None:
-        bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
-
-    tensor_input = isinstance(y0, torch.Tensor)
-    if tensor_input:
-        sde = base_sde.TupleSDE(sde)
-        y0 = (y0,)
-        bm = TupleBrownian(bm)
+    sde, y0, bm, tensor_input = check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm, names=names)
 
     sde = base_sde.ForwardSDE(sde)
     results = integrate(
@@ -116,15 +99,14 @@ def sdeint(sde,
     return results
 
 
-def get_names_to_change(names):
+def check_contract(sde, method, logqp, ts, y0, bm, names, adjoint_method=None):
     if names is None:
-        return {}
+        names_to_change = {}
+    else:
+        names_to_change = {key: names[key] for key in ('drift', 'diffusion', 'prior_drift') if key in names}
+    if len(names_to_change) > 0:
+        sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
 
-    keys = ('drift', 'diffusion', 'prior_drift')
-    return {key: names[key] for key in keys if key in names}
-
-
-def check_contract(sde, method, logqp, adjoint_method=None):
     required_funcs = ('f', 'g', 'h') if logqp else ('f', 'g')
     missing_funcs = [func for func in required_funcs if not hasattr(sde, func)]
     if len(missing_funcs) > 0:
@@ -145,9 +127,86 @@ def check_contract(sde, method, logqp, adjoint_method=None):
     if method not in METHODS:
         raise ValueError(f'Expected method in {METHODS}, but found {method}.')
 
+    tensor_input = torch.is_tensor(y0)
+    if tensor_input:
+        sde = base_sde.TupleSDE(sde)
+        y0 = (y0,)
+    if not isinstance(y0, tuple) or any(not torch.is_tensor(y0_) for y0_ in y0):
+        raise ValueError("y0 must be a Tensor or a tuple of Tensors.")
+
+    drift_shape = [fi.shape for fi in sde.f(ts[0], y0)]
+    diffusion_shape = [gi.shape for gi in sde.g(ts[0], y0)]
+
+    if len(drift_shape) != len(diffusion_shape) or len(drift_shape) != len(y0):
+        raise ValueError("drift, diffusion and y0 must all return the same number of Tensors.")
+
+    for drift_shape_, y0_ in zip(drift_shape, y0):
+        if drift_shape_ != y0_.shape:
+            raise ValueError(f"Drift must return a Tensor of the same shape as y0. Got drift shape {drift_shape_} but "
+                             f"y0 shape {y0_.shape}.")
+
+    noise_channels = diffusion_shape[0][-1]
+    if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general, NOISE_TYPES.scalar):
+        batch_dimensions = diffusion_shape[0][:-2]
+        for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
+            drift_shape_ = tuple(drift_shape_)
+            diffusion_shape_ = tuple(diffusion_shape_)
+            if len(drift_shape_) == 0:
+                raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
+            if len(diffusion_shape_) < 2:
+                raise ValueError(f"Diffusion must have shape (..., state_channels, noise_channels), but got shape "
+                                 f"{diffusion_shape_}.")
+            if drift_shape_ != diffusion_shape_[:-1]:
+                raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape "
+                                 f"{drift_shape_}, meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} "
+                                 f"channel dimensions, but diffusion shape {diffusion_shape_}, meaning "
+                                 f"{diffusion_shape_[:-2]} batch dimensions, {diffusion_shape_[-2]} channel dimensions "
+                                 f"and {diffusion_shape_[-1]} noise dimension.")
+            if diffusion_shape_[:-2] != batch_dimensions:
+                raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
+                                 "dimensions.")
+            if diffusion_shape_[-1] != noise_channels:
+                raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
+        if sde.noise_type == NOISE_TYPES.scalar:
+            if noise_channels != 1:
+                raise ValueError(f"Scalar noise must have only one channel; the diffusion has {noise_channels} noise "
+                                 f"channels.")
+    else:  # sde.noise_type == NOISE_TYPES.diagonal
+        batch_dimensions = diffusion_shape[0][:-1]
+        for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
+            drift_shape_ = tuple(drift_shape_)
+            diffusion_shape_ = tuple(diffusion_shape_)
+            if len(drift_shape_) == 0:
+                raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
+            if len(diffusion_shape_) == 0:
+                raise ValueError(f"Diffusion must have shape (..., state_channels), but got shape ().")
+            if drift_shape_ != diffusion_shape_:
+                raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape "
+                                 f"{drift_shape_}, meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} "
+                                 f"channel dimensions, but diffusion shape {diffusion_shape_}, meaning "
+                                 f"{diffusion_shape_[:-1]} batch dimensions, {diffusion_shape_[-1]} channel dimensions "
+                                 f"and {diffusion_shape_[-1]} noise dimension.")
+            if diffusion_shape_[:-1] != batch_dimensions:
+                raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
+                                 "dimensions.")
+            if diffusion_shape_[-1] != noise_channels:
+                raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
+
+    if bm is None:
+        if method == METHODS.srk:
+            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
+        else:
+            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0[0].dtype,
+                              device=y0[0].device, levy_area_approximation=levy_area_approximation)
+    if tensor_input:
+        bm = TupleBrownian(bm)
+
     if adjoint_method is not None:
         if adjoint_method not in METHODS:
             raise ValueError(f'Expected adjoint_method in {METHODS}, but found {method}.')
+
+    return sde, y0, bm, tensor_input
 
 
 def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):

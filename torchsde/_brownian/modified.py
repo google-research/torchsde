@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..settings import LEVY_AREA_APPROXIMATIONS
-
 from . import base_brownian
 
 
@@ -45,15 +43,39 @@ class _ModifiedBrownian(base_brownian.BaseBrownian):
         return self.base_brownian.levy_area_approximation
 
 
+# TODO: these checks are very inelegant. Is there a better interface to Brownian motion?
 class ReverseBrownian(_ModifiedBrownian):
-    def __call__(self, ta, tb):
-        if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            return tuple(-b for b in self.base_brownian(-tb, -ta))
+    def __call__(self, ta, tb, return_U=False, return_A=False):
+        # TODO: double-check if U and A need reversing
+        if return_U:
+            if return_A:
+                W, U, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), U, A
+            else:
+                W, U = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), U
         else:
-            return tuple((-b, -h, a) for b, h, a in self.base_brownian(-tb, -ta))
+            if return_A:
+                W, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W), A
+            else:
+                W = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
+                return tuple(-W_ for W_ in W)
 
 
 class TupleBrownian(_ModifiedBrownian):
-    def __call__(self, ta, tb):
-        return (self.base_brownian(ta, tb),)
-
+    def __call__(self, ta, tb, return_U=False, return_A=False):
+        if return_U:
+            if return_A:
+                W, U, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (U,), (A,)
+            else:
+                W, U = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (U,)
+        else:
+            if return_A:
+                W, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,), (A,)
+            else:
+                W = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+                return (W,)

@@ -27,7 +27,7 @@ from torch import nn, optim
 from torch.distributions import Normal, Laplace, kl_divergence
 
 from examples import utils
-from torchsde import sdeint, sdeint_adjoint, SDEIto, BrownianPath
+from torchsde import sdeint, sdeint_adjoint, SDEIto, BrownianInterval
 
 Data = namedtuple('Data', ['ts_', 'ts_ext_', 'ts_vis_', 'ts', 'ts_ext', 'ts_vis', 'ys', 'ys_'])
 
@@ -82,17 +82,12 @@ class LatentSDE(SDEIto):
         py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
         logqp0 = kl_divergence(qy0, py0).sum(1).mean(0)  # KL(time=0).
 
-        # `trapezoidal_approx` is for SRK. Disabling it gives better performance.
         if args.adjoint:
-            zs, logqp = sdeint_adjoint(
-                self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
-            )
+            zs, logqp = sdeint_adjoint(self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive,
+                                       rtol=args.rtol, atol=args.atol)
         else:
-            zs, logqp = sdeint(
-                self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
-            )
+            zs, logqp = sdeint(self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive,
+                               rtol=args.rtol, atol=args.atol)
         logqp = logqp.sum(0).mean(0)
         log_ratio = logqp0 + logqp  # KL(time=0) + KL(path).
 
@@ -176,7 +171,8 @@ def main():
 
     # Fix seed for the random draws used in the plots.
     eps = torch.randn(vis_batch_size, 1).to(device)
-    bm = BrownianPath(t0=ts_vis[0], w0=torch.zeros(vis_batch_size, 1).to(device))
+    bm = BrownianInterval(t0=ts_vis[0], t1=ts_vis[-1], shape=(vis_batch_size, 1), dtype=torch.float32, device=device,
+                          levy_area_approximation='space-time')  # We need space-time Levy area to use the SRK solver
 
     # Model.
     model = LatentSDE().to(device)

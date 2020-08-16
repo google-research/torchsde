@@ -438,14 +438,15 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         self._w_h = (W, H)
 
         if levy_area_approximation not in LEVY_AREA_APPROXIMATIONS:
-            raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}.")
+            raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}, but got "
+                             f"'{levy_area_approximation}'.")
 
         self._dt = None
         self._cache_size = cache_size
         self.levy_area_approximation = levy_area_approximation
 
         # Precompute these as we don't want to spend lots of time checking strings in hot loops.
-        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.spacetime,
+        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.space_time,
                                                        LEVY_AREA_APPROXIMATIONS.davie,
                                                        LEVY_AREA_APPROXIMATIONS.foster)
         self.have_A = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
@@ -467,12 +468,15 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
     def _increment_and_space_time_levy_area(self):
         return self._w_h
 
-    def __call__(self, ta, tb):
+    # TODO: pick better names for return_U, return_A. A is clearly 'levy_area', but U?
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
+        if tb is None:
+            ta, tb = self.start, ta
         ta = float(ta)
         tb = float(tb)
         # Can get queries just inside and outside the specified region in SDE solvers; we just clamp.
-        ta = min(self.start, max(ta, self.end))
-        tb = min(self.start, max(tb, self.end))
+        ta = max(self.start, min(ta, self.end))
+        tb = max(self.start, min(tb, self.end))
         if ta > tb:
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
 
@@ -520,11 +524,16 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         if self.have_H:
             U = (tb - ta) * (H + 0.5 * W)
 
-        if self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            return W
-        elif self.levy_area_approximation == LEVY_AREA_APPROXIMATIONS.spacetime:
-            return W, U
-        return W, U, A
+        if return_U:
+            if return_A:
+                return W, U, A
+            else:
+                return W, U
+        else:
+            if return_A:
+                return W, A
+            else:
+                return W
 
     def _create_dependency_tree(self, dt):
         self._dt = dt

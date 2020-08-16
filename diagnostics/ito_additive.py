@@ -14,6 +14,7 @@
 
 import os
 
+import argparse
 import matplotlib.pyplot as plt
 import torch
 import tqdm
@@ -22,7 +23,8 @@ from scipy import stats
 
 from tests.basic_sde import AdditiveSDE
 from tests.problems import Ex3Additive
-from torchsde import sdeint, BrownianPath
+from torchsde import sdeint, BrownianInterval
+from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs_if_not_found, compute_mse
 
 
@@ -31,15 +33,15 @@ def inspect_samples():
     steps = 10
 
     ts = torch.linspace(0., 5., steps=steps).to(device)
-    t0 = ts[0]
     dt = 3e-1
     y0 = torch.ones(batch_size, d).to(device)
     sde = AdditiveSDE(d=d, m=m).to(device)
 
     with torch.no_grad():
-        bm = BrownianPath(t0=t0, w0=torch.zeros(batch_size, m).to(device))
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, m), dtype=y0.dtype, device=device,
+                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
         ys_em = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
-        ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk', options={'trapezoidal_approx': False})
+        ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
         ys_true = sdeint(sde, y0=y0, ts=ts, dt=1e-3, bm=bm, method='euler')
 
         ys_em = ys_em.squeeze().t()
@@ -64,7 +66,7 @@ def inspect_samples():
 
 def inspect_strong_order():
     batch_size, d, m = 4096, 5, 5
-    t0, t1 = ts = torch.tensor([0., 5.]).to(device)
+    ts = torch.tensor([0., 5.]).to(device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d).to(device)
     sde = Ex3Additive(d=d).to(device)
@@ -73,12 +75,13 @@ def inspect_strong_order():
     srk_mses_ = []
 
     with torch.no_grad():
-        bm = BrownianPath(t0=t0, w0=torch.zeros(batch_size, m).to(device))  # It's important to have the correct size!!!
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, m), dtype=y0.dtype, device=device,
+                              levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         for dt in tqdm.tqdm(dts):
             # Only take end value.
             _, ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
-            _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk', options={'trapezoidal_approx': False})
+            _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
             euler_mse = compute_mse(ys_euler, ys_analytical)
@@ -109,7 +112,11 @@ def inspect_strong_order():
 
 
 if __name__ == '__main__':
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--no-gpu', action='store_true')
+
+    args = parser.parse_args()
+    device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(0)
 

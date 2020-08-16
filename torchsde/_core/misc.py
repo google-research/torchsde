@@ -144,13 +144,13 @@ def batch_mvp(m, v):
     return mvp
 
 
-def grad(outputs, inputs, grad_outputs=None, **kwargs):
+def grad(outputs, inputs, **kwargs):
     outputs = make_seq_requires_grad(outputs)
     if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
         inputs = (inputs,)
     _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
-    _grad = torch.autograd.grad(outputs, inputs, grad_outputs=grad_outputs, **kwargs)
+    _grad = torch.autograd.grad(outputs, inputs, **kwargs)
     return convert_none_to_zeros(_grad, inputs)
 
 

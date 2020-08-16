@@ -46,7 +46,7 @@ ts = torch.linspace(0, 1, 20)
 
 
 def time_func():
-    ys = sdeint(geometric_bm, y0, ts, adaptive=False, dt=ts[1], options={'trapezoidal_approx': True})
+    sdeint(geometric_bm, y0, ts, adaptive=False, dt=ts[1])
 
 
 print(timeit.Timer(time_func).timeit(number=100))

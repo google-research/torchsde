@@ -73,7 +73,7 @@ def _batch_jacobian(output, input_):
 
 
 def _gdg_jvp_brute_force(sde, t, y, a):
-    # TODO: Only checks the first input.
+    # Only returns the value for the first input-output pair.
     with torch.enable_grad():
         y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
         g_eval = sde.g(t, y)
@@ -92,18 +92,18 @@ def _make_inputs():
     y = [torch.randn(batch_size, d).to(device)]
     a = torch.randn(batch_size, m, m).to(device)
     a = [a - a.transpose(1, 2)]  # Anti-symmetric.
-    sde = ForwardSDE(base_sde=SDE())
+    sde = ForwardSDE(SDE())
     return sde, t, y, a
 
 
 def test_gdg_jvp():
     sde, t, y, a = _make_inputs()
-    outs_full_jac = _gdg_jvp_brute_force(sde, t, y, a)  # Reference.
-    outs = sde.gdg_jvp_compute(t, y, a)
-    outs_v2 = sde.gdg_jvp_v2(t, y, a)
-    for out_full_jac, out, out_v2 in zip(outs_full_jac, outs, outs_v2):
-        assert torch.allclose(out_full_jac, out)
-        assert torch.allclose(out_full_jac, out_v2)
+    outs_brute_force = _gdg_jvp_brute_force(sde, t, y, a)  # Reference.
+    outs = sde.gdg_jvp_column_sum(t, y, a)
+    outs_v2 = sde.gdg_jvp_column_sum_v2(t, y, a)
+    for out_brute_force, out, out_v2 in zip(outs_brute_force, outs, outs_v2):
+        assert torch.allclose(out_brute_force, out)
+        assert torch.allclose(out_brute_force, out_v2)
 
 
 def _time_function(func, reps=10):
@@ -115,11 +115,11 @@ def _time_function(func, reps=10):
 def check_efficiency():
     sde, t, y, a = _make_inputs()
 
-    func1 = lambda: sde.gdg_jvp_compute(t, y, a)  # Linear in m.
+    func1 = lambda: sde.gdg_jvp_column_sum_v1(t, y, a)  # Linear in m.
     time_elapse = _time_function(func1)
     print(f'Time elapse for loop: {time_elapse:.4f}')
 
-    func2 = lambda: sde.gdg_jvp_v2(t, y, a)  # Almost constant in m.
+    func2 = lambda: sde.gdg_jvp_column_sum_v2(t, y, a)  # Almost constant in m.
     time_elapse = _time_function(func2)
     print(f'Time elapse for duplicate: {time_elapse:.4f}')
 
