@@ -49,7 +49,7 @@ class Heun(base_solver.BaseSDESolver):
         g_prod_eval_prime = self.sde.g_prod(t1, y0_prime, I_k)
 
         y1 = [
-            y0_ + dt * (f_eval_ + f_eval_prime_) * 0.5 + (g_prod_eval_ + g_prod_eval_prime_) * 0.5
+            y0_ + (dt * (f_eval_ + f_eval_prime_) + (g_prod_eval_ + g_prod_eval_prime_)) * 0.5
             for y0_, f_eval_, f_eval_prime_, g_prod_eval_, g_prod_eval_prime_ in zip(y0, f_eval, f_eval_prime, g_prod_eval, g_prod_eval_prime)
         ]
 
