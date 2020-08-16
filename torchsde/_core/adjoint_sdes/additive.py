@@ -33,23 +33,18 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
 
         with torch.enable_grad():
             y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            f_eval = sde.f(-t, y)
-            f_eval = [-f_eval_ for f_eval_ in f_eval]
+            minus_adj_y = [-adj_y_.detach() for adj_y_ in adj_y]
+            minus_f = [-f_ for f_ in sde.f(-t, y)]
             vjp_y_and_params = misc.grad(
-                outputs=f_eval,
+                outputs=minus_f,
                 inputs=y + params,
-                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
+                grad_outputs=minus_adj_y,
                 allow_unused=True,
-                create_graph=True
             )
-            vjp_y = vjp_y_and_params[:n_tensors]
-            vjp_y = misc.convert_none_to_zeros(vjp_y, y)
-            vjp_params = vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
+            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
+            vjp_params = misc.flatten(vjp_params)
 
-        return (*f_eval, *vjp_y, vjp_params)
+        return (*minus_f, *vjp_y, vjp_params)
 
     def g_prod(self, t, y_aug, v):
         sde, params, n_tensors = self._base_sde, self.params, len(y_aug) // 2
@@ -57,25 +52,20 @@ class AdjointSDEAdditive(base_sde.AdjointSDE):
 
         with torch.enable_grad():
             y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            g_eval = [-g_ for g_ in sde.g(-t, y)]
+            minus_adj_y = [-adj_y_.detach() for adj_y_ in adj_y]
+            minus_g = [-g_ for g_ in sde.g(-t, y)]
+            minus_g_prod = misc.seq_batch_mvp(minus_g, v)
+            minus_g_weighted = [(minus_g_ * v_.unsqueeze(-2)).sum(-1) for minus_g_, v_ in zip(minus_g, v)]
             vjp_y_and_params = misc.grad(
-                outputs=g_eval, inputs=y + params,
-                grad_outputs=[
-                    -v_.unsqueeze(1) * adj_y_.unsqueeze(2)  # Convert tensors to be of size (batch_size, d, m).
-                    for v_, adj_y_ in zip(v, adj_y)
-                ],
+                outputs=minus_g_weighted,
+                inputs=y + params,
+                grad_outputs=minus_adj_y,
                 allow_unused=True,
             )
-            vjp_y = vjp_y_and_params[:n_tensors]
-            vjp_y = misc.convert_none_to_zeros(vjp_y, y)
+            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
+            vjp_params = misc.flatten(vjp_params)
 
-            vjp_params = vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
-            g_prod_eval = misc.seq_batch_mvp(g_eval, v)
-
-        return (*g_prod_eval, *vjp_y, vjp_params)
+        return (*minus_g_prod, *vjp_y, vjp_params)
 
     def g(self, t, y):
         raise NotImplementedError("This method shouldn't be called.")
@@ -110,10 +100,8 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
                 allow_unused=True,
                 create_graph=True
             )
-            vjp_y = vjp_y_and_params[:n_tensors]
-            vjp_y = misc.convert_none_to_zeros(vjp_y, y)
-            vjp_params = vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
+            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
+            vjp_params = misc.flatten(vjp_params)
 
             # Vector field change due to log-ratio term, i.e. ||u||^2 / 2.
             g_eval = sde.g(-t, y)
@@ -124,14 +112,13 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
             u_eval = [torch.bmm(g_inv_eval_, u_eval_) for g_inv_eval_, u_eval_ in zip(g_inv_eval, u_eval)]
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
             corr_vjp_y_and_params = misc.grad(
-                outputs=log_ratio_correction, inputs=y + params,
+                outputs=log_ratio_correction,
+                inputs=y + params,
                 grad_outputs=adj_l,
                 allow_unused=True,
             )
-            corr_vjp_y = corr_vjp_y_and_params[:n_tensors]
-            corr_vjp_y = misc.convert_none_to_zeros(corr_vjp_y, y)
-            corr_vjp_params = corr_vjp_y_and_params[n_tensors:]
-            corr_vjp_params = misc.flatten_convert_none_to_zeros(corr_vjp_params, params)
+            corr_vjp_y, corr_vjp_params = corr_vjp_y_and_params[:n_tensors], corr_vjp_y_and_params[n_tensors:]
+            corr_vjp_params = misc.flatten(corr_vjp_params)
 
             vjp_y = misc.seq_add(vjp_y, corr_vjp_y)
             vjp_params = vjp_params + corr_vjp_params
@@ -148,17 +135,15 @@ class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
             adj_y = [adj_y_.detach() for adj_y_ in adj_y]
 
             g_eval = [-g_ for g_ in sde.g(-t, y)]
+            g_prod_eval = misc.seq_batch_mvp(g_eval, v)
             vjp_y_and_params = misc.grad(
-                outputs=g_eval, inputs=y + params,
+                outputs=g_eval,
+                inputs=y + params,
                 grad_outputs=[-v_.unsqueeze(1) * adj_y_.unsqueeze(2) for v_, adj_y_ in zip(v, adj_y)],
                 allow_unused=True,
             )
-            vjp_y = vjp_y_and_params[:n_tensors]
-            vjp_y = misc.convert_none_to_zeros(vjp_y, y)
-
-            vjp_params = vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten_convert_none_to_zeros(vjp_params, params)
-            g_prod_eval = misc.seq_batch_mvp(g_eval, v)
+            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
+            vjp_params = misc.flatten(vjp_params)
 
         return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
 

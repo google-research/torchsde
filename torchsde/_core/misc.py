@@ -30,14 +30,6 @@ def flatten(sequence):
     return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
 
 
-def flatten_convert_none_to_zeros(sequence, like_sequence):
-    flat = [
-        p.reshape(-1) if p is not None else torch.zeros_like(q).reshape(-1)
-        for p, q in zip(sequence, like_sequence)
-    ]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
-
-
 def convert_none_to_zeros(sequence, like_sequence):
     return [torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)]
 
@@ -153,22 +145,24 @@ def batch_mvp(m, v):
 
 
 def grad(outputs, inputs, grad_outputs=None, **kwargs):
-    # Workaround for PyTorch bug #39784
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):
+    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
         inputs = (inputs,)
-    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
-    return torch.autograd.grad(outputs, inputs, grad_outputs=grad_outputs, **kwargs)
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
+
+    _grad = torch.autograd.grad(outputs, inputs, grad_outputs=grad_outputs, **kwargs)
+    return convert_none_to_zeros(_grad, inputs)
 
 
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
     # The present implementation avoids this.
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):
+    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
         inputs = (inputs,)
-    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
-    dummy = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy, **kwargs)
-    return torch.autograd.grad(vjp, dummy, grad_outputs=grad_inputs, **kwargs)
+    dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
+    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
+    _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
+    return convert_none_to_zeros(_jvp, inputs)

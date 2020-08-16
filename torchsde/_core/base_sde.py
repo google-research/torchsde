@@ -135,7 +135,7 @@ class ForwardSDE(BaseSDE):
                 create_graph=requires_grad,
                 allow_unused=True
             )
-        return misc.convert_none_to_zeros(vjp_val, y)
+        return vjp_val
 
     def gdg_prod_scalar(self, t, y, v):
         return self.gdg_prod_diagonal(t, y, v)
@@ -160,7 +160,7 @@ class ForwardSDE(BaseSDE):
                 for col_idx in range(g_eval[0].size(-1))
             ]
             gdg_jvp_eval = misc.seq_add(*gdg_jvp_eval)
-        return misc.convert_none_to_zeros(gdg_jvp_eval, y)
+        return gdg_jvp_eval
 
     def gdg_jvp_v2(self, t, y, a):
         # Just like `gdg_jvp_compute`, but faster and more memory intensive.
@@ -177,7 +177,6 @@ class ForwardSDE(BaseSDE):
             gdg_jvp_eval = misc.jvp(
                 g_eval_dup, y_dup, grad_inputs=v_flat, create_graph=requires_grad, allow_unused=True
             )
-            gdg_jvp_eval = misc.convert_none_to_zeros(gdg_jvp_eval, y)
             gdg_jvp_eval = [t.reshape(batch_size, m, d, m).permute(0, 2, 1, 3) for t in gdg_jvp_eval]
             gdg_jvp_eval = [t.diagonal(dim1=-2, dim2=-1).sum(-1) for t in gdg_jvp_eval]
         return gdg_jvp_eval
