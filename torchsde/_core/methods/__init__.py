@@ -18,6 +18,7 @@ from .euler import Euler
 from .midpoint import Midpoint
 from .milstein import Milstein
 from .srk import SRK
+from .heun import Heun
 
 
 def select(method):
@@ -29,5 +30,7 @@ def select(method):
         return SRK
     elif method == METHODS.midpoint:
         return Midpoint
+    elif method == METHODS.heun:
+        return Heun
     else:
         raise ValueError(f"Method '{method}' does not match any known method.")
