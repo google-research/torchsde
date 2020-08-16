@@ -73,7 +73,7 @@ class Ex2(SDEIto):
     def g(self, t, y):
         del t
         self._nfe += 1
-        return self.p * torch.cos(y) ** 2.
+        return self.p * torch.cos(y) ** 2
 
     def analytical_grad(self, y0, t, grad_output, bm):
         with torch.no_grad():

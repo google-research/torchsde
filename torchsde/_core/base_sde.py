@@ -17,7 +17,7 @@ import abc
 import torch
 from torch import nn
 
-from torchsde import settings
+from ..settings import NOISE_TYPES, SDE_TYPES
 from . import misc
 
 
@@ -29,10 +29,10 @@ class BaseSDE(abc.ABC, nn.Module):
 
     def __init__(self, noise_type, sde_type):
         super(BaseSDE, self).__init__()
-        if noise_type not in settings.NOISE_TYPES:
-            raise ValueError(f"Expected noise type in {settings.NOISE_TYPES}, but found {noise_type}")
-        if sde_type not in settings.SDE_TYPES:
-            raise ValueError(f"Expected sde type in {settings.SDE_TYPES}, but found {sde_type}")
+        if noise_type not in NOISE_TYPES:
+            raise ValueError(f"Expected noise type in {NOISE_TYPES}, but found {noise_type}")
+        if sde_type not in SDE_TYPES:
+            raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde_type}")
         # Making these Python properties breaks `torch.jit.script`
         self.noise_type = noise_type
         self.sde_type = sde_type
@@ -78,22 +78,22 @@ class ForwardSDE(BaseSDE):
 
         # Register the core function. This avoids polluting the codebase with if-statements.
         self.g_prod = {
-            settings.NOISE_TYPES.diagonal: self.g_prod_diagonal,
-            settings.NOISE_TYPES.additive: self.g_prod_additive,
-            settings.NOISE_TYPES.scalar: self.g_prod_scalar,
-            settings.NOISE_TYPES.general: self.g_prod_general
+            NOISE_TYPES.diagonal: self.g_prod_diagonal,
+            NOISE_TYPES.additive: self.g_prod_additive,
+            NOISE_TYPES.scalar: self.g_prod_scalar,
+            NOISE_TYPES.general: self.g_prod_general
         }[base_sde.noise_type]
         self.gdg_prod = {
-            settings.NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-            settings.NOISE_TYPES.additive: self._skip,
-            settings.NOISE_TYPES.scalar: self.gdg_prod_scalar,
-            settings.NOISE_TYPES.general: self.gdg_prod_general
+            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+            NOISE_TYPES.additive: self._skip,
+            NOISE_TYPES.scalar: self.gdg_prod_scalar,
+            NOISE_TYPES.general: self.gdg_prod_general
         }
         self.gdg_jvp = {
-            settings.NOISE_TYPES.diagonal: self._skip,
-            settings.NOISE_TYPES.additive: self._skip,
-            settings.NOISE_TYPES.scalar: self._skip,
-            settings.NOISE_TYPES.general: self.gdg_jvp_v2
+            NOISE_TYPES.diagonal: self._skip,
+            NOISE_TYPES.additive: self._skip,
+            NOISE_TYPES.scalar: self._skip,
+            NOISE_TYPES.general: self.gdg_jvp_v2
         }[base_sde.noise_type]
 
     def f(self, t, y):
@@ -216,10 +216,10 @@ class RenameMethodsSDE(BaseSDE):
 class SDEIto(BaseSDE):
 
     def __init__(self, noise_type):
-        super(SDEIto, self).__init__(noise_type=noise_type, sde_type=settings.SDE_TYPES.ito)
+        super(SDEIto, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.ito)
 
 
 class SDEStratonovich(BaseSDE):
 
     def __init__(self, noise_type):
-        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=settings.SDE_TYPES.stratonovich)
+        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.stratonovich)

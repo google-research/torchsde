@@ -282,19 +282,8 @@ def sdeint_adjoint(sde,
     if not isinstance(sde, nn.Module):
         raise ValueError('sde is required to be an instance of nn.Module.')
 
-    names_to_change = sdeint.get_names_to_change(names)
-    if len(names_to_change) > 0:
-        sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-    sdeint.check_contract(sde=sde, method=method, logqp=logqp, adjoint_method=adjoint_method)
-
-    if bm is None:
-        bm = BrownianPath(t0=ts[0], w0=torch.zeros_like(y0).cpu())
-
-    tensor_input = isinstance(y0, torch.Tensor)
-    if tensor_input:
-        sde = base_sde.TupleSDE(sde)
-        y0 = (y0,)
-        bm = TupleBrownian(bm)
+    sde, y0, bm, tensor_input = sdeint.check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm,
+                                                      names=names, adjoint_method=adjoint_method)
 
     flat_params = misc.flatten(sde.parameters())
     if logqp:
