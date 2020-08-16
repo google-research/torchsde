@@ -38,45 +38,13 @@ class BaseSDE(abc.ABC, nn.Module):
         self.sde_type = sde_type
 
 
-class AdjointSDE(BaseSDE):
-    """Base class for reverse-time adjoint SDE.
-
-    Each forward SDE with different noise type has a different adjoint SDE.
-    """
-
-    def __init__(self, base_sde, noise_type):
-        # `noise_type` must be supplied! Since the adjoint might have a different noise type than the original SDE.
-        super(AdjointSDE, self).__init__(sde_type=base_sde.sde_type, noise_type=noise_type)
-        self._base_sde = base_sde
-
-    @abc.abstractmethod
-    def f(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def g(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def h(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def g_prod(self, t, y, v):
-        pass
-
-    @abc.abstractmethod
-    def gdg_prod(self, t, y, v):
-        pass
-
-
 class ForwardSDE(BaseSDE):
 
     def __init__(self, base_sde):
         super(ForwardSDE, self).__init__(sde_type=base_sde.sde_type, noise_type=base_sde.noise_type)
         self._base_sde = base_sde
 
-        # Register the core function. This avoids polluting the codebase with if-statements.
+        # Register the core function. This avoids polluting the codebase with if-statements and speeds things up.
         self.g_prod = {
             settings.NOISE_TYPES.diagonal: self.g_prod_diagonal,
             settings.NOISE_TYPES.additive: self.g_prod_additive,
@@ -181,7 +149,8 @@ class ForwardSDE(BaseSDE):
             gdg_jvp_eval = [t.diagonal(dim1=-2, dim2=-1).sum(-1) for t in gdg_jvp_eval]
         return gdg_jvp_eval
 
-    def _skip(self, t, y, v):  # noqa
+    def _skip(self, *args):  # noqa
+        _, y = args[:2]
         return [0.] * len(y)
 
 

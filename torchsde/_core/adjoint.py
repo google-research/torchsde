@@ -22,10 +22,8 @@ try:
 except Exception:  # noqa
     from .._brownian import BrownianPath
 from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian
-from ..settings import NOISE_TYPES
 from ..types import TensorOrTensors, Scalar, Vector
 
-from . import adjoint_sdes
 from . import base_sde
 from . import misc
 from . import sdeint
@@ -80,7 +78,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _get_adjoint_sde(sde=sde, params=params)
+        adjoint_sde = _adjoint_select(sde=sde, params=params, adjoint_method=adjoint_method)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -171,7 +169,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _get_adjoint_sde(sde=sde, params=params, logqp=True)
+        adjoint_sde = _adjoint_select(sde=sde, params=params, adjoint_method=adjoint_method, logqp=True)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
@@ -310,24 +308,6 @@ def sdeint_adjoint(sde,
     return ys[0] if tensor_input else ys
 
 
-def _get_adjoint_sde(sde, params, logqp=False):
-    if sde.noise_type == NOISE_TYPES.diagonal:
-        if logqp:
-            return adjoint_sdes.AdjointSDEDiagonalLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEDiagonal(sde, params=params)
-
-    elif sde.noise_type == NOISE_TYPES.scalar:
-        if logqp:
-            return adjoint_sdes.AdjointSDEScalarLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEScalar(sde, params=params)
-
-    elif sde.noise_type == NOISE_TYPES.additive:
-        if logqp:
-            return adjoint_sdes.AdjointSDEAdditiveLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEAdditive(sde, params=params)
-
-    else:
-        raise ValueError('Adjoint mode for general noise SDEs not supported.')
+def _adjoint_select(sde, params, adjoint_method=None, logqp=False):
+    # TODO: Write this!
+    raise NotImplementedError
