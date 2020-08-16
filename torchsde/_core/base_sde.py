@@ -128,7 +128,6 @@ class ForwardSDE(BaseSDE):
         with torch.enable_grad():
             y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
             val = self._base_sde.g(t, y)
-            val = misc.make_seq_requires_grad(val)
             vjp_val = misc.grad(
                 outputs=val,
                 inputs=y,
