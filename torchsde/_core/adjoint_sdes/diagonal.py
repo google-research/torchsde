@@ -19,7 +19,7 @@ from .. import base_sde
 from .. import misc
 
 
-class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
+class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEDiagonal, self).__init__(sde, noise_type="diagonal")
@@ -180,7 +180,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDEIto):
         raise NotImplementedError("This method shouldn't be called.")
 
 
-class AdjointSDEDiagonalLogqp(base_sde.AdjointSDEIto):
+class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEDiagonalLogqp, self).__init__(sde, noise_type="diagonal")

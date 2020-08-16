@@ -46,7 +46,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         ctx.dt_min = dt_min
         ctx.adjoint_options = adjoint_options
 
-        sde = base_sde.ForwardSDEIto(sde)
+        sde = base_sde.ForwardSDE(sde)
         ans = sdeint.integrate(
             sde=sde,
             y0=y0,
@@ -133,7 +133,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         ctx.dt_min = dt_min
         ctx.adjoint_options = adjoint_options
 
-        sde = base_sde.ForwardSDEIto(sde)
+        sde = base_sde.ForwardSDE(sde)
         ans_and_logqp = sdeint.integrate(
             sde=sde,
             y0=y0,

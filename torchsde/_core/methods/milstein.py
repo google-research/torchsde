@@ -32,10 +32,7 @@ class Milstein(base_solver.BaseSDESolver):
 
         f_eval = self.sde.f(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
-        if self.sde.noise_type == NOISE_TYPES.additive:
-            gdg_prod_eval = [0] * len(g_prod_eval)
-        else:
-            gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
+        gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
         y1 = [
             y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
             for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)

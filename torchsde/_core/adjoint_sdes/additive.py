@@ -20,7 +20,7 @@ from .. import base_sde
 from .. import misc
 
 
-class AdjointSDEAdditive(base_sde.AdjointSDEIto):
+class AdjointSDEAdditive(base_sde.AdjointSDE):
 
     def __init__(self, sde, params):
         super(AdjointSDEAdditive, self).__init__(sde, noise_type="general")
@@ -90,7 +90,7 @@ class AdjointSDEAdditive(base_sde.AdjointSDEIto):
         raise NotImplementedError("This method shouldn't be called.")
 
 
-class AdjointSDEAdditiveLogqp(base_sde.AdjointSDEIto):
+class AdjointSDEAdditiveLogqp(base_sde.AdjointSDE):
     def __init__(self, sde, params):
         super(AdjointSDEAdditiveLogqp, self).__init__(sde, noise_type="general")
         self.params = params

@@ -96,7 +96,7 @@ def sdeint(sde,
         y0 = (y0,)
         bm = TupleBrownian(bm)
 
-    sde = base_sde.ForwardSDEIto(sde)
+    sde = base_sde.ForwardSDE(sde)
     results = integrate(
         sde=sde,
         y0=y0,
