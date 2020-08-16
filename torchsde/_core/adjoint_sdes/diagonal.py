@@ -153,7 +153,7 @@ class AdjointSDEDiagonal(base_sde.AdjointSDE):
 
     def h(self, t, y):
         raise NotImplementedError("This method shouldn't be called.")
-    
+
 
 class AdjointSDEDiagonalLogqp(base_sde.AdjointSDE):
 
