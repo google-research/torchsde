@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Strong order 1.0 scheme from
+"""Stratonovich Heun method (strong order 1.0 scheme) from
 
 Burrage K., Burrage P. M. and Tian T. 2004 "Numerical methods for strong solutions 
 of stochastic differential equations: an overview" Proc. R. Soc. Lond. A. 460: 373–402.
