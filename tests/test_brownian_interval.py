@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test the two `BrownianTree`.
+"""Test the `BrownianInterval``.
 
 The suite tests both running on CPU and CUDA (if available).
 """
