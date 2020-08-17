@@ -165,4 +165,4 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
     vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
     _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
-    return convert_none_to_zeros(_jvp, inputs)
+    return convert_none_to_zeros(_jvp, dummy_outputs)
