@@ -56,7 +56,7 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._skip,
             NOISE_TYPES.scalar: self.gdg_prod_diagonal_or_scalar,
             NOISE_TYPES.general: self.gdg_prod_general
-        }
+        }[self.noise_type]
         self.gdg_jvp_column_sum = {
             NOISE_TYPES.diagonal: self._skip,
             NOISE_TYPES.additive: self._skip,
