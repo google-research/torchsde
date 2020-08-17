@@ -46,21 +46,22 @@ class _ModifiedBrownian(base_brownian.BaseBrownian):
 # TODO: these checks are very inelegant. Is there a better interface to Brownian motion?
 class ReverseBrownian(_ModifiedBrownian):
     def __call__(self, ta, tb, return_U=False, return_A=False):
-        # TODO: double-check if U and A need reversing
+        # Whether or not to negate the statistics depends on the return value of the adjoint SDE. Currently, the adjoint
+        # returns negated drift and diffusion, so we don't negate here.
         if return_U:
             if return_A:
                 W, U, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
-                return tuple(-W_ for W_ in W), U, A
+                return W, U, A
             else:
                 W, U = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
-                return tuple(-W_ for W_ in W), U
+                return W, U
         else:
             if return_A:
                 W, A = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
-                return tuple(-W_ for W_ in W), A
+                return W, A
             else:
                 W = self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
-                return tuple(-W_ for W_ in W)
+                return W
 
 
 class TupleBrownian(_ModifiedBrownian):
