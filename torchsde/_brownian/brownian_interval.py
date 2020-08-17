@@ -305,6 +305,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  device: Optional[Union[str, torch.device]] = None,
                  entropy: Optional[int] = None,
                  dt: Optional[Scalar] = None,
+                 pool_size: int = 8,
                  cache_size: Optional[int] = 45,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[torch.Tensor] = None,
@@ -326,6 +327,9 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 to equal the first step this is evaluated with. This allows us
                 to set up a structure that should be efficient to query at these
                 intervals.
+            pool_size (int): Size of the pooled entropy. If you care about
+                statistical randomness then increasing this will help (but will
+                slow things down).
             cache_size: How big a cache of recent calculations to use. (As new
                 calculations depend on old calculations, this speeds things up
                 dramatically, rather than recomputing things.) The default is
@@ -412,7 +416,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
         self.increment_and_space_time_levy_area_cache = increment_and_space_time_levy_area_cache
 
-        generator = np.random.SeedSequence(entropy=entropy)
+        generator = np.random.SeedSequence(entropy=entropy, pool_size=pool_size)
         # First three states are reserved as in _Initial
         _, _, _, initial_W_seed, initial_H_seed = generator.generate_state(5)
 

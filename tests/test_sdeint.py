@@ -24,7 +24,7 @@ from tests import basic_sde
 from tests.torch_test import TorchTestCase
 from torchsde import BrownianPath, sdeint
 
-torch.manual_seed(2147483647)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 

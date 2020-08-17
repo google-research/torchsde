@@ -28,7 +28,7 @@ from scipy.stats import norm, kstest
 import pytest
 import torchsde
 
-torch.manual_seed(2147483647)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 
 D = 3
@@ -125,6 +125,12 @@ def test_determinism_simple(device, levy_area_approximation, return_U, return_A)
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_determinism_large(device, levy_area_approximation, return_U, return_A):
+    """
+    Tests that BrownianInterval deterministically produces the same results when queried at the same points.
+
+    We first of all query it at lots of points (larger than its internal cache), and then re-query at the same set of
+    points, and compare.
+    """
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
@@ -216,12 +222,10 @@ def test_continuity(device, levy_area_approximation, random_order):
     bm = torchsde.BrownianInterval(t0=ts[0], t1=ts[-1], shape=(), device=device,
                                    levy_area_approximation=levy_area_approximation)
     vals = torch.empty_like(ts)
-    i_ = torch.arange(len(ts), device=device)
-    if random_order:
-        i_ = i_[torch.randperm(len(ts), device=device)]
-    for i in i_:
-        t = ts[i]
-        vals[i] = bm(t)
+    t_indices = torch.randperm(len(ts), device=device) if random_order else torch.arange(len(ts), device=device)
+    for t_index in t_indices:
+        t = ts[t_index]
+        vals[t_index] = bm(t)
     last_val = vals[0]
     for val in vals[1:]:
         assert (val - last_val).abs().max() < 5e-2

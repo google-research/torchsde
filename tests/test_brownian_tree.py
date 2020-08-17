@@ -102,7 +102,6 @@ def test_normality(brownian_class, device):
             ref_dist = norm(loc=mean_, scale=std_)
 
             _, pval = kstest(samples_, ref_dist.cdf)
-            print(pval)
             assert pval >= ALPHA
 
 

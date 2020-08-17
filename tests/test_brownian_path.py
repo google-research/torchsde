@@ -30,7 +30,7 @@ import itertools
 import torchsde
 import pytest
 
-torch.manual_seed(2147483647)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 
 D = 3
@@ -108,12 +108,10 @@ def test_continuity(device, random_order):
     ts = torch.linspace(0., 1., 10000, device=device)
     bm = torchsde.BrownianPath(t0=ts[0], t1=ts[-1], w0=torch.randn((), dtype=ts.dtype, device=device))
     vals = torch.empty_like(ts)
-    i_ = torch.arange(len(ts), device=device)
-    if random_order:
-        i_ = i_[torch.randperm(len(ts), device=device)]
-    for i in i_:
-        t = ts[i]
-        vals[i] = bm(t)
+    t_indices = torch.randperm(len(ts), device=device) if random_order else torch.arange(len(ts), device=device)
+    for t_index in t_indices:
+        t = ts[t_index]
+        vals[t_index] = bm(t)
     last_val = vals[0]
     for val in vals[1:]:
         assert (val - last_val).abs().max() < 5e-2
