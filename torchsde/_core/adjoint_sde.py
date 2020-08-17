@@ -26,19 +26,21 @@ class AdjointSDE(base_sde.BaseSDE):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
-        # TODO: Start supporting other noise types for Stratonovich.
         sde_type = forward_sde.sde_type
-        noise_type = {
-            SDE_TYPES.ito: {
+        if sde_type == SDE_TYPES.ito:
+            noise_type = {
                 NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
                 NOISE_TYPES.additive: NOISE_TYPES.general,
                 NOISE_TYPES.scalar: NOISE_TYPES.scalar,
                 NOISE_TYPES.general: NOISE_TYPES.general,
-            }[forward_sde.noise_type],
-            SDE_TYPES.stratonovich: {
-                NOISE_TYPES.general: NOISE_TYPES.general
             }[forward_sde.noise_type]
-        }[forward_sde.sde_type]
+        else:
+            noise_type = {
+                NOISE_TYPES.general: NOISE_TYPES.general,
+                NOISE_TYPES.additive: NOISE_TYPES.general,
+                NOISE_TYPES.scalar: NOISE_TYPES.scalar,
+                NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
+            }[forward_sde.noise_type]
 
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
         self._base_sde = forward_sde
