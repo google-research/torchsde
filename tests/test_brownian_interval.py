@@ -33,7 +33,7 @@ torch.set_default_dtype(torch.float64)
 
 D = 3
 SMALL_BATCH_SIZE = 16
-LARGE_BATCH_SIZE = 16384
+LARGE_BATCH_SIZE = 32000
 REPS = 3
 LARGE_REPS = 500
 ALPHA = 0.001
@@ -42,82 +42,129 @@ ALPHA = 0.001
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
 
-def _setup(device, batch_size):
+def _setup(device, levy_area_approximation, shape):
     t0, t1 = torch.tensor([0., 1.], device=device)
     ta = torch.rand([], device=device)
     tb = torch.rand([], device=device)
     ta, tb = min(ta, tb), max(ta, tb)
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(batch_size, D), dtype=torch.float64, device=device)
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=shape, device=device,
+                                   levy_area_approximation=levy_area_approximation)
     return ta, tb, bm
 
 
-@pytest.mark.parametrize("device", devices)
-def test_shape(device):
-    if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
-
-    ta, tb, bm = _setup(device, SMALL_BATCH_SIZE)
-    sample1 = bm(ta)
-    sample2 = bm(tb)
-    sample3 = bm(ta, tb)
-    assert sample1.shape == sample2.shape == sample3.shape == (SMALL_BATCH_SIZE, D)
-
-    ta, tb, bm = _setup(device, SMALL_BATCH_SIZE)
-    # Query interval before increment
-    sample3 = bm(ta, tb)
-    sample1 = bm(ta)
-    sample2 = bm(tb)
-    assert sample1.shape == sample2.shape == sample3.shape == (SMALL_BATCH_SIZE, D)
+def _levy_returns():
+    yield "none", False, False
+    yield "space-time", False, False
+    yield "space-time", True, False
+    for levy_area_approximation in ('davie', 'foster'):
+        for return_U in (True, False):
+            for return_A in (True, False):
+                yield levy_area_approximation, return_U, return_A
 
 
 @pytest.mark.parametrize("device", devices)
-def test_determinism_simple(device):
+@pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
+def test_shape(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(device, SMALL_BATCH_SIZE)
-    vals = [bm(ta, tb) for _ in range(REPS)]
+    for shape, A_shape in (((SMALL_BATCH_SIZE, D), (SMALL_BATCH_SIZE, D, D)),
+                           ((SMALL_BATCH_SIZE,), (SMALL_BATCH_SIZE,)),
+                           ((), ())):
+        ta, tb, bm = _setup(device, levy_area_approximation, shape)
+        sample1 = bm(ta, return_U=return_U, return_A=return_A)
+        sample2 = bm(tb, return_U=return_U, return_A=return_A)
+        sample3 = bm(ta, tb, return_U=return_U, return_A=return_A)
+        shapes = []
+        A_shapes = []
+        for sample in (sample1, sample2, sample3):
+            if return_U:
+                if return_A:
+                    W1, U1, A1 = sample
+                    shapes.append(W1.shape)
+                    shapes.append(U1.shape)
+                    A_shapes.append(A1.shape)
+                else:
+                    W1, U1 = sample
+                    shapes.append(W1.shape)
+                    shapes.append(U1.shape)
+            else:
+                if return_A:
+                    W1, A1 = sample
+                    shapes.append(W1.shape)
+                    A_shapes.append(A1.shape)
+                else:
+                    W1 = sample
+                    shapes.append(W1.shape)
+
+        for shape_ in shapes:
+            assert shape_ == shape
+        for shape_ in A_shapes:
+            assert shape_ == A_shape
+
+
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
+def test_determinism_simple(device, levy_area_approximation, return_U, return_A):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
+    vals = [bm(ta, tb, return_U=return_U, return_A=return_A) for _ in range(REPS)]
     for val in vals[1:]:
-        assert torch.allclose(val, vals[0])
+        if torch.is_tensor(val):
+            val = (val,)
+        if torch.is_tensor(vals[0]):
+            val0 = (vals[0],)
+        else:
+            val0 = vals[0]
+        for v, v0 in zip(val, val0):
+            assert (v == v0).all()
 
 
 @pytest.mark.parametrize("device", devices)
-def test_determinism_large(device):
+@pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
+def test_determinism_large(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(device, SMALL_BATCH_SIZE)
+    ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     cache = {}
     for _ in range(LARGE_REPS):
         ta_ = torch.rand_like(ta)
         tb_ = torch.rand_like(tb)
         ta_, tb_ = min(ta_, tb_), max(ta_, tb_)
-        val = bm(ta_, tb_)
-        cache[ta_, tb_] = val.detach().clone()
+        val = bm(ta_, tb_, return_U=return_U, return_A=return_A)
+        if torch.is_tensor(val):
+            val = (val,)
+        cache[ta_, tb_] = tuple(v.detach().clone() for v in val)
 
     cache2 = {}
     for ta_, tb_ in cache:
-        val = bm(ta_, tb_)
-        cache2[ta_, tb_] = val.detach().clone()
+        val = bm(ta_, tb_, return_U=return_U, return_A=return_A)
+        if torch.is_tensor(val):
+            val = (val,)
+        cache2[ta_, tb_] = tuple(v.detach().clone() for v in val)
 
     for ta_, tb_ in cache:
-        assert (cache[ta_, tb_] == cache2[ta_, tb_]).all()
+        for v1, v2 in zip(cache[ta_, tb_], cache2[ta_, tb_]):
+            assert (v1 == v2).all()
 
 
 @pytest.mark.parametrize("device", devices)
-def test_normality_simple(device):
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
+def test_normality_simple(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0_, t1_ = 0.0, 1.0
     t0, t1 = torch.tensor([t0_, t1_], device=device)
-    eps = 1e-5
     for _ in range(REPS):
         W = torch.tensor(npr.randn(), device=device).repeat(LARGE_BATCH_SIZE)
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, W=W)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, W=W, levy_area_approximation=levy_area_approximation)
 
         for _ in range(REPS):
-            t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)
+            t_ = npr.uniform(low=t0_, high=t1_)
             samples = bm(t_)
             samples_ = samples.cpu().detach().numpy()
 
@@ -130,13 +177,44 @@ def test_normality_simple(device):
 
 
 @pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
+def test_normality_conditional(device, levy_area_approximation):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    t0_, t1_ = 0.0, 1.0
+    t0, t1 = torch.tensor([t0_, t1_], device=device)
+    for _ in range(REPS):
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
+                                       levy_area_approximation=levy_area_approximation)
+
+        for _ in range(REPS):
+            t_ = npr.uniform(low=t0_, high=t1_)
+            ta = npr.uniform(low=t0_, high=t1_)
+            tb = npr.uniform(low=t0_, high=t1_)
+            ta, t_, tb = sorted([t_, ta, tb])
+
+            increment = bm(ta, tb).cpu().detach().numpy()
+            sample = bm(ta, t_).cpu().detach().numpy()
+
+            mean = increment * (t_ - ta) / (tb - ta)
+            std = np.sqrt((tb - t_) * (t_ - ta) / (tb - ta))
+            rescaled_sample = (sample - mean) / std
+
+            _, pval = kstest(rescaled_sample, 'norm')
+            assert pval >= ALPHA
+
+
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
 @pytest.mark.parametrize("random_order", [False, True])
-def test_continuity(device, random_order):
+def test_continuity(device, levy_area_approximation, random_order):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     ts = torch.linspace(0., 1., 10000, device=device)
-    bm = torchsde.BrownianInterval(t0=ts[0], t1=ts[-1], shape=(), dtype=ts.dtype, device=device)
+    bm = torchsde.BrownianInterval(t0=ts[0], t1=ts[-1], shape=(), device=device,
+                                   levy_area_approximation=levy_area_approximation)
     vals = torch.empty_like(ts)
     i_ = torch.arange(len(ts), device=device)
     if random_order:
@@ -150,12 +228,14 @@ def test_continuity(device, random_order):
         last_val = val
 
 
+@pytest.mark.skip("BrownianInterval.to not supported")
 @pytest.mark.parametrize("device", devices)
-def test_to_dtype(device):
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
+def test_to_dtype(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(device, SMALL_BATCH_SIZE)
+    ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     tc = torch.rand_like(ta)
     td = torch.rand_like(ta)
     tc, td = min(tc, td), max(tc, td)
@@ -187,11 +267,13 @@ def test_to_dtype(device):
     assert torch.allclose(w4, w4_.double())
 
 
-def test_to_device():
+@pytest.mark.skip("BrownianInterval.to not supported")
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
+def test_to_device(levy_area_approximation):
     if not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(cpu, SMALL_BATCH_SIZE)
+    ta, tb, bm = _setup(cpu, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     tc = torch.rand_like(ta)
     td = torch.rand_like(ta)
     tc, td = min(tc, td), max(tc, td)

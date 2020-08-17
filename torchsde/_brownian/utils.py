@@ -118,7 +118,9 @@ _r12 = 1 / 12
 def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
     if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
         return None
-    elif W.shape == ():
+    elif W.ndimension() in (0, 1):
+        # If we have zero or one dimensions then treat the scalar / single dimension we have as batch, so that the
+        # Brownian motion is one dimensional and the Levy area is zero.
         return torch.zeros_like(W)
     else:
         # Davie's approximation to the Levy area from space-time Levy area
@@ -129,9 +131,9 @@ def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
             # Foster's additional correction to Davie's approximation
             tenth_h = 0.1 * h
             H_squared = H ** 2
-            var = tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))
+            std = (tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))).sqrt()
         else:  # davie approximation
-            var = _r12 * h ** 2
-        a_tilde = math.sqrt(var) * noise
+            std = math.sqrt(_r12 * h ** 2)
+        a_tilde = std * noise
         A += a_tilde
         return A
