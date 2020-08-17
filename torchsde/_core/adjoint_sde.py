@@ -223,12 +223,14 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             prod_partials_adj_y = prod_partials_adj_y_and_params[:n_tensors]
             prod_partials_params = prod_partials_adj_y_and_params[n_tensors:]
+            prod_partials_params = misc.flatten(prod_partials_params)
 
             gdg_v = misc.grad(
                 outputs=g_eval,
                 inputs=y,
                 grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, v, g_eval)],
-                allow_unused=True, create_graph=True
+                allow_unused=True,
+                create_graph=True
             )
             mixed_partials_adj_y_and_params = misc.grad(
                 outputs=gdg_v,
