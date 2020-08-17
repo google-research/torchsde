@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from . import base_brownian
 
 
@@ -43,7 +45,6 @@ class _ModifiedBrownian(base_brownian.BaseBrownian):
         return self.base_brownian.levy_area_approximation
 
 
-# TODO: these checks are very inelegant. Is there a better interface to Brownian motion?
 class ReverseBrownian(_ModifiedBrownian):
     def __call__(self, ta, tb, return_U=False, return_A=False):
         # Whether or not to negate the statistics depends on the return value of the adjoint SDE. Currently, the adjoint
@@ -53,17 +54,7 @@ class ReverseBrownian(_ModifiedBrownian):
 
 class TupleBrownian(_ModifiedBrownian):
     def __call__(self, ta, tb, return_U=False, return_A=False):
-        if return_U:
-            if return_A:
-                W, U, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
-                return (W,), (U,), (A,)
-            else:
-                W, U = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
-                return (W,), (U,)
-        else:
-            if return_A:
-                W, A = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
-                return (W,), (A,)
-            else:
-                W = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
-                return (W,)
+        statistics = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
+        if torch.is_tensor(statistics):
+            return (statistics,)
+        return [(i,) for i in statistics]
