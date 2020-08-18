@@ -42,6 +42,7 @@ def inspect_sample():
 
         ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
         ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
+        ys_milstein_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', options={'grad_free': True})
         ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
         ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 

@@ -19,6 +19,7 @@ from .midpoint import Midpoint
 from .milstein import Milstein
 from .srk import SRK
 from .heun import Heun
+from .milstein_strat import MilsteinStrat
 
 
 def select(method):
@@ -32,5 +33,7 @@ def select(method):
         return Midpoint
     elif method == METHODS.heun:
         return Heun
+    elif method == METHODS.milstein_strat:
+        return MilsteinStrat
     else:
         raise ValueError(f"Method '{method}' does not match any known method.")

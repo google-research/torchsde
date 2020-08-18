@@ -33,6 +33,7 @@ class METHODS(metaclass=ContainerMeta):
     srk = 'srk'
     midpoint = 'midpoint'
     heun = 'heun'
+    milstein_strat = 'milstein_strat'
 
 
 class NOISE_TYPES(metaclass=ContainerMeta):  # noqa
@@ -52,3 +53,7 @@ class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):  # noqa
     space_time = 'space-time'  # Only compute an (exact) space-time Levy area
     davie = 'davie'  # Compute Davie's approximation to Levy area
     foster = 'foster'  # Compute Foster's correction to Davie's approximation to Levy area
+
+
+class METHOD_OPTIONS(metaclass=ContainerMeta):
+    grad_free = 'grad_free'
