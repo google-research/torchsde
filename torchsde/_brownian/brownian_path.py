@@ -199,8 +199,6 @@ class BrownianPath(base_brownian.BaseBrownian):
             idx = 0
             old = None
         else:
-            # bisect.bisect_left and bisect.bisect_right (bisect.bisect) have
-            # different behavior when entry already in list.
             idx = bisect.bisect_left(self._ts, t)
             if t == self._ts[idx]:
                 old = self._ws[idx]

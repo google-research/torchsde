@@ -49,7 +49,7 @@ def search(ts: blist.blist, ws: blist.blist, t):
         w = None
         found = False
     else:  # `t` within range.
-        idx = bisect.bisect(ts, t)
+        idx = bisect.bisect_left(ts, t)
         if t == ts[idx]:  # Found `t` in `ts`.
             w = ws[idx]
             found = True
