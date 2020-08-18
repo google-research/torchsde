@@ -67,7 +67,7 @@ setuptools.setup(
                        optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
-    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0'],
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.19.1'],
     python_requires='~=3.6',
     classifiers=[
         "Programming Language :: Python :: 3",
