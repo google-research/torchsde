@@ -14,12 +14,16 @@
 
 import bisect
 import math
+from typing import Optional
 
 import blist
 import torch
 from numpy.random import default_rng
 
 from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import TensorOrTensors
+
+_rsqrt3 = 1 / math.sqrt(3)
 
 
 def search(ts: blist.blist, ws: blist.blist, t):
@@ -83,12 +87,58 @@ def normal_like(seed, ref):
 
 
 def brownian_bridge(t0: float, t1: float, w0, w1, t: float, seed=None):
-    with torch.no_grad():
-        mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
-        std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
-        if seed is not None:
-            return mean + std * normal_like(seed, ref=mean)
-        return mean + std * torch.randn_like(mean)
+    # TODO: Use `torch.Generator`.
+    mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
+    std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
+    if seed is not None:
+        return mean + std * normal_like(seed, ref=mean)
+    return mean + std * torch.randn_like(mean)
+
+
+def augmented_brownian_bridge(
+        s: float,
+        ws: torch.Tensor,
+        m: float,
+        t: Optional[float] = None,
+        wt: Optional[torch.Tensor] = None,
+        ust: Optional[torch.Tensor] = None,
+        levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none) -> TensorOrTensors:
+    if t is None:
+        h = m - s
+        wsm = math.sqrt(h) * torch.randn_like(ws)
+        wm = ws + wsm
+        if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
+            return wm
+        else:
+            usm = h / 2. * (wsm + torch.randn_like(ws) * math.sqrt(h) * _rsqrt3)
+            return wm, usm
+
+    # Small operations performed on CPU.
+    h1, h2, h = m - s, t - m, t - s
+    A = torch.tensor(
+        [[h1, h1 ** 2 / 2],
+         [h1 ** 2 / 2, h1 ** 3 / 3]]
+    )
+    B = torch.tensor(
+        [[h, h ** 2 / 2],
+         [h ** 2 / 2, h ** 3 / 3]]
+    )
+    C = torch.tensor(
+        [[h1, h1 ** 2 / 2 + h1 * h2],
+         [h1 ** 2 / 2, h1 ** 3 / 3 + h1 ** 2 * h2 / 2]]
+    )
+
+    mu_x = torch.stack((ws, torch.zeros_like(ws)), dim=-1)
+    mu_y = torch.stack((ws, torch.zeros_like(ws)), dim=-1)
+    y = torch.stack((wt, ust), dim=-1)
+    mean = mu_x + (y - mu_y) @ (C @ torch.inverse(B).to(ws)).T
+
+    covariance = A - C @ torch.inverse(B) @ C.T
+    L = torch.cholesky(covariance).to(ws)
+    sample = mean + torch.randn_like(mean) @ L.T
+
+    wm, usm = sample[..., 0], sample[..., 1]
+    return [wm, usm]
 
 
 def is_scalar(x):
@@ -97,9 +147,6 @@ def is_scalar(x):
 
 def blist_to(l, *args, **kwargs):  # noqa
     return blist.blist([li.to(*args, **kwargs) for li in l])  # noqa
-
-
-_rsqrt3 = 1 / math.sqrt(3)
 
 
 def space_time_levy_area(W, h, levy_area_approximation, get_noise):
