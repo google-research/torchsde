@@ -51,23 +51,23 @@ class AdjointSDE(BaseSDE):
 
     @abc.abstractmethod
     def f(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def g(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def h(self, t, y):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def g_prod(self, t, y, v):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def gdg_prod(self, t, y, v):
-        pass
+        raise NotImplementedError
 
 
 class ForwardSDE(BaseSDE):
@@ -75,6 +75,11 @@ class ForwardSDE(BaseSDE):
     def __init__(self, sde):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
+
+        self.f = sde.f
+        self.g = sde.g
+        if hasattr(sde, 'h'):
+            self.h = sde.h
 
         # Register the core function. This avoids polluting the codebase with if-statements.
         self.g_prod = {
@@ -88,7 +93,7 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._skip,
             NOISE_TYPES.scalar: self.gdg_prod_diagonal_or_scalar,
             NOISE_TYPES.general: self.gdg_prod_general
-        }
+        }[sde.noise_type]
         self.gdg_jvp_column_sum = {
             NOISE_TYPES.diagonal: self._skip,
             NOISE_TYPES.additive: self._skip,
@@ -96,15 +101,6 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.general: self.gdg_jvp_column_sum_v2
         }[sde.noise_type]
         # TODO: Assign `gdg_jacobian_contraction`.
-
-    def f(self, t, y):
-        return self._base_sde.f(t, y)
-
-    def g(self, t, y):
-        return self._base_sde.g(t, y)
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y)
 
     # g_prod functions.
     def g_prod_diagonal(self, t, y, v):
