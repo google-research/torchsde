@@ -194,7 +194,6 @@ def test_normality_conditional(device, levy_area_approximation):
         bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
-        # for _ in range(REPS):
         t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)
         ta = npr.uniform(low=t0_ + eps, high=t1_ - eps)
         tb = npr.uniform(low=t0_ + eps, high=t1_ - eps)
