@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import math
 
 import blist
-import numpy as np
 import torch
 from numpy.random import default_rng
 
@@ -23,22 +23,24 @@ from ..settings import LEVY_AREA_APPROXIMATIONS
 
 
 def search(ts: blist.blist, ws: blist.blist, t):
-    """Search for the state value that corresponds to the time.
+    """Search for the state that corresponds to the time.
+
+    It is possible that `t` is not within the range of the sorted `ts`.
 
     Returns:
         (None, None, False) if `t` is not within the range of `ts`.
         (int, Tensor, True) if `t` is in `ts`.
         (int, Tensor, False) if `t` is not in `ts` but within the range.
     """
-    if t == ts[-1]:
+    if t == ts[-1]:  # Heuristic #1.
         idx = len(ts) - 1
         w = ws[idx]
         found = True
-    elif len(ts) > 1 and t == ts[-2]:
+    elif len(ts) > 1 and t == ts[-2]:  # Heuristic #2.
         idx = len(ts) - 2
         w = ws[idx]
         found = True
-    elif t == ts[0]:
+    elif t == ts[0]:  # Heuristic #3.
         idx = 0
         w = ws[idx]
         found = True
@@ -46,18 +48,15 @@ def search(ts: blist.blist, ws: blist.blist, t):
         idx = None
         w = None
         found = False
-    else:
-        # TODO: Replace with `torch.searchsorted` when torch==1.7.0 releases.
-        #  Also need to make sure we use tensor dt.
-        idx = np.searchsorted(ts, t)
+    else:  # `t` within range.
+        idx = bisect.bisect(ts, t)
         if t == ts[idx]:  # Found `t` in `ts`.
             w = ws[idx]
             found = True
         else:
-            # Didn't find `t` in `ts`, but within range.
+            # Didn't find `t` in `ts`.
             t0, t1 = ts[idx - 1], ts[idx]
             w0, w1 = ws[idx - 1], ws[idx]
-
             w = brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t)
             found = False
     return idx, w, found

@@ -104,3 +104,6 @@ class BrownianPath(base_brownian.BaseBrownian):
 
     def get_cache(self):
         return self._bm.get_cache()
+
+    def __len__(self):
+        return len(self._bm.get_cache())

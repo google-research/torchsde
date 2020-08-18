@@ -97,3 +97,21 @@ def test_normality(brownian_class, device):
 
         _, pval = kstest(samples_, ref_dist.cdf)
         assert pval >= ALPHA
+
+
+# TODO: Make `insert` of `torchsde.brownian_lib.BrownianPath` have the same behavior.
+@pytest.mark.parametrize("brownian_class", [torchsde.BrownianPath])
+@pytest.mark.parametrize("device", devices)
+def test_insert(brownian_class, device):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    t, bm = _setup(brownian_class, device)
+    w = torch.randn(BATCH_SIZE, D)
+    ret = bm.insert(t, w)
+    assert len(bm) == 2
+    assert ret is None
+
+    ret = bm.insert(t, w)
+    assert len(bm) == 2
+    assert ret.eq(w).all()

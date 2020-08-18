@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import math
 
 import blist
-import numpy as np
 import torch
 
 from . import base_brownian
@@ -100,6 +100,7 @@ class BrownianPath(base_brownian.BaseBrownian):
                 return W
 
     def call(self, t):
+        # TODO: Remove `found`.
         t = float(t)
         if t == self._ts[-1]:
             idx = len(self._ts) - 1
@@ -141,10 +142,10 @@ class BrownianPath(base_brownian.BaseBrownian):
         return w
 
     def insert(self, t, w):
-        """Insert scalar time and tensor Brownian motion state into list.
+        """Insert time and Brownian motion state into lists.
 
-        The method silently replaces the original value if t is already in the list, and returns the old value.
-        Otherwise returns None.
+        Silently replaces the original state if `t` is already in the list, and
+        returns the old state. Otherwise returns `None` if `t` is not inside.
 
         The method should only be used for testing purposes.
         """
@@ -156,11 +157,13 @@ class BrownianPath(base_brownian.BaseBrownian):
             idx = 0
             old = None
         else:
-            # TODO: Replace with `torch.searchsorted` when torch==1.7.0 releases.
-            #  Also need to make sure we use tensor dt.
-            idx = np.searchsorted(self._ts, t)
+            # bisect.bisect_left and bisect.bisect_right (bisect.bisect) have
+            # different behavior when entry already in list.
+            idx = bisect.bisect_left(self._ts, t)
             if t == self._ts[idx]:
                 old = self._ws[idx]
+                self._ts.pop(idx)
+                self._ws.pop(idx)
             else:
                 old = None
 
@@ -170,7 +173,7 @@ class BrownianPath(base_brownian.BaseBrownian):
         return old
 
     def __repr__(self):
-        return f"BrownianPath(t0={self._ts[0]:.3f}, t1={self._ts[-1]:.3f})"
+        return f"{self.__class__.__name__}(t0={self._ts[0]:.3f}, t1={self._ts[-1]:.3f})"
 
     def to(self, *args, **kwargs):
         self._ws = utils.blist_to(self._ws, *args, **kwargs)
