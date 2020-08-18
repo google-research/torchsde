@@ -379,8 +379,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             dtypes.append(dtype)
         if device is None:
             if len(devices) == 0:
-                # Is there no better way to get the current default device?
-                devices.append(torch.empty(()).device)
+                devices.append(torch.device('cpu'))
         else:
             devices.append(torch.device(device))
         if len(shapes) == 0:
