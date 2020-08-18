@@ -22,11 +22,10 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 
-from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
-
 from . import base_brownian
 from . import utils
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar
 
 
 _rsqrt3 = 1 / math.sqrt(3)
@@ -54,17 +53,17 @@ class _Interval:
 
     def __init__(self, start, end, parent, is_left, top, generator):
         # These are the things that every interval has
-        self._start = start      # the left hand edge of the interval
-        self._end = end          # the right hand edge of the interval
-        self._parent = parent    # our parent interval
+        self._start = start  # the left hand edge of the interval
+        self._end = end  # the right hand edge of the interval
+        self._parent = parent  # our parent interval
         self._is_left = is_left  # are we the left or right child of our parent
-        self._top = top          # the top-level BrownianInterval, where we cache certain state
+        self._top = top  # the top-level BrownianInterval, where we cache certain state
         self._generator = generator
         self._W_seed, self._H_seed, self._a_seed = generator.generate_state(3)
 
         # These are the things that intervals which are parents also have
-        self._midway = None       # The point at which we split between left and right subintervals
-        self._left_child = None   # The left subinterval
+        self._midway = None  # The point at which we split between left and right subintervals
+        self._left_child = None  # The left subinterval
         self._right_child = None  # The right subinterval
 
     @property
@@ -125,7 +124,7 @@ class _Interval:
             second_coeff = 6 * first_coeff * right_diff * h_reciprocal
 
             left_W = first_coeff * W + second_coeff * H + third_coeff * X1
-            left_H = first_coeff**2 * H - a * X1 + c * right_diff * X2
+            left_H = first_coeff ** 2 * H - a * X1 + c * right_diff * X2
         else:
             # Don't compute space-time Levy area unless we need to
             left_W = self._brownian_bridge(is_left=True)
@@ -140,7 +139,7 @@ class _Interval:
             second_coeff = 6 * first_coeff * left_diff * h_reciprocal
 
             right_W = first_coeff * W - second_coeff * H - third_coeff * X1
-            right_H = first_coeff**2 * H - b * X1 - c * left_diff * X2
+            right_H = first_coeff ** 2 * H - b * X1 - c * left_diff * X2
         else:
             # Don't compute space-time Levy area unless we need to
             right_W = self._brownian_bridge(is_left=False)
@@ -597,9 +596,4 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f")")
 
     def to(self, *args, **kwargs):
-        # TODO: would be nice to actually move across the items in the cache without just deleting them. Would need to
-        #  use a custom LRU cache implementation to do that, though. Maybe use boltons.cacheutils?
-        self.increment_and_space_time_levy_area_cache.cache_clear()
-        self._w_h = tuple(v.to(*args, **kwargs) for v in self._w_h)
-        self.dtype = self._w_h[0].dtype
-        self.device = self._w_h[0].device
+        raise AttributeError(f'BrownianInterval does not support the method "to".')
