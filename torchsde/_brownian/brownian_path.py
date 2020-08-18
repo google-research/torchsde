@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
+import operator
 import bisect
 import math
+from typing import Optional, Tuple, Union
 
 import blist
 import torch
@@ -41,7 +44,10 @@ class BrownianPath(base_brownian.BaseBrownian):
 
     def __init__(self,
                  t0: Scalar,
-                 w0: torch.Tensor,
+                 w0: Optional[torch.Tensor] = None,
+                 shape: Optional[Tuple[int, ...]] = None,
+                 dtype: Optional[torch.dtype] = None,
+                 device: Optional[Union[str, torch.device]] = None,
                  window_size: int = 8,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  **unused_kwargs):
@@ -49,7 +55,14 @@ class BrownianPath(base_brownian.BaseBrownian):
 
         Args:
             t0 (float or Tensor): Initial time.
-            w0 (sequence of Tensor): Initial state.
+            w0 (sequence of Tensor, optional): Initial state.
+            shape (tuple of int, optional): The shape of each Brownian sample.
+                The last dimension is treated as the channel dimension and
+                any/all preceding dimensions are treated as batch dimensions.
+            dtype (torch.dtype): The dtype of each Brownian sample.
+                Defaults to the PyTorch default.
+            device (str or torch.device): The device of each Brownian sample.
+                Defaults to the current device.
             window_size (int): Size of the window around last query for local
                 search.
             levy_area_approximation (str): Whether to also approximate Levy
@@ -61,16 +74,46 @@ class BrownianPath(base_brownian.BaseBrownian):
         handle_unused_kwargs(self, unused_kwargs)
         del unused_kwargs
 
+        # TODO: Write a test for all the different behaviors.
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
-            raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
+            raise ValueError('Initial time `t0` should be a float or 0-d torch.Tensor.')
+        t0 = float(t0)
+
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+        if device is None:
+            device = torch.device("cpu")
+
+        shapes = utils.get_tensors_info(w0, shape=True, default_shape=shape)
+        dtypes = utils.get_tensors_info(w0, dtype=True, default_dtype=dtype)
+        devices = utils.get_tensors_info(w0, device=True, default_device=device)
+        if len(shapes) == 0:
+            raise ValueError("Must either specify `shape` or pass in `w0` to implicitly define the shape.")
+        if len(dtypes) == 0:
+            raise ValueError("Must either specify `dtype` or pass in `w0` to implicitly define the dtype.")
+        if len(devices) == 0:
+            raise ValueError("Must either specify `device` or pass in `w0` to implicitly define the device.")
+
+        # Make sure the reduce actually does a comparison, to get a bool datatype.
+        shapes.append(shapes[-1])
+        dtypes.append(dtypes[-1])
+        devices.append(devices[-1])
+        if not functools.reduce(operator.eq, shapes):
+            raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
+        if not functools.reduce(operator.eq, dtypes):
+            raise ValueError("Multiple dtypes found. Make sure `shape` and `w0` are consistent.")
+        if not functools.reduce(operator.eq, devices):
+            raise ValueError("Multiple devices found. Make sure `shape` and `w0` are consistent.")
 
         if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
             raise ValueError(
                 "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
             )
 
-        t0 = float(t0)
+        if w0 is None:
+            w0 = torch.zeros(size=shape, device=device, dtype=dtype)
+
         self._ts = blist.blist()
         self._ws = blist.blist()
         self._ts.append(t0)
@@ -100,7 +143,6 @@ class BrownianPath(base_brownian.BaseBrownian):
                 return W
 
     def call(self, t):
-        # TODO: Remove `found`.
         t = float(t)
         if t == self._ts[-1]:
             idx = len(self._ts) - 1

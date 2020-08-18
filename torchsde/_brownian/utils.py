@@ -130,3 +130,22 @@ def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
             a_tilde = math.sqrt(var) * noise
             A += a_tilde
         return A
+
+
+def get_tensors_info(*args,
+                     shape=False,
+                     dtype=False,
+                     device=False,
+                     default_shape=None,
+                     default_dtype=None,
+                     default_device=None):
+    # Assume one of `shape`, `dtype`, and `device` should be true.
+    if shape:
+        shapes = [] if default_shape is None else [default_shape]
+        return shapes + [arg.shape for arg in args if torch.is_tensor(arg)]
+    if dtype:
+        dtypes = [] if default_dtype is None else [default_dtype]
+        return dtypes + [arg.dtype for arg in args if torch.is_tensor(arg)]
+    if device:
+        devices = [] if default_device is None else [default_device]
+        return devices + [arg.device for arg in args if torch.is_tensor(arg)]
