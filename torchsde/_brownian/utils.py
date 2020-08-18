@@ -18,7 +18,6 @@ from typing import Optional
 
 import blist
 import torch
-from numpy.random import default_rng
 
 from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import TensorOrTensors
@@ -76,69 +75,74 @@ def search_and_insert(ts: blist.blist, ws: blist.blist, t):
     return w
 
 
-def normal_like(seed, ref):
-    """Return a tensor sampled from standard Gaussian with shape that of `ref`.
-
-    Randomness here is based on numpy!
-    """
-    if not isinstance(ref, torch.Tensor):
-        raise ValueError(f'Reference should be a torch tensor, but is of type {type(ref)}.')
-    return torch.tensor(default_rng(seed).normal(size=ref.shape)).to(ref)
+def randn_like(seed: int, ref: torch.Tensor) -> torch.Tensor:
+    generator = torch.Generator(ref.device).manual_seed(seed)
+    return torch.randn(ref.shape, dtype=ref.dtype, device=ref.device, generator=generator)
 
 
-def brownian_bridge(t0: float, t1: float, w0, w1, t: float, seed=None):
-    # TODO: Use `torch.Generator`.
+def brownian_bridge(t0: float,
+                    t1: float,
+                    w0: torch.Tensor,
+                    w1: torch.Tensor,
+                    t: float,
+                    seed: Optional[int] = None) -> torch.Tensor:
     mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
     std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
-    if seed is not None:
-        return mean + std * normal_like(seed, ref=mean)
-    return mean + std * torch.randn_like(mean)
+    return (mean + std * torch.randn_like(mean)) if seed is None else (mean + std * randn_like(seed, mean))
 
 
-def augmented_brownian_bridge(
-        s: float,
-        ws: torch.Tensor,
-        m: float,
-        t: Optional[float] = None,
-        wt: Optional[torch.Tensor] = None,
-        ust: Optional[torch.Tensor] = None,
+def brownian_bridge_centered(h1: float, h: float, W_h: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
+    mean = h1 * W_h / h
+    std = math.sqrt((h - h1) * h1 / h)
+    return (mean + std * torch.randn_like(mean)) if seed is None else (mean + std * randn_like(seed, mean))
+
+
+def brownian_bridge_augmented(
+        ref: torch.Tensor,
+        h1: float,
+        h: Optional[float] = None,
+        W_h: Optional[torch.Tensor] = None,
+        U_h: Optional[torch.Tensor] = None,
         levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none) -> TensorOrTensors:
-    if t is None:
-        h = m - s
-        wsm = math.sqrt(h) * torch.randn_like(ws)
-        wm = ws + wsm
+    if h is None:  # Unconditional sampling.
+        # Slight code repetition for readability.
         if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            return wm
+            W_h1 = math.sqrt(h1) * torch.randn_like(ref)
+            return W_h1
         else:
-            usm = h / 2. * (wsm + torch.randn_like(ws) * math.sqrt(h) * _rsqrt3)
-            return wm, usm
+            W_h1 = math.sqrt(h1) * torch.randn_like(ref)
+            U_h1 = h1 / 2. * (W_h1 + torch.randn_like(ref) * math.sqrt(h1) * _rsqrt3)
+            return W_h1, U_h1
 
-    # Small operations performed on CPU.
-    h1, h2, h = m - s, t - m, t - s
-    A = torch.tensor(
-        [[h1, h1 ** 2 / 2],
-         [h1 ** 2 / 2, h1 ** 3 / 3]]
-    )
-    B = torch.tensor(
-        [[h, h ** 2 / 2],
-         [h ** 2 / 2, h ** 3 / 3]]
-    )
-    C = torch.tensor(
-        [[h1, h1 ** 2 / 2 + h1 * h2],
-         [h1 ** 2 / 2, h1 ** 3 / 3 + h1 ** 2 * h2 / 2]]
-    )
+    # Conditional sampling.
+    if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
+        W_h1 = brownian_bridge_centered(h1, h, W_h)
+        return W_h1
+    else:
+        h2 = h - h1
+        A = torch.tensor(
+            [[h1, h1 ** 2 / 2],
+             [h1 ** 2 / 2, h1 ** 3 / 3]],
+        )
+        B = torch.tensor(
+            [[h, h ** 2 / 2],
+             [h ** 2 / 2, h ** 3 / 3]]
+        )
+        C = torch.tensor(
+            [[h1, h1 ** 2 / 2 + h1 * h2],
+             [h1 ** 2 / 2, h1 ** 3 / 3 + h1 ** 2 * h2 / 2]]
+        )
 
-    mu_x = torch.stack((ws, torch.zeros_like(ws)), dim=-1)
-    mu_y = torch.stack((ws, torch.zeros_like(ws)), dim=-1)
-    y = torch.stack((wt, ust), dim=-1)
-    mean = mu_x + (y - mu_y) @ (C @ torch.inverse(B).to(ws)).T
+        mu_x = mu_y = torch.zeros(size=ref.shape + (2,), dtype=ref.dtype, device=ref.device)
+        y = torch.stack((W_h, U_h), dim=-1)
+        mean = mu_x + (y - mu_y) @ (C @ torch.inverse(B).to(ref.device)).T
 
-    covariance = A - C @ torch.inverse(B) @ C.T
-    L = torch.cholesky(covariance).to(ws)
-    sample = mean + torch.randn_like(mean) @ L.T
+        covariance = A - C @ torch.inverse(B) @ C.T
+        L = torch.cholesky(covariance).to(ref.device)
+        sample = mean + torch.randn_like(mean) @ L.T
 
-    wm, usm = sample[..., 0], sample[..., 1]
-    return [wm, usm]
+        W_h1, U_h1 = sample[..., 0], sample[..., 1]
+        return W_h1, U_h1
 
 
 def is_scalar(x):
