@@ -82,11 +82,11 @@ class ForwardSDE(BaseSDE):
             self.h = sde.h
 
         # Register the core function. This avoids polluting the codebase with if-statements.
-        self.g_prod = {
-            NOISE_TYPES.diagonal: self.g_prod_diagonal,
-            NOISE_TYPES.additive: self.g_prod_additive_or_general,
-            NOISE_TYPES.scalar: self.g_prod_scalar,
-            NOISE_TYPES.general: self.g_prod_additive_or_general
+        self.prod = {
+            NOISE_TYPES.diagonal: misc.seq_mul,
+            NOISE_TYPES.additive: misc.seq_batch_mvp,
+            NOISE_TYPES.scalar: misc.seq_mul_bc,
+            NOISE_TYPES.general: misc.seq_batch_mvp
         }[sde.noise_type]
         self.gdg_prod = {
             NOISE_TYPES.diagonal: self.gdg_prod_diagonal_or_scalar,
@@ -102,15 +102,8 @@ class ForwardSDE(BaseSDE):
         }[sde.noise_type]
         # TODO: Assign `gdg_jacobian_contraction`.
 
-    # g_prod functions.
-    def g_prod_diagonal(self, t, y, v):
-        return misc.seq_mul(self._base_sde.g(t, y), v)
-
-    def g_prod_scalar(self, t, y, v):
-        return misc.seq_mul_bc(self._base_sde.g(t, y), v)
-
-    def g_prod_additive_or_general(self, t, y, v):
-        return misc.seq_batch_mvp(ms=self._base_sde.g(t, y), vs=v)
+    def g_prod(self, t, y, v):
+        return self.prod(self._base_sde.g(t, y), v)
 
     # gdg_prod functions.
     def gdg_prod_general(self, t, y, v):

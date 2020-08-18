@@ -21,12 +21,14 @@ from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD
 from .. import base_solver
 
 
-class Milstein(base_solver.BaseSDESolver):
+class BaseMilstein(base_solver.BaseSDESolver):
     strong_order = 1.0
     weak_order = 1.0
-    sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
+
+    def v_term(self, I_k, dt):
+        pass
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
@@ -34,14 +36,14 @@ class Milstein(base_solver.BaseSDESolver):
         t1 = t0 + dt
 
         I_k = self.bm(t0, t1)
-        v = [delta_bm_ ** 2. - dt for delta_bm_ in I_k]
+        v = self.v_term(I_k, dt)
 
         f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        g_eval = self.sde.g(t0, y0)
+        g_prod_eval = self.sde.prod(g_eval, I_k)
 
         if opt.grad_free in self.options and self.options[opt.grad_free]:
-            g_eval = self.sde.g(t0, y0)
-            g_prod_eval_v = self.sde.g_prod(t0, y0, v)
+            g_prod_eval_v = self.sde.prod(g_eval, v)
             sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
             y0_prime = [
                 y0_ + dt * f_eval_ + g_eval_ * sqrt_dt
@@ -59,5 +61,18 @@ class Milstein(base_solver.BaseSDESolver):
             y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
             for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
         ]
-        t1 = t0 + dt
         return t1, y1
+
+
+class MilsteinIto(BaseMilstein):
+    sde_type = SDE_TYPES.ito
+    
+    def v_term(self, I_k, dt):
+        return [delta_bm_ ** 2. - dt for delta_bm_ in I_k]
+
+
+class MilsteinStratonovich(BaseMilstein):
+    sde_type = SDE_TYPES.stratonovich
+
+    def v_term(self, I_k, dt):
+        return [delta_bm_ ** 2. for delta_bm_ in I_k]

@@ -33,7 +33,6 @@ class METHODS(metaclass=ContainerMeta):
     srk = 'srk'
     midpoint = 'midpoint'
     heun = 'heun'
-    milstein_strat = 'milstein_strat'
 
 
 class NOISE_TYPES(metaclass=ContainerMeta):  # noqa
