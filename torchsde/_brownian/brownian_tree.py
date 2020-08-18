@@ -109,7 +109,7 @@ class BrownianTree(base_brownian.BaseBrownian):
         w1_seed, w00_seed, w11_seed, parent = parent.spawn(4)
 
         if w1 is None:
-            w1 = w0 + utils.randn_like(w1_seed, w0) * math.sqrt(t1 - t0)
+            w1 = w0 + utils.randn_like(ref=w0, seed=w1_seed) * math.sqrt(t1 - t0)
 
         self._t0 = t0
         self._t1 = t1
@@ -129,12 +129,12 @@ class BrownianTree(base_brownian.BaseBrownian):
         self._ts_prev = blist.blist()
         self._ws_prev = blist.blist()
         self._ts_prev.extend([t00, t0])
-        self._ws_prev.extend([w0 + utils.randn_like(w00_seed, w0) * math.sqrt(t0 - t00), w0])
+        self._ws_prev.extend([w0 + utils.randn_like(ref=w0, seed=w00_seed) * math.sqrt(t0 - t00), w0])
 
         self._ts_post = blist.blist()
         self._ws_post = blist.blist()
         self._ts_post.extend([t1, t11])
-        self._ws_post.extend([w1, w1 + utils.randn_like(w11_seed, w1) * math.sqrt(t11 - t1)])
+        self._ws_post.extend([w1, w1 + utils.randn_like(ref=w0, seed=w11_seed) * math.sqrt(t11 - t1)])
 
         # Cache.
         ts, ws, seeds = _create_cache(t0=t0, t1=t1, w0=w0, w1=w1, parent=parent, k=cache_depth)

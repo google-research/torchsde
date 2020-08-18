@@ -75,7 +75,10 @@ def search_and_insert(ts: blist.blist, ws: blist.blist, t):
     return w
 
 
-def randn_like(seed: int, ref: torch.Tensor) -> torch.Tensor:
+def randn_like(ref: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
+    if seed is None:
+        return torch.randn_like(ref)
+
     generator = torch.Generator(ref.device).manual_seed(seed)
     return torch.randn(ref.shape, dtype=ref.dtype, device=ref.device, generator=generator)
 
@@ -88,13 +91,13 @@ def brownian_bridge(t0: float,
                     seed: Optional[int] = None) -> torch.Tensor:
     mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
     std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
-    return (mean + std * torch.randn_like(mean)) if seed is None else (mean + std * randn_like(seed, mean))
+    return mean + std * randn_like(ref=mean, seed=seed)
 
 
 def brownian_bridge_centered(h1: float, h: float, W_h: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
     mean = h1 * W_h / h
     std = math.sqrt((h - h1) * h1 / h)
-    return (mean + std * torch.randn_like(mean)) if seed is None else (mean + std * randn_like(seed, mean))
+    return mean + std * randn_like(ref=mean, seed=seed)
 
 
 def brownian_bridge_augmented(
@@ -103,15 +106,16 @@ def brownian_bridge_augmented(
         h: Optional[float] = None,
         W_h: Optional[torch.Tensor] = None,
         U_h: Optional[torch.Tensor] = None,
-        levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none) -> TensorOrTensors:
-    if h is None:  # Unconditional sampling.
+        levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.space_time) -> TensorOrTensors:
+    # Unconditional sampling.
+    if h is None:
         # Slight code repetition for readability.
         if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
-            W_h1 = math.sqrt(h1) * torch.randn_like(ref)
+            W_h1 = math.sqrt(h1) * randn_like(ref)
             return W_h1
         else:
-            W_h1 = math.sqrt(h1) * torch.randn_like(ref)
-            U_h1 = h1 / 2. * (W_h1 + torch.randn_like(ref) * math.sqrt(h1) * _rsqrt3)
+            W_h1 = math.sqrt(h1) * randn_like(ref)
+            U_h1 = h1 / 2. * (W_h1 + randn_like(ref) * math.sqrt(h1) * _rsqrt3)
             return W_h1, U_h1
 
     # Conditional sampling.
@@ -139,7 +143,7 @@ def brownian_bridge_augmented(
 
         covariance = A - C @ torch.inverse(B) @ C.T
         L = torch.cholesky(covariance).to(ref.device)
-        sample = mean + torch.randn_like(mean) @ L.T
+        sample = mean + randn_like(mean) @ L.T
 
         W_h1, U_h1 = sample[..., 0], sample[..., 1]
         return W_h1, U_h1

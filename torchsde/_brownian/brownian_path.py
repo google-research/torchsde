@@ -25,11 +25,11 @@ from . import base_brownian
 from . import utils
 from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
+from ..types import Scalar, TensorOrTensors
 
 
 class BrownianPath(base_brownian.BaseBrownian):
-    """Fast Brownian motion with all queries stored in a list and uses local search.
+    """Fast Brownian motion with all increments stored.
 
     Trades in memory for speed.
 
@@ -74,7 +74,6 @@ class BrownianPath(base_brownian.BaseBrownian):
         handle_unused_kwargs(self, unused_kwargs)
         del unused_kwargs
 
-        # TODO: Write a test for all the different behaviors.
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time `t0` should be a float or 0-d torch.Tensor.')
@@ -106,22 +105,67 @@ class BrownianPath(base_brownian.BaseBrownian):
         if not functools.reduce(operator.eq, devices):
             raise ValueError("Multiple devices found. Make sure `shape` and `w0` are consistent.")
 
-        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
-            raise ValueError(
-                "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
-            )
-
         if w0 is None:
             w0 = torch.zeros(size=shape, device=device, dtype=dtype)
 
-        self._ts = blist.blist()
-        self._ws = blist.blist()
-        self._ts.append(t0)
-        self._ws.append(w0)
+        if levy_area_approximation not in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
+            raise ValueError(
+                "BrownianPath currently only supports 'none' and 'space-time' for Levy area approximation."
+            )
+        self.levy_area_approximation = levy_area_approximation
+
+        # Provide references so that point-based queries still work.
+        self._t0 = t0
+        self._w0 = w0
+        self._ts = blist.blist([t0])
+        self._ws = blist.blist([torch.zeros_like(w0)])  # Record W increment.
+        self._us = blist.blist([torch.zeros_like(w0)])  # Record U increment.
 
         self._last_idx = 0
         self._window_size = window_size
-        self.levy_area_approximation = levy_area_approximation
+
+    def _update_internal_state(self, t: float) -> int:
+        """Update the recorded Brownian state and space-time Levy area.
+
+        Returns:
+            The index of the old state or newly inserted state.
+        """
+        idx = bisect.bisect_left(self._ts, t)
+        if t == self._ts[idx]:
+            return idx
+
+        if idx <= 0:
+            h1 = self._ts[0] - t
+            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1)
+            self._ts.insert(idx, t)
+            self._ws.insert(idx, W_h1)
+            self._us.insert(idx, U_h1)
+        elif idx >= len(self._ts):
+            h1 = t - self._ts[-1]
+            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1)
+            self._ts.insert(idx, t)
+            self._ws.insert(idx, W_h1)
+            self._us.insert(idx, U_h1)
+        else:
+            h = self._ts[idx] - self._ts[idx - 1]
+            h1 = t - self._ts[idx - 1]
+            h2 = h - h1
+
+            W_h, U_h = self._ws[idx], self._us[idx]
+            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1, h, W_h, U_h)
+
+            W_h2 = W_h - W_h1
+            U_h2 = U_h - U_h1 - h2 * W_h1
+
+            # Update right end.
+            self._ws[idx] = W_h2
+            self._us[idx] = U_h2
+
+            # Insert new.
+            self._ws.insert(idx, W_h1)
+            self._us.insert(idx, U_h1)
+
+        return idx
 
     def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
@@ -234,4 +278,4 @@ class BrownianPath(base_brownian.BaseBrownian):
         return len(self._ts)
 
     def get_cache(self):
-        return {'ts': self._ts, 'ws': self._ws}
+        return {'ts': self._ts, 'ws': self._ws, 'us': self._us}
