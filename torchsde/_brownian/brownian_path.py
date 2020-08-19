@@ -200,7 +200,9 @@ class BrownianPath(base_brownian.BaseBrownian):
 
     def _aggregate_W(self, idx_a: int, idx_b: int) -> torch.Tensor:
         """Aggregate Brownian increments."""
-        return sum(self._ws[idx_a + 1: idx_b + 1])
+        if idx_b > idx_a:
+            return sum(self._ws[idx_a + 1: idx_b + 1])
+        return torch.zeros_like(self._w0)
 
     def _aggregate_W_U(self, idx_a: int, idx_b: int) -> Tuple[torch.Tensor, ...]:
         """Aggregate Brownian increments and space-time Levy area."""

@@ -44,11 +44,6 @@ class ForwardSDE(BaseSDE):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
 
-        self.f = sde.f
-        self.g = sde.g
-        if hasattr(sde, 'h'):
-            self.h = sde.h
-
         # Register the core function. This avoids polluting the codebase with if-statements.
         self.g_prod = {
             NOISE_TYPES.diagonal: self.g_prod_diagonal,
@@ -69,6 +64,15 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.general: self.gdg_jvp_column_sum_v2
         }[sde.noise_type]
         # TODO: Assign `gdg_jacobian_contraction`.
+
+    def f(self, t, y):
+        return self._base_sde.f(t, y)
+
+    def g(self, t, y):
+        return self._base_sde.g(t, y)
+
+    def h(self, t, y):
+        return self._base_sde.h(t, y)
 
     # g_prod functions.
     def g_prod_diagonal(self, t, y, v):

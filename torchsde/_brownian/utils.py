@@ -126,23 +126,24 @@ def brownian_bridge_augmented(ref: torch.Tensor,
         h2 = h - h1
         A = torch.tensor(
             [[h1, h1 ** 2 / 2],
-             [h1 ** 2 / 2, h1 ** 3 / 3]],
+             [h1 ** 2 / 2, h1 ** 3 / 3]], dtype=torch.float64
         )
         B = torch.tensor(
             [[h, h ** 2 / 2],
-             [h ** 2 / 2, h ** 3 / 3]]
+             [h ** 2 / 2, h ** 3 / 3]], dtype=torch.float64
         )
         C = torch.tensor(
             [[h1, h1 ** 2 / 2 + h1 * h2],
-             [h1 ** 2 / 2, h1 ** 3 / 3 + h1 ** 2 * h2 / 2]]
+             [h1 ** 2 / 2, h1 ** 3 / 3 + h1 ** 2 * h2 / 2]], dtype=torch.float64
         )
 
+        # TODO: Cholesky and inverse slows things down.
         mu_x = mu_y = torch.zeros(size=ref.shape + (2,), dtype=ref.dtype, device=ref.device)
         y = torch.stack((W_h, U_h), dim=-1)
-        mean = mu_x + (y - mu_y) @ (C @ torch.inverse(B).to(ref.device)).T
+        mean = mu_x + (y - mu_y) @ (C @ torch.inverse(B).to(ref)).T
 
         covariance = A - C @ torch.inverse(B) @ C.T
-        L = torch.cholesky(covariance).to(ref.device)
+        L = torch.cholesky(covariance).to(ref)
         sample = mean + randn_like(mean) @ L.T
 
         W_h1, U_h1 = sample[..., 0], sample[..., 1]

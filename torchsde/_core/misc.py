@@ -84,10 +84,6 @@ def seq_sub(xs, ys):
     return [x - y for x, y in zip(xs, ys)]
 
 
-def seq_div(xs, ys):
-    return [_stable_div(x, y) for x, y in zip(xs, ys)]
-
-
 def seq_sub_div(xs, ys, zs):
     return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
 
