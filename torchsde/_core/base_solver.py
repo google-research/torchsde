@@ -76,8 +76,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def step_logqp(self, t, y, dt, logqp0):
-        t1, y1 = self.step(t, y, dt)
+    def step_logqp(self, t, next_t, y, logqp0):
+        dt = next_t - t
+        y1 = self.step_(t, next_t, y)
 
         if self.sde.noise_type in ("diagonal", "scalar"):
             f_eval = self.sde.f(t, y)
@@ -100,7 +101,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
             ]
-        return t1, y1, logqp1
+        return y1, logqp1
+
+    # TODO: adjust solvers and remove this
+    def step_(self, t, next_t, y):
+        dt = next_t - t
+        _, next_y = self.step(t, y, dt)
+        return next_y
 
     # TODO: unify integrate and integrate_logqp? My IDE spits out so many warnings about duplicate code.
     def integrate(self, ts):
@@ -113,30 +120,27 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
-        curr_t = ts[0]
-        curr_y = y0
+
+        prev_t = curr_t = ts[0]
+        prev_y = curr_y = y0
+
         ys = [y0]
         prev_error_ratio = None
-        prev_t, prev_y = curr_t, curr_y
 
-        for next_t in ts[1:]:
-            while curr_t < next_t:
-                # TODO: I'm not completely convinced that this is sufficient to ensure that we always step inside the
-                #  region specified by `ts`. In floating point arithmetic, is it possible for (x - y) + y > x? (Where
-                #  here x = ts[-1] and y = curr_t.) It's definitely possible for (x - y) + y < x, consider the case of
-                #  x = 1 and y = 1e30.
-                step_size = min(step_size, ts[-1] - curr_t)
+        for out_t in ts[1:]:
+            while curr_t < out_t:
+                next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
                     # Take 1 full step.
-                    t1f, y1f = self.step(curr_t, curr_y, step_size)
+                    next_y_full = self.step_(curr_t, next_t, curr_y)
                     # Take 2 half steps.
-                    half_step_size = 0.5 * step_size
-                    t05, y05 = self.step(curr_t, curr_y, half_step_size)
-                    t1h, y1h = self.step(t05, y05, half_step_size)
+                    midpoint_t = 0.5 * (curr_t + next_t)
+                    midpoint_y = self.step_(curr_t, midpoint_t, curr_y)
+                    next_y = self.step_(midpoint_t, next_t, midpoint_y)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
-                        error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
+                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
                             prev_step_size=step_size,
@@ -151,18 +155,11 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     # Accept step.
                     if error_estimate <= 1 or step_size <= dt_min:
                         prev_t, prev_y = curr_t, curr_y
-                        curr_t, curr_y = t1h, y1h
-                    del t1f, y1f
+                        curr_t, curr_y = next_t, next_y
                 else:
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t, curr_y = self.step(curr_t, curr_y, step_size)
-            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
-                curr_t, curr_y = interp.linear_interp(
-                    t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t
-                )
-            else:
-                curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
-            ys.append(curr_y)
+                    curr_t, curr_y = next_t, self.step_(curr_t, next_t, curr_y)
+            ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
 
         ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
         return ans
@@ -178,29 +175,30 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
-        curr_t = ts[0]
-        curr_y = y0
-        ys = [y0]
-        logqp = [[] for _ in y0]
-        prev_error_ratio = None
-        prev_t, prev_y = curr_t, curr_y
 
-        for next_t in ts[1:]:
+        prev_t = curr_t = ts[0]
+        prev_y = curr_y = y0
+
+        ys = [y0]
+        prev_error_ratio = None
+        logqp = [[] for _ in y0]
+
+        for out_t in ts[1:]:
             curr_logqp = [0. for _ in y0]
             prev_logqp = curr_logqp
-            while curr_t < next_t:
-                step_size = min(step_size, ts[-1] - curr_t)
+            while curr_t < out_t:
+                next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
                     # Take 1 full step.
-                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
+                    next_y_full = self.step_(curr_t, next_t, curr_y)
                     # Take 2 half steps.
-                    half_step_size = 0.5 * step_size
-                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, half_step_size, logqp0=curr_logqp)
-                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, half_step_size, logqp0=logqp05)
+                    midpoint_t = 0.5 * (curr_t + next_t)
+                    midpoint_y, midpoint_logqp = self.step_logqp(curr_t, midpoint_t, curr_y, curr_logqp)
+                    next_y, next_logqp = self.step_logqp(midpoint_t, next_t, midpoint_y, midpoint_logqp)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
-                        error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
+                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
                             prev_step_size=step_size,
@@ -215,19 +213,15 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     # Accept step.
                     if error_estimate <= 1 or step_size <= dt_min:
                         prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
-                        curr_t, curr_y, curr_logqp = t1h, y1h, logqp1h
-                    del t1f, y1f, logqp1f
+                        curr_t, curr_y, curr_logqp = next_t, next_y, next_logqp
                 else:
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
-                    curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
-            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
-                curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
-                    t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
-                )
-            else:
-                curr_t, curr_y, curr_logqp = self.step_logqp(prev_t, prev_y, next_t - prev_t, logqp0=prev_logqp)
-            ys.append(curr_y)
-            [logqp_i.append(curr_logqp_i) for logqp_i, curr_logqp_i in zip(logqp, curr_logqp)]
+                    curr_y, curr_logqp = self.step_logqp(curr_t, next_t, curr_y, curr_logqp)
+                    curr_t = next_t
+            ret_y, ret_logqp = interp.linear_interp_logqp(t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t,
+                                                          y1=curr_y, logqp1=curr_logqp, t=out_t)
+            ys.append(ret_y)
+            [logqp_i.append(ret_logqp_i) for logqp_i, ret_logqp_i in zip(logqp, ret_logqp)]
 
         ans = [torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0))]
         logqp = [torch.stack(logqp_i, dim=0) for logqp_i in logqp]
