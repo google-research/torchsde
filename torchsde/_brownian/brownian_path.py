@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import functools
 import operator
-import bisect
-import math
+import warnings
 from typing import Optional, Tuple, Union
 
 import blist
@@ -77,22 +77,16 @@ class BrownianPath(base_brownian.BaseBrownian):
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time `t0` should be a float or 0-d torch.Tensor.')
-        t0 = float(t0)
-
         if dtype is None:
-            dtype = torch.get_default_dtype()
+            dtype = torch.get_default_dtype() if w0 is None else w0.dtype
         if device is None:
-            device = torch.device("cpu")
+            device = torch.device("cpu") if w0 is None else w0.device
 
         shapes = utils.get_tensors_info(w0, shape=True, default_shape=shape)
         dtypes = utils.get_tensors_info(w0, dtype=True, default_dtype=dtype)
         devices = utils.get_tensors_info(w0, device=True, default_device=device)
         if len(shapes) == 0:
             raise ValueError("Must either specify `shape` or pass in `w0` to implicitly define the shape.")
-        if len(dtypes) == 0:
-            raise ValueError("Must either specify `dtype` or pass in `w0` to implicitly define the dtype.")
-        if len(devices) == 0:
-            raise ValueError("Must either specify `device` or pass in `w0` to implicitly define the device.")
 
         # Make sure the reduce actually does a comparison, to get a bool datatype.
         shapes.append(shapes[-1])
@@ -101,37 +95,75 @@ class BrownianPath(base_brownian.BaseBrownian):
         if not functools.reduce(operator.eq, shapes):
             raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
         if not functools.reduce(operator.eq, dtypes):
-            raise ValueError("Multiple dtypes found. Make sure `shape` and `w0` are consistent.")
+            raise ValueError("Multiple dtypes found. Make sure `dtype` and `w0` are consistent.")
         if not functools.reduce(operator.eq, devices):
-            raise ValueError("Multiple devices found. Make sure `shape` and `w0` are consistent.")
-
-        if w0 is None:
-            w0 = torch.zeros(size=shape, device=device, dtype=dtype)
-
-        if levy_area_approximation not in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
-            raise ValueError(
-                "BrownianPath currently only supports 'none' and 'space-time' for Levy area approximation."
-            )
-        self.levy_area_approximation = levy_area_approximation
+            raise ValueError("Multiple devices found. Make sure `device` and `w0` are consistent.")
 
         # Provide references so that point-based queries still work.
+        t0 = float(t0)
+        w0 = torch.zeros(size=shape, device=device, dtype=dtype) if w0 is None else w0
         self._t0 = t0
         self._w0 = w0
-        self._ts = blist.blist([t0])
-        self._ws = blist.blist([torch.zeros_like(w0)])  # Record W increment.
-        self._us = blist.blist([torch.zeros_like(w0)])  # Record U increment.
+        self._ts = blist.blist([t0])  # noqa
+
+        # Record the increments W_{s,t} and U_{s,t}.
+        self._ws = blist.blist([torch.zeros_like(w0)])  # noqa
+        self._us = blist.blist([torch.zeros_like(w0)])  # noqa
 
         self._last_idx = 0
         self._window_size = window_size
 
-    def _update_internal_state(self, t: float) -> int:
+        # Avoid having if-statements in method body for speed.
+        if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
+            self._update_state = self._update_state_without_levy_area
+            self.insert = self._insert_without_levy_area
+        else:
+            self._update_state = self._update_state_with_levy_area
+            self.insert = self._insert_with_levy_area
+        self.levy_area_approximation = levy_area_approximation
+
+    def _update_state_without_levy_area(self, t: float) -> int:
+        """Update the recorded Brownian state.
+
+        Returns:
+            The index of the old state or newly inserted state.
+        """
+        idx = bisect.bisect_left(self._ts, t)
+        if idx < len(self._ts) and t == self._ts[idx]:
+            return idx
+
+        if idx <= 0:
+            h1 = self._ts[0] - t
+            W_h1 = utils.brownian_bridge_augmented(self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            self._ts.insert(idx, t)
+            self._ws.insert(idx, W_h1)
+        elif idx >= len(self._ts):
+            h1 = t - self._ts[-1]
+            W_h1 = utils.brownian_bridge_augmented(self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            self._ts.insert(idx, t)
+            self._ws.insert(idx, W_h1)
+        else:
+            h = self._ts[idx] - self._ts[idx - 1]
+            h1 = t - self._ts[idx - 1]
+
+            W_h = self._ws[idx]
+            W_h1 = utils.brownian_bridge_augmented(
+                self._w0, h1, h, W_h, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            W_h2 = W_h - W_h1
+
+            self._ws[idx] = W_h2
+            self._ts.insert(idx, t)
+            self._ws.insert(idx, W_h1)
+        return idx
+
+    def _update_state_with_levy_area(self, t: float) -> int:
         """Update the recorded Brownian state and space-time Levy area.
 
         Returns:
             The index of the old state or newly inserted state.
         """
         idx = bisect.bisect_left(self._ts, t)
-        if t == self._ts[idx]:
+        if idx < len(self._ts) and t == self._ts[idx]:
             return idx
 
         if idx <= 0:
@@ -157,104 +189,106 @@ class BrownianPath(base_brownian.BaseBrownian):
             W_h2 = W_h - W_h1
             U_h2 = U_h - U_h1 - h2 * W_h1
 
-            # Update right end.
             self._ws[idx] = W_h2
             self._us[idx] = U_h2
 
-            # Insert new.
+            self._ts.insert(idx, t)
             self._ws.insert(idx, W_h1)
             self._us.insert(idx, U_h1)
-
         return idx
 
-    def __call__(self, ta, tb=None, return_U=False, return_A=False):
-        if tb is None:
-            W = self.call(ta)
-        else:
-            W = self.call(tb) - self.call(ta)
-        U = None
-        A = None
+    def _aggregate_W(self, idx_a: int, idx_b: int) -> torch.Tensor:
+        """Aggregate Brownian increments."""
+        return sum(self._ws[idx_a + 1: idx_b + 1])
 
+    def _aggregate_W_U(self, idx_a: int, idx_b: int) -> Tuple[torch.Tensor, ...]:
+        """Aggregate Brownian increments and space-time Levy area."""
+        W, U = self._ws[idx_a + 1], self._us[idx_a + 1]
+        for i in range(idx_a + 2, idx_b + 1):
+            U = U + self._us[i] + (self._ts[i] - self._ts[i - 1]) * W
+            W = W + self._ws[i]
+        return W, U
+
+    def _aggregate_W_U_A(self, idx_a: int, idx_b: int) -> Tuple[torch.Tensor, ...]:
+        """Aggregate Brownian increments, space-time Levy area, and space-space Levy area."""
+        W, U = self._aggregate_W_U(idx_a, idx_b)
+        h = self._ts[idx_b] - self._ts[idx_a]
+        H = utils.U_to_H(W, U, h)
+        A = utils.davie_foster_approximation(W, H, h, self.levy_area_approximation)
+        return W, U, A
+
+    def _point_eval(self, t: float) -> torch.Tensor:
+        idx_a, idx_b = 0, self._update_state(t)
+        return self._aggregate_W(idx_a, idx_b) + self._w0
+
+    def _interval_eval(self, ta: float, tb: float, return_U=False, return_A=False) -> TensorOrTensors:
+        if ta > tb:
+            raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
+
+        idx_a = self._update_state(ta)
+        idx_b = self._update_state(tb)
         if return_U:
             if return_A:
-                return W, U, A
+                return self._aggregate_W_U_A(idx_a, idx_b)
             else:
-                return W, U
+                return self._aggregate_W_U(idx_a, idx_b)
         else:
             if return_A:
+                W, U, A = self._aggregate_W_U_A(idx_a, idx_b)
                 return W, A
             else:
-                return W
+                return self._aggregate_W(idx_a, idx_b)
 
-    def call(self, t):
-        t = float(t)
-        if t == self._ts[-1]:
-            idx = len(self._ts) - 1
-            w = self._ws[idx]
-            found = True
-        elif t == self._ts[0]:
-            idx = 0
-            w = self._ws[idx]
-            found = True
-        elif t > self._ts[-1]:
-            idx = len(self._ts)
-            t0 = self._ts[-1]
-            t1 = t
-            dw = torch.randn_like(self._ws[0]) * math.sqrt(t1 - t0)
-            w = self._ws[-1] + dw
-            found = False
-        elif t < self._ts[0]:
-            idx = 0
-            t0 = t
-            t1 = self._ts[0]
-            dw = torch.randn_like(self._ws[0]) * math.sqrt(t1 - t0)
-            w = self._ws[0] - dw
-            found = False
-        else:
-            # Try local neighborhood of last query.
-            left_idx = max(0, self._last_idx - self._window_size)
-            right_idx = min(len(self._ts), self._last_idx + self._window_size)
-            idx, w, found = utils.search(self._ts[left_idx:right_idx], self._ws[left_idx:right_idx], t)
-            if w is None:  # t not within range of local neighborhood.
-                # t must be within range of self._ts. This is ensured by the entering logic.
-                idx, w, found = utils.search(self._ts, self._ws, t)
-            else:  # Convert idx to be in full range.
-                idx = idx + left_idx
+    def __call__(self, ta, tb=None, return_U=False, return_A=False) -> TensorOrTensors:
+        ta = float(ta)
+        tb = float(tb) if tb is not None else tb
+        if ta < self._t0:
+            warnings.warn(f"Should have ta>=t0 but got ta={ta} and t0={self._t0}.")
+            ta = self._t0
 
-        if not found:
-            self._ts.insert(idx, t)
-            self._ws.insert(idx, w)
-        self._last_idx = idx
-        return w
+        if tb is None:
+            return self._point_eval(ta)
+        return self._interval_eval(ta, tb, return_U=return_U, return_A=return_A)
 
-    def insert(self, t, w):
-        """Insert time and Brownian motion state into lists.
+    def _insert_without_levy_area(self, t, w):
+        """Insert time and Brownian motion increment.
 
-        Silently replaces the original state if `t` is already in the list, and
+        Silently replaces the original states if `t` is already in the list, and
         returns the old state. Otherwise returns `None` if `t` is not inside.
 
         The method should only be used for testing purposes.
         """
         t = float(t)
-        if t > self._ts[-1]:
-            idx = len(self._ts)
-            old = None
-        elif t < self._ts[0]:
-            idx = 0
-            old = None
-        else:
-            idx = bisect.bisect_left(self._ts, t)
-            if t == self._ts[idx]:
-                old = self._ws[idx]
-                self._ts.pop(idx)
-                self._ws.pop(idx)
-            else:
-                old = None
+        idx = bisect.bisect_left(self._ts, t)
+        if idx < len(self._ts) and t == self._ts[idx]:
+            W = self._ws.pop(idx)
+            self._ws.insert(idx, w)
+            return W
 
         self._ts.insert(idx, t)
         self._ws.insert(idx, w)
-        self._last_idx = idx
-        return old
+        return None
+
+    def _insert_with_levy_area(self, t, w, u):
+        """Insert time, Brownian increment, and space-time Levy area increment.
+
+        Silently replaces the original states if `t` is already in the list, and
+        returns the old state. Otherwise returns `None` if `t` is not inside.
+
+        The method should only be used for testing purposes.
+        """
+        t = float(t)
+        idx = bisect.bisect_left(self._ts, t)
+        if idx < len(self._ts) and t == self._ts[idx]:
+            W, U = self._ws.pop(idx), self._us.pop(idx)
+            self._ws.insert(idx, w)
+            self._us.insert(idx, u)
+            return W, U
+
+        self._ts.insert(idx, t)
+        self._ws.insert(idx, w)
+        self._us.insert(idx, u)
+        return None, None
 
     def __repr__(self):
         return f"{self.__class__.__name__}(t0={self._ts[0]:.3f}, t1={self._ts[-1]:.3f})"

@@ -100,13 +100,12 @@ def brownian_bridge_centered(h1: float, h: float, W_h: torch.Tensor, seed: Optio
     return mean + std * randn_like(ref=mean, seed=seed)
 
 
-def brownian_bridge_augmented(
-        ref: torch.Tensor,
-        h1: float,
-        h: Optional[float] = None,
-        W_h: Optional[torch.Tensor] = None,
-        U_h: Optional[torch.Tensor] = None,
-        levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.space_time) -> TensorOrTensors:
+def brownian_bridge_augmented(ref: torch.Tensor,
+                              h1: float,
+                              h: Optional[float] = None,
+                              W_h: Optional[torch.Tensor] = None,
+                              U_h: Optional[torch.Tensor] = None,
+                              levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.space_time) -> TensorOrTensors:
     # Unconditional sampling.
     if h is None:
         # Slight code repetition for readability.
@@ -166,7 +165,7 @@ def space_time_levy_area(W, h, levy_area_approximation, get_noise):
         return None
 
 
-def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
+def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise=None):
     if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
         return None
     elif W.shape == ():
@@ -179,12 +178,20 @@ def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
             tenth_h = 0.1 * h
             H_squared = H ** 2
             var = tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))
-            noise = get_noise()
+            noise = torch.randn_like(A) if get_noise is None else get_noise()
             noise = noise - noise.transpose(-1, -2)
             # noise is skew symmetric of variance 2
             a_tilde = math.sqrt(var) * noise
             A += a_tilde
         return A
+
+
+def U_to_H(W: torch.Tensor, U: torch.Tensor, h: float) -> torch.Tensor:
+    return U / h - .5 * W
+
+
+def H_to_U(W: torch.Tensor, H: torch.Tensor, h: float) -> torch.Tensor:
+    return h * (.5 * W + H)
 
 
 def get_tensors_info(*args,

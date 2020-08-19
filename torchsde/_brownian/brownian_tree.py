@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import copy
 import math
 from typing import Optional
 
 import blist
-import bisect
 import torch
 from numpy.random import SeedSequence
 
@@ -171,7 +171,7 @@ class BrownianTree(base_brownian.BaseBrownian):
             return utils.search_and_insert(ts=self._ts_post, ws=self._ws_post, t=t)
 
         i = bisect.bisect_left(self._ts, t)
-        if self._ts[i] == t:  # `t` in cache.
+        if i < len(self._ts) and t == self._ts[i]:  # `t` in cache.
             return self._ws[i]
 
         parent = copy.copy(self._seeds[i - 1])  # Spawn modifies the seed.
