@@ -12,23 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
+
 import math
 
 import torch
 
-from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS as opt
+from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS
 
 from .. import base_solver
 
 
-class BaseMilstein(base_solver.BaseSDESolver):
+class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     strong_order = 1.0
     weak_order = 1.0
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
+    def __init__(self, options, **kwargs):
+        if METHOD_OPTIONS.grad_free not in options:
+            options[METHOD_OPTIONS.grad_free] = False
+        super(BaseMilstein, self).__init__(options=options, **kwargs)
+
+    @abc.abstractmethod
     def v_term(self, I_k, dt):
-        pass
+        raise NotImplementedError
 
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
@@ -42,7 +50,7 @@ class BaseMilstein(base_solver.BaseSDESolver):
         g_eval = self.sde.g(t0, y0)
         g_prod_eval = self.sde.prod(g_eval, I_k)
 
-        if opt.grad_free in self.options and self.options[opt.grad_free]:
+        if self.options[METHOD_OPTIONS.grad_free]:
             g_prod_eval_v = self.sde.prod(g_eval, v)
             sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
             y0_prime = [
@@ -68,11 +76,11 @@ class MilsteinIto(BaseMilstein):
     sde_type = SDE_TYPES.ito
     
     def v_term(self, I_k, dt):
-        return [delta_bm_ ** 2. - dt for delta_bm_ in I_k]
+        return [delta_bm_ ** 2 - dt for delta_bm_ in I_k]
 
 
 class MilsteinStratonovich(BaseMilstein):
     sde_type = SDE_TYPES.stratonovich
 
     def v_term(self, I_k, dt):
-        return [delta_bm_ ** 2. for delta_bm_ in I_k]
+        return [delta_bm_ ** 2 for delta_bm_ in I_k]
