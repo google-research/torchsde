@@ -16,12 +16,12 @@
 import torch
 from torch import nn
 
-from torchsde import SDEIto
+from torchsde import BaseSDE
 
 
-class Ex1(SDEIto):
-    def __init__(self, d=10):
-        super(Ex1, self).__init__(noise_type="diagonal")
+class Ex1(BaseSDE):
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex1, self).__init__(noise_type="diagonal", sde_type=sde_type)
         self._nfe = 0
         # Use non-exploding initialization.
         sigma = torch.sigmoid(torch.randn(d))
@@ -59,9 +59,9 @@ class Ex1(SDEIto):
         return self._nfe
 
 
-class Ex2(SDEIto):
-    def __init__(self, d=10):
-        super(Ex2, self).__init__(noise_type="diagonal")
+class Ex2(BaseSDE):
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex2, self).__init__(noise_type="diagonal", sde_type=sde_type)
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
@@ -69,6 +69,11 @@ class Ex2(SDEIto):
         del t
         self._nfe += 1
         return -self.p ** 2. * torch.sin(y) * torch.cos(y) ** 3.
+
+    def f_corr(self, t, y):
+        del t
+        self._nfe += 1
+        return torch.zeros_like(y)
 
     def g(self, t, y):
         del t
@@ -95,9 +100,9 @@ class Ex2(SDEIto):
         return self._nfe
 
 
-class Ex3(SDEIto):
-    def __init__(self, d=10):
-        super(Ex3, self).__init__(noise_type="diagonal")
+class Ex3(BaseSDE):
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex3, self).__init__(noise_type="diagonal", sde_type=sde_type)
         self._nfe = 0
         self.a = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
         self.b = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)

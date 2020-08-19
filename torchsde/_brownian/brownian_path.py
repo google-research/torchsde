@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import bisect
-import functools
-import operator
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -61,7 +59,7 @@ class BrownianPath(base_brownian.BaseBrownian):
                 any/all preceding dimensions are treated as batch dimensions.
             dtype (torch.dtype): The dtype of each Brownian sample.
                 Defaults to the PyTorch default.
-            device (str or torch.device): The device of each Brownian sample.
+            device (torch.device): The device of each Brownian sample.
                 Defaults to the current device.
             window_size (int): Size of the window around last query for local
                 search.
@@ -71,6 +69,8 @@ class BrownianPath(base_brownian.BaseBrownian):
                 approximation type. This is needed for some higher-order SDE
                 solvers.
         """
+        # TODO: Couple of things to optimize: 1) search based on local window,
+        #  2) avoid the `return_U` and `return_A` arguments.
         handle_unused_kwargs(self, unused_kwargs)
         del unused_kwargs
 
@@ -92,11 +92,12 @@ class BrownianPath(base_brownian.BaseBrownian):
         shapes.append(shapes[-1])
         dtypes.append(dtypes[-1])
         devices.append(devices[-1])
-        if not functools.reduce(operator.eq, shapes):
+
+        if not all(i == shapes[0] for i in shapes):
             raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
-        if not functools.reduce(operator.eq, dtypes):
+        if not all(i == dtypes[0] for i in dtypes):
             raise ValueError("Multiple dtypes found. Make sure `dtype` and `w0` are consistent.")
-        if not functools.reduce(operator.eq, devices):
+        if not all(i == devices[0] for i in devices):
             raise ValueError("Multiple devices found. Make sure `device` and `w0` are consistent.")
 
         # Provide references so that point-based queries still work.

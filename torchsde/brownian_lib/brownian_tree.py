@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import random
+import warnings
 from typing import Optional
 
 import torch
@@ -128,6 +129,12 @@ class BrownianTree(base_brownian.BaseBrownian):
                 return W
 
     def call(self, t):
+        if t < self._t0:
+            warnings.warn(f"Should have t>=t0 but got t={t} and t0={self._t0}.")
+            t = self._t0
+        if t > self._t1:
+            warnings.warn(f"Should have t<=t1 but got t={t} and t1={self._t1}.")
+            t = self._t1
         return self._bm(t)
 
     def __repr__(self):

@@ -17,8 +17,8 @@ import abc
 import torch
 from torch import nn
 
-from ..settings import NOISE_TYPES, SDE_TYPES
 from . import misc
+from ..settings import NOISE_TYPES, SDE_TYPES
 
 
 class BaseSDE(abc.ABC, nn.Module):
@@ -44,7 +44,12 @@ class ForwardSDE(BaseSDE):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
 
-        # Register the core function. This avoids polluting the codebase with if-statements and speeds things up.
+        self.f = sde.f
+        self.g = sde.g
+        if hasattr(sde, 'h'):
+            self.h = sde.h
+
+        # Register the core function. This avoids polluting the codebase with if-statements.
         self.g_prod = {
             NOISE_TYPES.diagonal: self.g_prod_diagonal,
             NOISE_TYPES.additive: self.g_prod_additive_or_general,
@@ -56,7 +61,7 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._skip,
             NOISE_TYPES.scalar: self.gdg_prod_diagonal_or_scalar,
             NOISE_TYPES.general: self.gdg_prod_general
-        }[self.noise_type]
+        }[sde.noise_type]
         self.gdg_jvp_column_sum = {
             NOISE_TYPES.diagonal: self._skip,
             NOISE_TYPES.additive: self._skip,
@@ -64,15 +69,6 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.general: self.gdg_jvp_column_sum_v2
         }[sde.noise_type]
         # TODO: Assign `gdg_jacobian_contraction`.
-
-    def f(self, t, y):
-        return self._base_sde.f(t, y)
-
-    def g(self, t, y):
-        return self._base_sde.g(t, y)
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y)
 
     # g_prod functions.
     def g_prod_diagonal(self, t, y, v):

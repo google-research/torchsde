@@ -15,6 +15,7 @@
 import bisect
 import copy
 import math
+import warnings
 from typing import Optional
 
 import blist
@@ -165,10 +166,12 @@ class BrownianTree(base_brownian.BaseBrownian):
 
     def call(self, t):
         t = float(t)
-        if t <= self._t0:
-            return utils.search_and_insert(ts=self._ts_prev, ws=self._ws_prev, t=t)
-        if t >= self._t1:
-            return utils.search_and_insert(ts=self._ts_post, ws=self._ws_post, t=t)
+        if t < self._t0:
+            warnings.warn(f"Should have t>=t0 but got t={t} and t0={self._t0}.")
+            t = self._t0
+        if t > self._t1:
+            warnings.warn(f"Should have t<=t1 but got t={t} and t1={self._t1}.")
+            t = self._t1
 
         i = bisect.bisect_left(self._ts, t)
         if i < len(self._ts) and t == self._ts[i]:  # `t` in cache.

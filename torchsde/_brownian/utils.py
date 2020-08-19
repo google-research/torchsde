@@ -23,6 +23,7 @@ from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import TensorOrTensors
 
 _rsqrt3 = 1 / math.sqrt(3)
+_r12 = 1 / 12
 
 
 def search(ts: blist.blist, ws: blist.blist, t):
@@ -168,21 +169,24 @@ def space_time_levy_area(W, h, levy_area_approximation, get_noise):
 def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise=None):
     if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
         return None
-    elif W.shape == ():
+    elif W.ndimension() in (0, 1):
+        # If we have zero or one dimensions then treat the scalar / single dimension we have as batch, so that the
+        # Brownian motion is one dimensional and the Levy area is zero.
         return torch.zeros_like(W)
     else:
         # Davie's approximation to the Levy area from space-time Levy area
         A = H.unsqueeze(-1) * W.unsqueeze(-2) - W.unsqueeze(-1) * H.unsqueeze(-2)
+        noise = torch.randn_like(A) if get_noise is None else get_noise()
+        noise = noise - noise.transpose(-1, -2)  # noise is skew symmetric of variance 2
         if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.foster:
             # Foster's additional correction to Davie's approximation
             tenth_h = 0.1 * h
             H_squared = H ** 2
-            var = tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))
-            noise = torch.randn_like(A) if get_noise is None else get_noise()
-            noise = noise - noise.transpose(-1, -2)
-            # noise is skew symmetric of variance 2
-            a_tilde = math.sqrt(var) * noise
-            A += a_tilde
+            std = (tenth_h * (tenth_h + H_squared.unsqueeze(-1) + H_squared.unsqueeze(-2))).sqrt()
+        else:  # davie approximation
+            std = math.sqrt(_r12 * h ** 2)
+        a_tilde = std * noise
+        A += a_tilde
         return A
 
 

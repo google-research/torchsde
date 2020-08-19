@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test the two `BrownianTree`.
+"""Test `BrownianTree`.
 
 The suite tests both running on CPU and CUDA (if available).
 """
@@ -43,8 +43,8 @@ devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
 
 def _setup(brownian_class, device, batch_size):
-    t0, t1 = torch.tensor([0., 1.]).to(device)
-    w0 = torch.zeros(batch_size, D).to(device)
+    t0, t1 = torch.tensor([0., 1.], device=device)
+    w0 = torch.zeros(batch_size, D, device=device)
     t = torch.rand([]).to(device)
     bm = brownian_class(t0=t0, t1=t1, w0=w0, entropy=0)
     return t, bm
@@ -67,7 +67,8 @@ def test_basic(brownian_class, device):
     assert sample.size() == (SMALL_BATCH_SIZE, D)
 
 
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
+@pytest.mark.parametrize("brownian_class", brownian_classes)
+@pytest.mark.parametrize("device", devices)
 def test_determinism(brownian_class, device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
@@ -78,18 +79,19 @@ def test_determinism(brownian_class, device):
         assert torch.allclose(val, vals[0])
 
 
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
+@pytest.mark.parametrize("brownian_class", brownian_classes)
+@pytest.mark.parametrize("device", devices)
 def test_normality(brownian_class, device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0_, t1_ = 0.0, 1.0
-    t0, t1 = torch.tensor([t0_, t1_]).to(device)
+    t0, t1 = torch.tensor([t0_, t1_], device=device)
     eps = 1e-5
     for _ in range(REPS):
         w0_, w1_ = 0.0, npr.randn()
-        w0 = torch.tensor(w0_).repeat(LARGE_BATCH_SIZE).to(device)
-        w1 = torch.tensor(w1_).repeat(LARGE_BATCH_SIZE).to(device)
+        w0 = torch.tensor(w0_, device=device).repeat(LARGE_BATCH_SIZE)
+        w1 = torch.tensor(w1_, device=device).repeat(LARGE_BATCH_SIZE)
         bm = brownian_class(t0=t0, t1=t1, w0=w0, w1=w1, pool_size=100, tol=1e-14)  # noqa
 
         for _ in range(REPS):

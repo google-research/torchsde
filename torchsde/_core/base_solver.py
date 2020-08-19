@@ -121,13 +121,18 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
         for next_t in ts[1:]:
             while curr_t < next_t:
+                # TODO: I'm not completely convinced that this is sufficient to ensure that we always step inside the
+                #  region specified by `ts`. In floating point arithmetic, is it possible for (x - y) + y > x? (Where
+                #  here x = ts[-1] and y = curr_t.) It's definitely possible for (x - y) + y < x, consider the case of
+                #  x = 1 and y = 1e30.
+                step_size = min(step_size, ts[-1] - curr_t)
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f = self.step(curr_t, curr_y, delta_t)
+                    t1f, y1f = self.step(curr_t, curr_y, step_size)
                     # Take 2 half steps.
-                    t05, y05 = self.step(curr_t, curr_y, delta_t / 2)
-                    t1h, y1h = self.step(t05, y05, delta_t / 2)
+                    half_step_size = 0.5 * step_size
+                    t05, y05 = self.step(curr_t, curr_y, half_step_size)
+                    t1h, y1h = self.step(t05, y05, half_step_size)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -149,9 +154,8 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                         curr_t, curr_y = t1h, y1h
                     del t1f, y1f
                 else:
-                    delta_t = step_size
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t, curr_y = self.step(curr_t, curr_y, delta_t)
+                    curr_t, curr_y = self.step(curr_t, curr_y, step_size)
             if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
                 curr_t, curr_y = interp.linear_interp(
                     t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t
@@ -185,13 +189,14 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             curr_logqp = [0. for _ in y0]
             prev_logqp = curr_logqp
             while curr_t < next_t:
+                step_size = min(step_size, ts[-1] - curr_t)
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
+                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
                     # Take 2 half steps.
-                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, delta_t / 2, logqp0=curr_logqp)
-                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, delta_t / 2, logqp0=logqp05)
+                    half_step_size = 0.5 * step_size
+                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, half_step_size, logqp0=curr_logqp)
+                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, half_step_size, logqp0=logqp05)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -213,9 +218,8 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                         curr_t, curr_y, curr_logqp = t1h, y1h, logqp1h
                     del t1f, y1f, logqp1f
                 else:
-                    delta_t = step_size
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
-                    curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
+                    curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
             if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
                 curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
                     t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
