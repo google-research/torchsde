@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+THRESHOLD = 1e-5  # Voodoo constant chosen based on results comparing adjoint gradient and analytical gradient.
+
 import abc
 import warnings
 
@@ -151,7 +153,16 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     prev_t, prev_y = curr_t, curr_y
                     curr_t, curr_y = self.step(curr_t, curr_y, step_size)
 
-            curr_t, curr_y = interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t)
+            # Sample paths of SDEs typically aren't differentiable, so it doesn't really make sense to interpolate
+            # using high-order polynomials. We try to avoid interpolation for as much as possible, but we also want to
+            # avoid stepping with super small step sizes (e.g. < 1e-9), in which case the solvers and Brownian motion
+            # data structures may produce pathological behavior.
+
+            # `curr_t` may overstep `next_t`. If `next_t` is close to either end, we interpolate.
+            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
+                curr_t, curr_y = interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t)
+            else:
+                curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
             ys.append(curr_y)
 
         ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
@@ -210,9 +221,12 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
                     curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
 
-            curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
-                t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
-            )
+            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
+                curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
+                    t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
+                )
+            else:
+                curr_t, curr_y, curr_logqp = self.step_logqp(prev_t, prev_y, next_t - prev_t, logqp0=prev_logqp)
             ys.append(curr_y)
             [logqp_i.append(curr_logqp_i) for logqp_i, curr_logqp_i in zip(logqp, curr_logqp)]
 

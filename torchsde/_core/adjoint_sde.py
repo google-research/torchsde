@@ -22,7 +22,7 @@ from ..settings import SDE_TYPES, NOISE_TYPES
 
 class AdjointSDE(base_sde.BaseSDE):
 
-    def __init__(self, forward_sde, params, logqp=False):
+    def __init__(self, forward_sde, params, n_tensors, logqp=False):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
@@ -45,35 +45,53 @@ class AdjointSDE(base_sde.BaseSDE):
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
         self._base_sde = forward_sde
         self._params = params
+        self._n_tensors = n_tensors
 
         # Register the core function. This avoids polluting the codebase with if-statements and speeds things up.
+        # The `sde_type` and `noise_type` of the forward SDE determines the registered functions.
         if logqp:
             self.f = {
                 SDE_TYPES.ito: {
                     NOISE_TYPES.diagonal: self.f_corrected_diagonal_logqp,
-                }.get(noise_type, self.f_corrected_default_logqp),
+                    NOISE_TYPES.additive: self.f_uncorrected_logqp,
+                    NOISE_TYPES.scalar: self.f_corrected_default_logqp,
+                    NOISE_TYPES.general: self.f_corrected_default_logqp
+                }[forward_sde.noise_type],
                 SDE_TYPES.stratonovich: self.f_uncorrected_logqp
-            }[sde_type]
+            }[forward_sde.sde_type]
+
+            self.g_prod = {
+                NOISE_TYPES.diagonal: self.g_prod_diagonal_logqp
+            }.get(forward_sde.noise_type, self.g_prod_default_logqp)
+
+            self.gdg_prod = {
+                NOISE_TYPES.diagonal: self.gdg_prod_diagonal_logqp,
+            }.get(forward_sde.noise_type, self.gdg_prod_default_logqp)
         else:
             self.f = {
                 SDE_TYPES.ito: {
                     NOISE_TYPES.diagonal: self.f_corrected_diagonal,
-                }.get(noise_type, self.f_corrected_default),
+                    NOISE_TYPES.additive: self.f_uncorrected,
+                    NOISE_TYPES.scalar: self.f_corrected_default,
+                    NOISE_TYPES.general: self.f_corrected_default
+                }[forward_sde.noise_type],
                 SDE_TYPES.stratonovich: self.f_uncorrected
-            }[sde_type]
+            }[forward_sde.sde_type]
 
-        self.g_prod = {
-            NOISE_TYPES.diagonal: self.g_prod_diagonal
-        }.get(noise_type, self.g_prod_default)
+            self.g_prod = {
+                NOISE_TYPES.diagonal: self.g_prod_diagonal
+            }.get(forward_sde.noise_type, self.g_prod_default)
 
-        self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-            NOISE_TYPES.additive: self._skip
-        }.get(noise_type, self.gdg_prod_default)
+            self.gdg_prod = {
+                NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+            }.get(forward_sde.noise_type, self.gdg_prod_default)
 
-    # f functions.
+    ########################################
+    #                  f                   #
+    ########################################
+
     def f_uncorrected(self, t, y_aug):  # For Stratonovich.
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 2
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
@@ -92,11 +110,10 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*minus_f, *vjp_y, vjp_params)
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
-        # TODO: This requires 2 corrections: One in the forward, and the other in backward.
         raise NotImplementedError
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 2
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
@@ -147,9 +164,12 @@ class AdjointSDE(base_sde.BaseSDE):
 
         return (*f_eval_corrected, *vjp_y, vjp_params)
 
-    # g_prod functions.
+    ########################################
+    #                g_prod                #
+    ########################################
+
     def g_prod_default(self, t, y_aug, v):  # For Ito/Stratonovich general/additive/scalar.
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 2
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
@@ -170,7 +190,7 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*minus_g_prod, *vjp_y, vjp_params)
 
     def g_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 2
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
@@ -190,9 +210,12 @@ class AdjointSDE(base_sde.BaseSDE):
 
         return (*g_prod_eval, *vjp_y, vjp_params)
 
-    # gdg_prod functions.
+    ########################################
+    #               gdg_prod               #
+    ########################################
+
     def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 2
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
         with torch.enable_grad():
@@ -249,11 +272,14 @@ class AdjointSDE(base_sde.BaseSDE):
         )
 
     def gdg_prod_default(self, t, y, v):  # For Ito/Stratonovich general/additive/scalar.
-        # TODO: Write this!
         raise NotImplementedError
 
+    ########################################
+    #               f_logqp                #
+    ########################################
+
     def f_uncorrected_logqp(self, t, y_aug):
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 3
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
         vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
 
@@ -296,11 +322,10 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*f_eval, *vjp_y, *vjp_l, vjp_params)
 
     def f_corrected_default_logqp(self, t, y_aug):
-        # TODO: This requires 2 corrections: One in the forward, and the other in backward.
         raise NotImplementedError
 
     def f_corrected_diagonal_logqp(self, t, y_aug):
-        sde, params, n_tensors = self._base_sde, self._params, len(y_aug) // 3
+        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
         vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
 
@@ -320,7 +345,8 @@ class AdjointSDE(base_sde.BaseSDE):
             f_eval = sde.f(-t, y)
             f_eval_corrected = misc.seq_sub(gdg, f_eval)
             vjp_y_and_params = misc.grad(
-                outputs=f_eval_corrected, inputs=y + params,
+                outputs=f_eval_corrected,
+                inputs=y + params,
                 grad_outputs=[-adj_y_ for adj_y_ in adj_y],
                 allow_unused=True,
                 create_graph=True
@@ -329,13 +355,15 @@ class AdjointSDE(base_sde.BaseSDE):
             vjp_params = misc.flatten(vjp_params)
 
             adj_times_dgdx = misc.grad(
-                outputs=g_eval, inputs=y,
+                outputs=g_eval,
+                inputs=y,
                 grad_outputs=adj_y,
                 allow_unused=True,
                 create_graph=True
             )
             extra_vjp_y_and_params = misc.grad(
-                outputs=g_eval, inputs=y + params,
+                outputs=g_eval,
+                inputs=y + params,
                 grad_outputs=adj_times_dgdx,
                 allow_unused=True,
                 create_graph=True,
@@ -348,7 +376,8 @@ class AdjointSDE(base_sde.BaseSDE):
             u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
             log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
             corr_vjp_y_and_params = misc.grad(
-                outputs=log_ratio_correction, inputs=y + params,
+                outputs=log_ratio_correction,
+                inputs=y + params,
                 grad_outputs=adj_l,
                 allow_unused=True,
             )
@@ -360,6 +389,37 @@ class AdjointSDE(base_sde.BaseSDE):
 
         return (*f_eval_corrected, *vjp_y, *vjp_l, vjp_params)
 
-    def _skip(self, *args):  # noqa
-        _, y = args[:2]
-        return [0.] * len(y)
+    ########################################
+    #             g_prod_logqp             #
+    ########################################
+
+    def g_prod_default_logqp(self, t, y_aug, v):
+        n_tensors = self._n_tensors
+        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
+        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
+        results = self.g_prod_default(t, y_aug, v)
+        g_prod_eval, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
+        return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
+
+    def g_prod_diagonal_logqp(self, t, y_aug, v):
+        n_tensors = self._n_tensors
+        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
+        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
+        results = self.g_prod_diagonal(t, y_aug, v)
+        g_prod_eval, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
+        return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
+
+    ########################################
+    #             gdg_prod_logqp           #
+    ########################################
+
+    def gdg_prod_diagonal_logqp(self, t, y_aug, v):
+        n_tensors = self._n_tensors
+        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
+        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
+        results = self.gdg_prod_diagonal(t, y_aug, v)
+        gdg_v, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
+        return (*gdg_v, *vjp_y, *vjp_l, vjp_params)
+
+    def gdg_prod_default_logqp(self, t, y_aug, v):
+        raise NotImplementedError

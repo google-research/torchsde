@@ -80,7 +80,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = AdjointSDE(forward_sde=sde, params=params)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, n_tensors=n_tensors)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -171,7 +171,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, logqp=True)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, n_tensors=n_tensors, logqp=True)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]

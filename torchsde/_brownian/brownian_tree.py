@@ -106,8 +106,8 @@ class BrownianTree(base_brownian.BaseBrownian):
 
         t0, t1 = float(t0), float(t1)
 
-        parent = SeedSequence(entropy=entropy, pool_size=pool_size)
-        w1_seed, w00_seed, w11_seed, parent = parent.spawn(4)
+        generator, parent = SeedSequence(entropy=entropy, pool_size=pool_size).spawn(2)
+        w1_seed, w00_seed, w11_seed = generator.generate_state(3)
 
         if w1 is None:
             w1 = w0 + utils.randn_like(ref=w0, seed=w1_seed) * math.sqrt(t1 - t0)
@@ -130,12 +130,14 @@ class BrownianTree(base_brownian.BaseBrownian):
         self._ts_prev = blist.blist()
         self._ws_prev = blist.blist()
         self._ts_prev.extend([t00, t0])
-        self._ws_prev.extend([w0 + utils.randn_like(ref=w0, seed=w00_seed) * math.sqrt(t0 - t00), w0])
+        w00 = w0 + utils.randn_like(ref=w0, seed=w00_seed) * math.sqrt(t0 - t00)
+        self._ws_prev.extend([w00, w0])
 
         self._ts_post = blist.blist()
         self._ws_post = blist.blist()
         self._ts_post.extend([t1, t11])
-        self._ws_post.extend([w1, w1 + utils.randn_like(ref=w0, seed=w11_seed) * math.sqrt(t11 - t1)])
+        w11 = w1 + utils.randn_like(ref=w0, seed=w11_seed) * math.sqrt(t11 - t1)
+        self._ws_post.extend([w1, w11])
 
         # Cache.
         ts, ws, seeds = _create_cache(t0=t0, t1=t1, w0=w0, w1=w1, parent=parent, k=cache_depth)
@@ -224,6 +226,8 @@ class BrownianTree(base_brownian.BaseBrownian):
 
 def _binary_search(t0, t1, w0, w1, t, parent, tol):
     seed_v, seed_l, seed_r = parent.spawn(3)
+    seed_v, = seed_v.generate_state(1)
+
     t_mid = (t0 + t1) / 2
     w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seed_v)
     depth = 0
@@ -239,6 +243,8 @@ def _binary_search(t0, t1, w0, w1, t, parent, tol):
             parent = seed_r
 
         seed_v, seed_l, seed_r = parent.spawn(3)
+        seed_v, = seed_v.generate_state(1)
+
         t_mid = (t0 + t1) / 2
         w_mid = utils.brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t_mid, seed=seed_v)
         depth += 1
@@ -258,6 +264,7 @@ def _create_cache(t0, t1, w0, w1, parent, k):
         new_seeds = []
         for i, parent in enumerate(seeds):
             seed_v, seed_l, seed_r = parent.spawn(3)
+            seed_v, = seed_v.generate_state(1)
             new_seeds.extend([seed_l, seed_r])
 
             t0, t1 = ts[i], ts[i + 1]
