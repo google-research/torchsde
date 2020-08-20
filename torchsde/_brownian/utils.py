@@ -25,6 +25,15 @@ _rsqrt3 = 1 / math.sqrt(3)
 _r12 = 1 / 12
 
 
+class BrownianReturn:
+    __slots__ = ('W', 'U', 'A')
+    
+    def __init__(self, W, U, A):
+        self.W = W
+        self.U = U
+        self.A = A
+
+
 def randn_like(ref: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
     if seed is None:
         return torch.randn_like(ref)
