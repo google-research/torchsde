@@ -86,7 +86,7 @@ def test_normality(brownian_class, device):
         w1 = torch.tensor(w1_, device=device).repeat(BATCH_SIZE)
 
         bm = brownian_class(t0=t0, w0=w0)  # noqa
-        bm.insert(t=t1, w=w1)
+        bm._insert(t=t1, w=w1)
 
         t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)  # Avoid sampling too close to the boundary.
         samples = bm(t_)
@@ -101,20 +101,19 @@ def test_normality(brownian_class, device):
         assert pval >= ALPHA
 
 
+# TODO: Make `insert` of `torchsde.brownian_lib.BrownianPath` have the same behavior.
+@pytest.mark.parametrize("brownian_class", [torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
-@pytest.mark.parametrize("random_order", [False, True])
-def test_continuity(device, random_order):
+def test_insert(brownian_class, device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ts = torch.linspace(0., 1., 10000, device=device)
-    bm = torchsde.BrownianPath(t0=ts[0], t1=ts[-1], w0=torch.randn((), dtype=ts.dtype, device=device))
-    vals = torch.empty_like(ts)
-    t_indices = torch.randperm(len(ts), device=device) if random_order else torch.arange(len(ts), device=device)
-    for t_index in t_indices:
-        t = ts[t_index]
-        vals[t_index] = bm(t)
-    last_val = vals[0]
-    for val in vals[1:]:
-        assert (val - last_val).abs().max() < 5e-2
-        last_val = val
+    t, bm = _setup(brownian_class, device)
+    w = torch.randn(BATCH_SIZE, D)
+    ret = bm._insert(t, w)
+    assert len(bm) == 2
+    assert ret is None
+
+    ret = bm._insert(t, w)
+    assert len(bm) == 2
+    assert ret.eq(w).all()

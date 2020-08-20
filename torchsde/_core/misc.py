@@ -14,7 +14,6 @@
 
 import functools
 import operator
-import types
 import warnings
 
 import torch
@@ -30,32 +29,16 @@ def flatten(sequence):
     return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
 
 
-def flatten_convert_none_to_zeros(sequence, like_sequence):
-    flat = [
-        p.reshape(-1) if p is not None else torch.zeros_like(q).reshape(-1)
-        for p, q in zip(sequence, like_sequence)
-    ]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
-
-
 def convert_none_to_zeros(sequence, like_sequence):
     return [torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)]
 
 
 def make_seq_requires_grad(sequence):
-    """Replace tensors in sequence that doesn't require gradients with tensors that requires gradients.
-
-    Args:
-        sequence: an Iterable of tensors.
-
-    Returns:
-        A list of tensors that all require gradients.
-    """
     return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
 
 
-def is_increasing(t):
-    return torch.all(torch.gt(t[1:], t[:-1]))
+def is_strictly_increasing(ts):
+    return all(x < y for x, y in zip(ts[:-1], ts[1:]))
 
 
 def is_nan(t):
@@ -92,10 +75,6 @@ def seq_sub(xs, ys):
     return [x - y for x, y in zip(xs, ys)]
 
 
-def seq_div(xs, ys):
-    return [_stable_div(x, y) for x, y in zip(xs, ys)]
-
-
 def seq_sub_div(xs, ys, zs):
     return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
 
@@ -113,62 +92,29 @@ def seq_batch_mvp(ms, vs):
     return [batch_mvp(m, v) for m, v in zip(ms, vs)]
 
 
-def is_seq_not_nested(x):
-    if not _is_tuple_or_list(x):
-        return False
-    for xi in x:
-        if _is_tuple_or_list(xi):
-            return False
-    return True
-
-
-def _is_tuple_or_list(x):
-    return isinstance(x, tuple) or isinstance(x, list)
-
-
-def join(*iterables):
-    """Return a generator which is an aggregate of all input generators.
-
-    Useful for combining parameters of different `nn.Module` objects.
-    """
-    for iterable in iterables:
-        assert isinstance(iterable, types.GeneratorType)
-        yield from iterable
-
-
 def batch_mvp(m, v):
-    """Batched matrix vector product.
-
-    Args:
-        m: A tensor of size (batch_size, d, m).
-        v: A tensor of size (batch_size, m).
-
-    Returns:
-        A tensor of size (batch_size, d).
-    """
-    v = v.unsqueeze(dim=-1)  # (batch_size, m, 1)
-    mvp = torch.bmm(m, v)  # (batch_size, d, 1)
-    mvp = mvp.squeeze(dim=-1)  # (batch_size, d)
-    return mvp
+    return torch.bmm(m, v.unsqueeze(-1)).squeeze(dim=-1)
 
 
 def grad(outputs, inputs, **kwargs):
-    # Workaround for PyTorch bug #39784
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):
+    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
         inputs = (inputs,)
-    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
-    return torch.autograd.grad(outputs, inputs, **kwargs)
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
+
+    _grad = torch.autograd.grad(outputs, inputs, **kwargs)
+    return convert_none_to_zeros(_grad, inputs)
 
 
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
     # The present implementation avoids this.
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):
+    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
         inputs = (inputs,)
-    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
-    dummy = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy, **kwargs)
-    return torch.autograd.grad(vjp, dummy, grad_outputs=grad_inputs, **kwargs)
+    dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
+    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
+    _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
+    return convert_none_to_zeros(_jvp, dummy_outputs)

@@ -14,7 +14,6 @@
 
 import functools as ft
 import math
-import operator
 import random
 import warnings
 from typing import Optional, Tuple, Union
@@ -26,7 +25,6 @@ from . import base_brownian
 from . import utils
 from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import Scalar
-
 
 _rsqrt3 = 1 / math.sqrt(3)
 
@@ -313,36 +311,41 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         """Initialize the Brownian interval.
 
         Args:
-            t0: Initial time.
-            t1: Terminal time.
-            shape: The shape of each Brownian sample. The last dimension is
-                treated as the channel dimension and any/all preceding
-                dimensions are treated as batch dimensions.
-            dtype: The dtype of each Brownian sample. Defaults to the PyTorch default.
-            device: The device of each Brownian sample. Defaults to the current device.
-            entropy: Global seed, defaults to `None` for random entropy.
-            dt: The expected average step size of the SDE solver. Set it if you
-                know it (e.g. when using a fixed solver); else it will default
-                to equal the first step this is evaluated with. This allows us
-                to set up a structure that should be efficient to query at these
-                intervals.
+            t0 (float or Tensor): Initial time.
+            t1 (float or Tensor): Terminal time.
+            shape (tuple of int, optional): The shape of each Brownian sample.
+                The last dimension is treated as the channel dimension and
+                any/all preceding dimensions are treated as batch dimensions.
+            dtype (torch.dtype): The dtype of each Brownian sample.
+                Defaults to the PyTorch default.
+            device (torch.device): The device of each Brownian sample.
+                Defaults to the current device.
+            entropy (int): Global seed, defaults to `None` for random entropy.
+            dt (float): The expected average step size of the SDE solver.
+                Set it if you know it (e.g. when using a fixed-step solver);
+                else it will default to equal the first step this is evaluated
+                with. This allows us to set up a structure that should be
+                efficient to query at these intervals.
             pool_size (int): Size of the pooled entropy. If you care about
                 statistical randomness then increasing this will help (but will
                 slow things down).
-            cache_size: How big a cache of recent calculations to use. (As new
-                calculations depend on old calculations, this speeds things up
-                dramatically, rather than recomputing things.) The default is
-                set to be pretty close to optimum: smaller values imply more
-                recalculation, whilst larger values imply more time spent
-                keeping track of the cache.
-            levy_area_approximation: Whether to also approximate Levy area.
-                Defaults to None. Valid options are either 'none', 'space-time',
-                'davie' or 'foster', corresponding to approximation type. This
-                is needed for some higher-order SDE solvers.
-            W: The increment of the Brownian motion over the interval [t0, t1].
+            cache_size (int): How big a cache of recent calculations to use.
+                (As new calculations depend on old calculations, this speeds
+                things up dramatically, rather than recomputing things.)
+                The default is set to be pretty close to optimum: smaller
+                values imply more recalculation, whilst larger values imply
+                more time spent keeping track of the cache.
+            levy_area_approximation (str): Whether to also approximate Levy
+                area. Defaults to None. Valid options are 'none',
+                'space-time', 'davie' or 'foster', corresponding to different
+                approximation types.
+                This is needed for some higher-order SDE solvers.
+            W (sequence of Tensor, optional): The increment of the Brownian
+                motion over the interval [t0, t1].
                 Will be generated randomly if not provided.
-            H: The space-time Levy area of the Brownian motion over the interval
-                [t0, t1]. Will be generated randomly if not provided.
+            H (sequence of Tensor, optional): The space-time Levy area of the
+                Brownian motion over the interval [t0, t1].
+                Will be generated randomly if not provided.
         """
 
         if not utils.is_scalar(t0):
@@ -388,15 +391,15 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         shapes.append(shapes[-1])
         dtypes.append(dtypes[-1])
         devices.append(devices[-1])
-        if not ft.reduce(operator.eq, shapes):
-            raise ValueError(f"Multiple shapes found. Make sure whichever of `shape`, `W`, `H` that are passed are "
-                             f"consistent. {shapes}")
-        if not ft.reduce(operator.eq, dtypes):
-            raise ValueError("Multiple dtypes found. Make sure whichever of `dtype`, `W`, `H` that are passed are "
-                             "consistent.")
-        if not ft.reduce(operator.eq, devices):
-            raise ValueError("Multiple devices found. Make sure whichever of `device`, `W`, `H` that are passed are "
-                             "consistent.")
+        if not all(i == shapes[0] for i in shapes):
+            raise ValueError(
+                "Multiple shapes found. Make sure whichever of `shape`, `W`, `H` that are passed are consistent.")
+        if not all(i == dtypes[0] for i in dtypes):
+            raise ValueError(
+                "Multiple dtypes found. Make sure whichever of `dtype`, `W`, `H` that are passed are consistent.")
+        if not all(i == devices[0] for i in devices):
+            raise ValueError(
+                "Multiple devices found. Make sure whichever of `device`, `W`, `H` that are passed are consistent.")
 
         if entropy is None:
             entropy = random.randint(0, 2 ** 31 - 1)
@@ -595,4 +598,4 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f")")
 
     def to(self, *args, **kwargs):
-        raise AttributeError(f'BrownianInterval does not support the method "to".')
+        raise AttributeError(f"BrownianInterval does not support the method `to`.")

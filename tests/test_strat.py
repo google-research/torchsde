@@ -17,23 +17,32 @@
 This should be eventually refactored and the file should be removed.
 """
 
+import time
+
 import torch
 from torch import nn
 
-import time
-from torchsde._core.base_sde import ForwardSDE  # noqa
+from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde import settings
+from torchsde._core.base_sde import ForwardSDE, TupleSDE  # noqa
 
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 cpu, gpu = torch.device('cpu'), torch.device('cuda')
 device = gpu if torch.cuda.is_available() else cpu
+dtype = torch.get_default_dtype()
+batch_size, d, m = 1, 2, 3
+ts = torch.tensor([0.0, 0.2, 0.4], device=device)
+t0, t1 = ts[0], ts[-1]
+y0 = torch.full((batch_size, d), 0.1, device=device)
 
 
 def _column_wise_func(y, t, i):
     # This function is designed so that there are mixed partials.
-    return (torch.cos(y ** 2 * i + t * 0.1) +
-            torch.tan(y[..., 0:1] * y[..., -2:-1]) +
-            torch.sum(y ** 2, dim=-1, keepdim=True))
+    # Also need to make sure this function doesn't drive the solution to explosion.
+    return (torch.cos(y ** 2 * i + t * 0.1) * 0.2 +
+            torch.tan(y[..., 0:1] * y[..., -2:-1]) * 0.3 +
+            torch.sum(y ** 2, dim=-1, keepdim=True).cos() * 0.1)
 
 
 class SDE(nn.Module):
@@ -44,16 +53,10 @@ class SDE(nn.Module):
         self.sde_type = settings.SDE_TYPES.stratonovich
 
     def f(self, t, y):
-        return [torch.sin(y_) + t for y_ in y]
+        return torch.sin(y) + t
 
     def g(self, t, y):
-        return [
-            torch.stack([_column_wise_func(y_, t, i) for i in range(m)], dim=-1)
-            for y_ in y
-        ]
-
-
-batch_size, d, m = 3, 5, 12
+        return torch.stack([_column_wise_func(y, t, i) for i in range(m)], dim=-1)
 
 
 def _batch_jacobian(output, input_):
@@ -88,11 +91,11 @@ def _gdg_jvp_brute_force(sde, t, y, a):
 
 
 def _make_inputs():
-    t = torch.rand(()).to(device)
-    y = [torch.randn(batch_size, d).to(device)]
-    a = torch.randn(batch_size, m, m).to(device)
+    t = torch.rand((), device=device)
+    y = [torch.randn(batch_size, d, device=device)]
+    a = torch.randn(batch_size, m, m, device=device)
     a = [a - a.transpose(1, 2)]  # Anti-symmetric.
-    sde = ForwardSDE(SDE())
+    sde = ForwardSDE(TupleSDE(SDE()))
     return sde, t, y, a
 
 
@@ -124,5 +127,18 @@ def check_efficiency():
     print(f'Time elapse for duplicate: {time_elapse:.4f}')
 
 
+def test_adjoint():
+    sde = SDE().to(device)
+    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
+
+    def func(y0):
+        ys = sdeint_adjoint(sde, y0, ts, bm, method='midpoint')
+        return ys[-1].sum()
+
+    y0_ = y0.clone().requires_grad_(True)
+    torch.autograd.gradcheck(func, y0_, rtol=1e-4, atol=1e-3, eps=1e-8)
+
+
 test_gdg_jvp()
 check_efficiency()
+test_adjoint()

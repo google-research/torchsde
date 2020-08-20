@@ -24,11 +24,12 @@ import torch
 from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
 from tests.problems import Ex1, Ex2, Ex3, Ex3Additive
 from tests.torch_test import TorchTestCase
-from torchsde import BrownianPath, sdeint_adjoint
+from torchsde import BrownianInterval, sdeint_adjoint
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dtype = torch.get_default_dtype()
 
 d = 10
 m = 3
@@ -111,7 +112,15 @@ class TestAdjoint(TorchTestCase):
         if method == 'euler' and adaptive:
             return
 
-        bm = BrownianPath(t0=t0, w0=w0)
+        levy_area_approximation = {
+            'euler': 'none',
+            'milstein': 'none',
+            'srk': 'space-time',
+        }[method]
+        bm = BrownianInterval(
+            t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device,
+            levy_area_approximation=levy_area_approximation
+        )
         with torch.no_grad():
             grad_outputs = torch.ones(batch_size, d).to(device)
             alt_grad = problem.analytical_grad(y0, t1, grad_outputs, bm)
@@ -127,25 +136,19 @@ class TestAdjoint(TorchTestCase):
         if method == 'euler' and adaptive:
             return
 
-        nbefore = _count_differentiable_params(problem)
+        num_before = _count_differentiable_params(problem)
 
         problem.zero_grad()
-        _, yt = sdeint_adjoint(
-            problem, y0, ts, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol
-        )
+        _, yt = sdeint_adjoint(problem, y0, ts, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol)
         loss = yt.sum(dim=1).mean(dim=0)
         loss.backward()
 
-        nafter = _count_differentiable_params(problem)
-        self.assertEqual(nbefore, nafter)
+        num_after = _count_differentiable_params(problem)
+        self.assertEqual(num_before, num_after)
 
 
 def _count_differentiable_params(module):
-    cnt = 0
-    for p in module.parameters():
-        if p.requires_grad:
-            cnt += 1
-    return cnt
+    return len([p for p in module.parameters() if p.requires_grad])
 
 
 if __name__ == '__main__':

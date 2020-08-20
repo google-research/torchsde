@@ -22,16 +22,18 @@ import torch
 
 from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
 from tests.torch_test import TorchTestCase
-from torchsde import BrownianPath, sdeint_adjoint
+from torchsde import BrownianInterval, sdeint_adjoint
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dtype = torch.get_default_dtype()
 
 d = 2
 m = 2
 batch_size = 1
-t0, t1, t2 = ts = torch.tensor([0.0, 0.15, 0.3]).to(device)
+ts = torch.tensor([0.0, 0.15, 0.3]).to(device)
+t0, t1 = ts[0], ts[-1]
 dt = 1e-3
 w0 = torch.zeros(batch_size, d).to(device)
 y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
@@ -58,7 +60,9 @@ class TestAdjointLogqp(TorchTestCase):
 
 
 def _test_forward_and_backward(sde):
-    bm = BrownianPath(t0=t0, w0=w0)
+    bm = BrownianInterval(
+        t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
+    )
     for method in methods:
         _test_forward(sde, bm, method=method)
         _test_backward(sde, bm, method=method)

@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+THRESHOLD = 1e-5  # Voodoo constant chosen based on results comparing adjoint gradient and analytical gradient.
+
 import abc
 import warnings
 
 import torch
 
-from ..settings import NOISE_TYPES
-
 from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
+from ..settings import NOISE_TYPES
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -36,7 +37,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
-        assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
         assert sde.noise_type in self.noise_types, (
             f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
@@ -79,7 +79,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     def step_logqp(self, t, y, dt, logqp0):
         t1, y1 = self.step(t, y, dt)
 
-        if self.sde.noise_type in ("diagonal", "scalar"):
+        if self.sde.noise_type in (NOISE_TYPES.diagonal, NOISE_TYPES.scalar):
             f_eval = self.sde.f(t, y)
             g_eval = self.sde.g(t, y)
             h_eval = self.sde.h(t, y)
@@ -109,7 +109,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         Returns:
             A single state tensor of size (T, batch_size, d) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
@@ -121,18 +121,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
         for next_t in ts[1:]:
             while curr_t < next_t:
-                # TODO: I'm not completely convinced that this is sufficient to ensure that we always step inside the
-                #  region specified by `ts`. In floating point arithmetic, is it possible for (x - y) + y > x? (Where
-                #  here x = ts[-1] and y = curr_t.) It's definitely possible for (x - y) + y < x, consider the case of
-                #  x = 1 and y = 1e30.
-                step_size = min(step_size, ts[-1] - curr_t)
                 if adaptive:
+                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f = self.step(curr_t, curr_y, step_size)
+                    t1f, y1f = self.step(curr_t, curr_y, delta_t)
                     # Take 2 half steps.
-                    half_step_size = 0.5 * step_size
-                    t05, y05 = self.step(curr_t, curr_y, half_step_size)
-                    t1h, y1h = self.step(t05, y05, half_step_size)
+                    t05, y05 = self.step(curr_t, curr_y, delta_t / 2)
+                    t1h, y1h = self.step(t05, y05, delta_t / 2)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -156,10 +151,15 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 else:
                     prev_t, prev_y = curr_t, curr_y
                     curr_t, curr_y = self.step(curr_t, curr_y, step_size)
-            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
-                curr_t, curr_y = interp.linear_interp(
-                    t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t
-                )
+
+            # Sample paths of SDEs typically aren't differentiable, so it doesn't really make sense to interpolate
+            # using high-order polynomials. We try to avoid interpolation for as much as possible, but we also want to
+            # avoid stepping with super small step sizes (e.g. < 1e-9), in which case the solvers and Brownian motion
+            # data structures may produce pathological behavior.
+
+            # `curr_t` may overstep `next_t`. If `next_t` is close to either end, we interpolate.
+            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
+                curr_t, curr_y = interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t)
             else:
                 curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
             ys.append(curr_y)
@@ -174,7 +174,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             A single state tensor of size (T, batch_size, d) (or tuple), and a single log-ratio tensor of
             size (T - 1, batch_size) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
@@ -189,14 +189,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             curr_logqp = [0. for _ in y0]
             prev_logqp = curr_logqp
             while curr_t < next_t:
-                step_size = min(step_size, ts[-1] - curr_t)
                 if adaptive:
+                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
+                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
                     # Take 2 half steps.
-                    half_step_size = 0.5 * step_size
-                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, half_step_size, logqp0=curr_logqp)
-                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, half_step_size, logqp0=logqp05)
+                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, delta_t / 2, logqp0=curr_logqp)
+                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, delta_t / 2, logqp0=logqp05)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -220,7 +219,8 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 else:
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
                     curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
-            if curr_t - next_t < 1e-7 or next_t - prev_t < dt_min:
+
+            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
                 curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
                     t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
                 )
