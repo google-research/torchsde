@@ -86,7 +86,7 @@ def test_normality(brownian_class, device):
         w1 = torch.tensor(w1_, device=device).repeat(BATCH_SIZE)
 
         bm = brownian_class(t0=t0, w0=w0)  # noqa
-        bm.insert(t=t1, w=w1)
+        bm._insert(t=t1, w=w1)
 
         t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)  # Avoid sampling too close to the boundary.
         samples = bm(t_)
@@ -110,10 +110,10 @@ def test_insert(brownian_class, device):
 
     t, bm = _setup(brownian_class, device)
     w = torch.randn(BATCH_SIZE, D)
-    ret = bm.insert(t, w)
+    ret = bm._insert(t, w)
     assert len(bm) == 2
     assert ret is None
 
-    ret = bm.insert(t, w)
+    ret = bm._insert(t, w)
     assert len(bm) == 2
     assert ret.eq(w).all()

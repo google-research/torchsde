@@ -118,10 +118,10 @@ class BrownianPath(base_brownian.BaseBrownian):
         # Avoid having if-statements in method body for speed.
         if levy_area_approximation == LEVY_AREA_APPROXIMATIONS.none:
             self._update_state = self._update_state_without_levy_area
-            self.insert = self._insert_without_levy_area
+            self._insert = self._insert_without_levy_area
         else:
             self._update_state = self._update_state_with_levy_area
-            self.insert = self._insert_with_levy_area
+            self._insert = self._insert_with_levy_area
         self.levy_area_approximation = levy_area_approximation
 
     def _update_state_without_levy_area(self, t: float) -> int:

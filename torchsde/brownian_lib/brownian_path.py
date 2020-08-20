@@ -81,7 +81,7 @@ class BrownianPath(base_brownian.BaseBrownian):
     def __repr__(self):
         return repr(self._bm)
 
-    def insert(self, t, w):
+    def _insert(self, t, w):
         self._bm.insert(t, w)
 
     def to(self, *args, **kwargs):
