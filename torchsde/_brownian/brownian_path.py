@@ -136,12 +136,12 @@ class BrownianPath(base_brownian.BaseBrownian):
 
         if idx <= 0:
             h1 = self._ts[0] - t
-            W_h1 = utils.brownian_bridge_augmented(self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            W_h1 = utils.brownian_bridge_augmented(self._w0, h1)
             self._ts.insert(idx, t)
             self._ws.insert(idx, W_h1)
         elif idx >= len(self._ts):
             h1 = t - self._ts[-1]
-            W_h1 = utils.brownian_bridge_augmented(self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            W_h1 = utils.brownian_bridge_augmented(self._w0, h1)
             self._ts.insert(idx, t)
             self._ws.insert(idx, W_h1)
         else:
@@ -149,8 +149,7 @@ class BrownianPath(base_brownian.BaseBrownian):
             h1 = t - self._ts[idx - 1]
 
             W_h = self._ws[idx]
-            W_h1 = utils.brownian_bridge_augmented(
-                self._w0, h1, h, W_h, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.none)
+            W_h1 = utils.brownian_bridge_augmented(self._w0, h1, h, W_h)
             W_h2 = W_h - W_h1
 
             self._ws[idx] = W_h2
@@ -170,13 +169,15 @@ class BrownianPath(base_brownian.BaseBrownian):
 
         if idx <= 0:
             h1 = self._ts[0] - t
-            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1)
+            W_h1, U_h1 = utils.brownian_bridge_augmented(
+                self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
             self._ts.insert(idx, t)
             self._ws.insert(idx, W_h1)
             self._us.insert(idx, U_h1)
         elif idx >= len(self._ts):
             h1 = t - self._ts[-1]
-            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1)
+            W_h1, U_h1 = utils.brownian_bridge_augmented(
+                self._w0, h1, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
             self._ts.insert(idx, t)
             self._ws.insert(idx, W_h1)
             self._us.insert(idx, U_h1)
@@ -186,7 +187,8 @@ class BrownianPath(base_brownian.BaseBrownian):
             h2 = h - h1
 
             W_h, U_h = self._ws[idx], self._us[idx]
-            W_h1, U_h1 = utils.brownian_bridge_augmented(self._w0, h1, h, W_h, U_h)
+            W_h1, U_h1 = utils.brownian_bridge_augmented(
+                self._w0, h1, h, W_h, U_h, levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
             W_h2 = W_h - W_h1
             U_h2 = U_h - U_h1 - h2 * W_h1

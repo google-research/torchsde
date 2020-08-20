@@ -55,7 +55,7 @@ def brownian_bridge_augmented(ref: torch.Tensor,
                               h: Optional[float] = None,
                               W_h: Optional[torch.Tensor] = None,
                               U_h: Optional[torch.Tensor] = None,
-                              levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.space_time) -> TensorOrTensors:
+                              levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none) -> TensorOrTensors:
     # TODO: Replace h1 with h0, and h2 with h1.
     # Unconditional sampling.
     if h is None:
