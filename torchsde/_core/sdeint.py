@@ -194,7 +194,7 @@ def check_contract(sde, y0, ts, bm, logqp, method, names):
                 raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
 
     if not torch.is_tensor(ts):
-        if not (isinstance(ts, tuple) or isinstance(ts, list)) or not all(isinstance(t, (float, int)) for t in ts):
+        if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
             raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
         ts = torch.tensor(ts, dtype=y0[0].dtype, device=y0[0].device)
 

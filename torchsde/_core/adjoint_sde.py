@@ -27,20 +27,12 @@ class AdjointSDE(base_sde.BaseSDE):
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
         sde_type = forward_sde.sde_type
-        if sde_type == SDE_TYPES.ito:
-            noise_type = {
-                NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
-                NOISE_TYPES.additive: NOISE_TYPES.general,
-                NOISE_TYPES.scalar: NOISE_TYPES.scalar,
-                NOISE_TYPES.general: NOISE_TYPES.general,
-            }[forward_sde.noise_type]
-        else:
-            noise_type = {
-                NOISE_TYPES.general: NOISE_TYPES.general,
-                NOISE_TYPES.additive: NOISE_TYPES.general,
-                NOISE_TYPES.scalar: NOISE_TYPES.scalar,
-                NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
-            }[forward_sde.noise_type]
+        noise_type = {
+            NOISE_TYPES.general: NOISE_TYPES.general,
+            NOISE_TYPES.additive: NOISE_TYPES.general,
+            NOISE_TYPES.scalar: NOISE_TYPES.scalar,
+            NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
+        }[forward_sde.noise_type]
 
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
         self._base_sde = forward_sde
@@ -90,7 +82,7 @@ class AdjointSDE(base_sde.BaseSDE):
     #                  f                   #
     ########################################
 
-    def f_uncorrected(self, t, y_aug):  # For Stratonovich.
+    def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
         sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
 
@@ -214,6 +206,9 @@ class AdjointSDE(base_sde.BaseSDE):
     #               gdg_prod               #
     ########################################
 
+    def gdg_prod_default(self, t, y, v):  # For Ito/Stratonovich general/additive/scalar.
+        raise NotImplementedError
+
     def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
         sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
         y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
@@ -270,9 +265,6 @@ class AdjointSDE(base_sde.BaseSDE):
             *misc.seq_sub(prod_partials_adj_y, mixed_partials_adj_y),
             prod_partials_params - mixed_partials_params
         )
-
-    def gdg_prod_default(self, t, y, v):  # For Ito/Stratonovich general/additive/scalar.
-        raise NotImplementedError
 
     ########################################
     #               f_logqp                #
