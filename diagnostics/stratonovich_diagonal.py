@@ -21,7 +21,7 @@ import torch
 import tqdm
 from scipy import stats
 
-from tests.problems import Ex2
+from tests.problems import Ex1
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs_if_not_found, compute_mse
@@ -34,7 +34,7 @@ def inspect_sample():
     ts = torch.linspace(0., 5., steps=steps, device=device)
     dt = 1e-1
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex2(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1(d=d, sde_type='stratonovich').to(device)
 
     with torch.no_grad():
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=y0.shape, dtype=y0.dtype, device=device,
@@ -77,7 +77,7 @@ def inspect_strong_order():
     ts = torch.tensor([0., 5.], device=device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex2(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1(d=d, sde_type='stratonovich').to(device)
 
     heun_mses_ = []
     midpoint_mses_ = []

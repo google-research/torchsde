@@ -37,6 +37,10 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     def v_term(self, I_k, dt):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def y_prime_f_factor(self, dt, f_eval):
+        raise NotImplementedError
+
     def step(self, t0, y0, dt):
         assert dt > 0, 'Underflow in dt {}'.format(dt)
 
@@ -47,16 +51,16 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
 
         f_eval = self.sde.f(t0, y0)
         g_eval = self.sde.g(t0, y0)
-        g_prod_eval = self.sde.prod(g_eval, I_k)
+        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
 
         if self.options[METHOD_OPTIONS.grad_free]:
-            g_prod_eval_v = self.sde.prod(g_eval, v)
+            g_prod_eval_v = self.sde.g_prod(t0, y0, v)
             sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
             y0_prime = [
-                y0_ + dt * f_eval_ + g_eval_ * sqrt_dt
+                y0_ + self.y_prime_f_factor(dt, f_eval_) + g_eval_ * sqrt_dt
                 for y0_, f_eval_, g_eval_ in zip(y0, f_eval, g_eval)
             ]            
-            g_prod_eval_prime = self.sde.g_prod(t1, y0_prime, v)
+            g_prod_eval_prime = self.sde.g_prod(t0, y0_prime, v)
             gdg_prod_eval = [
                 (g_prod_eval_prime_ - g_prod_eval_v_) / sqrt_dt
                 for g_prod_eval_prime_, g_prod_eval_v_ in zip(g_prod_eval_prime, g_prod_eval_v)
@@ -77,9 +81,15 @@ class MilsteinIto(BaseMilstein):
     def v_term(self, I_k, dt):
         return [delta_bm_ ** 2 - dt for delta_bm_ in I_k]
 
+    def y_prime_f_factor(self, dt, f_eval):
+        return dt * f_eval
+
 
 class MilsteinStratonovich(BaseMilstein):
     sde_type = SDE_TYPES.stratonovich
 
     def v_term(self, I_k, dt):
         return [delta_bm_ ** 2 for delta_bm_ in I_k]
+
+    def y_prime_f_factor(self, dt, f_eval):
+        return 0.
