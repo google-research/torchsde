@@ -308,31 +308,14 @@ def _check_and_select_default_adjoint_method(sde, adjoint_method: str) -> str:
             SDE_TYPES.ito: {
                 NOISE_TYPES.diagonal: METHODS.milstein,
                 NOISE_TYPES.additive: METHODS.euler,
-                NOISE_TYPES.scalar: METHODS.euler,  # Optimize this.
-            }.get(noise_type, 'unsupported'),
+                NOISE_TYPES.scalar: METHODS.euler,  # TODO: Optimize this.
+            }.get(noise_type, "unsupported"),
             SDE_TYPES.stratonovich: {
                 NOISE_TYPES.general: METHODS.midpoint,
-            }.get(noise_type, 'unsupported')
+            }.get(noise_type, "unsupported")
         }[sde_type]
 
         if adjoint_method == "unsupported":
-            raise ValueError(f'Adjoint not supported for {sde_type} SDEs with noise type {noise_type}.')
-    else:
-        if sde_type == SDE_TYPES.ito:
-            if noise_type == NOISE_TYPES.general or NOISE_TYPES.scalar:
-                unsupported = True
-            elif noise_type == NOISE_TYPES.diagonal:
-                unsupported = adjoint_method not in (METHODS.euler, METHODS.milstein)
-            else:  # Additive noise.
-                unsupported = adjoint_method not in (METHODS.euler,)
-        else:
-            if noise_type == NOISE_TYPES.general:
-                unsupported = adjoint_method not in (METHODS.midpoint,)
-            else:
-                unsupported = True
-        if unsupported:
-            raise ValueError(
-                f'Adjoint not supported for {sde_type} SDEs with '
-                f'noise type {noise_type} and adjoint method {adjoint_method}'
-            )
+            raise ValueError(f"Adjoint not supported for {sde_type} SDEs with noise type {noise_type}.")
+
     return adjoint_method
