@@ -214,7 +214,7 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
     if options is None:
         options = {}
 
-    solver_fn = methods.select(method=method)
+    solver_fn = methods.select(method=method, sde_type=sde.sde_type)
     solver = solver_fn(
         sde=sde,
         bm=bm,

@@ -34,6 +34,11 @@ class Ex1(BaseSDE):
         self._nfe += 1
         return self.mu * y
 
+    def f_corr(self, t, y):
+        del t
+        self._nfe += 1
+        return self.mu * y - .5 * (self.sigma ** 2) * y
+
     def g(self, t, y):
         del t
         self._nfe += 1
