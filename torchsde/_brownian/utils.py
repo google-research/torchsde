@@ -149,20 +149,32 @@ def H_to_U(W: torch.Tensor, H: torch.Tensor, h: float) -> torch.Tensor:
     return h * (.5 * W + H)
 
 
-def get_tensors_info(*args,
-                     shape=False,
-                     dtype=False,
-                     device=False,
-                     default_shape=None,
-                     default_dtype=None,
-                     default_device=None):
-    # Assume one of `shape`, `dtype`, and `device` should be true.
-    if shape:
-        shapes = [] if default_shape is None else [default_shape]
-        return shapes + [arg.shape for arg in args if torch.is_tensor(arg)]
-    if dtype:
-        dtypes = [] if default_dtype is None else [default_dtype]
-        return dtypes + [arg.dtype for arg in args if torch.is_tensor(arg)]
-    if device:
-        devices = [] if default_device is None else [default_device]
-        return devices + [arg.device for arg in args if torch.is_tensor(arg)]
+def check_tensor_info(*tensors, shape=None, dtype=None, device=None):
+    """Check if shapes, dtypes, and devices of input tensors all match prescribed values."""
+    tensors = list(filter(torch.is_tensor, tensors))
+
+    if dtype is None and len(tensors) == 0:
+        dtype = torch.get_default_dtype()
+    if device is None and len(tensors) == 0:
+        device = torch.device("cpu")
+
+    shapes = [] if shape is None else [shape]
+    shapes += [t.shape for t in tensors]
+
+    dtypes = [] if dtype is None else [dtype]
+    dtypes += [t.dtype for t in tensors]
+
+    devices = [] if device is None else [device]
+    devices += [t.device for t in tensors]
+
+    if len(shapes) == 0:
+        raise ValueError("Must either specify `shape` or pass in `w0` to implicitly define the shape.")
+
+    if not all(i == shapes[0] for i in shapes):
+        raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
+    if not all(i == dtypes[0] for i in dtypes):
+        raise ValueError("Multiple dtypes found. Make sure `dtype` and `w0` are consistent.")
+    if not all(i == devices[0] for i in devices):
+        raise ValueError("Multiple devices found. Make sure `device` and `w0` are consistent.")
+
+    return shapes, dtypes, devices

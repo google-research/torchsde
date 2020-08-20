@@ -78,28 +78,8 @@ class BrownianPath(base_brownian.BaseBrownian):
         super(BrownianPath, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time `t0` should be a float or 0-d torch.Tensor.')
-        if dtype is None:
-            dtype = torch.get_default_dtype() if w0 is None else w0.dtype
-        if device is None:
-            device = torch.device("cpu") if w0 is None else w0.device
 
-        shapes = utils.get_tensors_info(w0, shape=True, default_shape=shape)
-        dtypes = utils.get_tensors_info(w0, dtype=True, default_dtype=dtype)
-        devices = utils.get_tensors_info(w0, device=True, default_device=device)
-        if len(shapes) == 0:
-            raise ValueError("Must either specify `shape` or pass in `w0` to implicitly define the shape.")
-
-        # Make sure the reduce actually does a comparison, to get a bool datatype.
-        shapes.append(shapes[-1])
-        dtypes.append(dtypes[-1])
-        devices.append(devices[-1])
-
-        if not all(i == shapes[0] for i in shapes):
-            raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
-        if not all(i == dtypes[0] for i in dtypes):
-            raise ValueError("Multiple dtypes found. Make sure `dtype` and `w0` are consistent.")
-        if not all(i == devices[0] for i in devices):
-            raise ValueError("Multiple devices found. Make sure `device` and `w0` are consistent.")
+        utils.check_tensor_info(w0, shape=shape, dtype=dtype, device=device)
 
         # Provide references so that point-based queries still work.
         t0 = float(t0)
