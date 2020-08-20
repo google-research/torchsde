@@ -198,9 +198,7 @@ class BrownianTree(base_brownian.BaseBrownian):
         )
 
     def to(self, *args, **kwargs):
-        self._ws_prev = utils.blist_to(self._ws_prev, *args, **kwargs)
-        self._ws_post = utils.blist_to(self._ws_post, *args, **kwargs)
-        self._ws = utils.blist_to(self._ws, *args, **kwargs)
+        raise AttributeError(f"BrownianTree does not support the method `to`.")
 
     @property
     def dtype(self):

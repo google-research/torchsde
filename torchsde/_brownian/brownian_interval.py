@@ -598,4 +598,4 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f")")
 
     def to(self, *args, **kwargs):
-        raise AttributeError(f'BrownianInterval does not support the method "to".')
+        raise AttributeError(f"BrownianInterval does not support the method `to`.")
