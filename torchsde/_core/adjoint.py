@@ -248,8 +248,8 @@ def sdeint_adjoint(sde,
         logqp (bool, optional): If `True`, also return the log-ratio penalty.
         method (str, optional): Name of numerical integration method.
         adjoint_method (str, optional): Name of numerical integration method for
-            backward adjoint solve. Defaults to select the method with highest
-            strong order possible according to noise type of the forward SDE.
+            backward adjoint solve. Defaults to a sensible choice depending on
+                the noise type of the supplied SDE.
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
