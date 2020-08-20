@@ -117,6 +117,7 @@ def space_time_levy_area(W, h, levy_area_approximation, get_noise):
         return None
 
 
+# TODO: Revert `get_noise` after fixes in BrownianPath.
 def davie_foster_approximation(W, H, h, levy_area_approximation, get_noise=None):
     if levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.none, LEVY_AREA_APPROXIMATIONS.space_time):
         return None
