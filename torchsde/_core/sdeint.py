@@ -145,6 +145,7 @@ def check_contract(sde, y0, ts, bm, logqp, method, names):
             raise ValueError(f"Drift must return a Tensor of the same shape as y0. Got drift shape {drift_shape_} but "
                              f"y0 shape {y0_.shape}.")
 
+    # TODO: Add back the scalar noise check and make it consistent with the underlying functionality.
     noise_channels = diffusion_shape[0][-1]
     if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general):
         batch_dimensions = diffusion_shape[0][:-2]

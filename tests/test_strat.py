@@ -26,15 +26,15 @@ from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde import settings
 from torchsde._core.base_sde import ForwardSDE, TupleSDE  # noqa
 
-torch.manual_seed(1293819)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 cpu, gpu = torch.device('cpu'), torch.device('cuda')
 device = gpu if torch.cuda.is_available() else cpu
 dtype = torch.get_default_dtype()
 batch_size, d, m = 1, 2, 3
-ts = torch.tensor([0.0, 0.2, 0.4]).to(device)
+ts = torch.tensor([0.0, 0.2, 0.4], device=device)
 t0, t1 = ts[0], ts[-1]
-y0 = torch.zeros(batch_size, d).fill_(0.1).to(device)
+y0 = torch.full((batch_size, d), 0.1, device=device)
 
 
 def _column_wise_func(y, t, i):
