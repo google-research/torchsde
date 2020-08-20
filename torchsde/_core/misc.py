@@ -14,7 +14,6 @@
 
 import functools
 import operator
-import types
 import warnings
 
 import torch
@@ -35,19 +34,11 @@ def convert_none_to_zeros(sequence, like_sequence):
 
 
 def make_seq_requires_grad(sequence):
-    """Replace tensors in sequence that doesn't require gradients with tensors that requires gradients.
-
-    Args:
-        sequence: an Iterable of tensors.
-
-    Returns:
-        A list of tensors that all require gradients.
-    """
     return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
 
 
-def is_increasing(t):
-    return torch.all(torch.gt(t[1:], t[:-1]))
+def is_strictly_increasing(ts):
+    return all(x < y for x, y in zip(ts[:-1], ts[1:]))
 
 
 def is_nan(t):
@@ -101,43 +92,8 @@ def seq_batch_mvp(ms, vs):
     return [batch_mvp(m, v) for m, v in zip(ms, vs)]
 
 
-def is_seq_not_nested(x):
-    if not _is_tuple_or_list(x):
-        return False
-    for xi in x:
-        if _is_tuple_or_list(xi):
-            return False
-    return True
-
-
-def _is_tuple_or_list(x):
-    return isinstance(x, tuple) or isinstance(x, list)
-
-
-def join(*iterables):
-    """Return a generator which is an aggregate of all input generators.
-
-    Useful for combining parameters of different `nn.Module` objects.
-    """
-    for iterable in iterables:
-        assert isinstance(iterable, types.GeneratorType)
-        yield from iterable
-
-
 def batch_mvp(m, v):
-    """Batched matrix vector product.
-
-    Args:
-        m: A tensor of size (batch_size, d, m).
-        v: A tensor of size (batch_size, m).
-
-    Returns:
-        A tensor of size (batch_size, d).
-    """
-    v = v.unsqueeze(dim=-1)  # (batch_size, m, 1)
-    mvp = torch.bmm(m, v)  # (batch_size, d, 1)
-    mvp = mvp.squeeze(dim=-1)  # (batch_size, d)
-    return mvp
+    return torch.bmm(m, v.unsqueeze(-1)).squeeze(dim=-1)
 
 
 def grad(outputs, inputs, **kwargs):

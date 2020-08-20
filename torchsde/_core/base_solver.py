@@ -37,7 +37,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
-        assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
         assert sde.noise_type in self.noise_types, (
             f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
@@ -110,7 +109,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         Returns:
             A single state tensor of size (T, batch_size, d) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
@@ -175,7 +174,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             A single state tensor of size (T, batch_size, d) (or tuple), and a single log-ratio tensor of
             size (T - 1, batch_size) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt

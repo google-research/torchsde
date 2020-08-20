@@ -283,8 +283,7 @@ def sdeint_adjoint(sde,
     if not isinstance(sde, nn.Module):
         raise ValueError('sde is required to be an instance of nn.Module.')
 
-    sde, y0, bm, tensor_input = sdeint.check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm,
-                                                      names=names)
+    sde, y0, ts, bm, tensor_input = sdeint.check_contract(sde, y0, ts, bm, logqp, method, names)
     adjoint_method = _check_and_select_default_adjoint_method(sde, adjoint_method)
 
     flat_params = misc.flatten(sde.parameters())

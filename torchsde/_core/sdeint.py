@@ -77,7 +77,7 @@ def sdeint(sde: [base_sde.BaseSDE],
         ValueError: An error occurred due to unrecognized noise type/method,
             or if `sde` is missing required methods.
     """
-    sde, y0, bm, tensor_input = check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm, names=names)
+    sde, y0, ts, bm, tensor_input = check_contract(sde, y0, ts, bm, logqp, method, names)
 
     sde = base_sde.ForwardSDE(sde)
     results = integrate(
@@ -99,7 +99,7 @@ def sdeint(sde: [base_sde.BaseSDE],
     return results
 
 
-def check_contract(sde, method, logqp, ts, y0, bm, names):
+def check_contract(sde, y0, ts, bm, logqp, method, names):
     if names is None:
         names_to_change = {}
     else:
@@ -131,8 +131,8 @@ def check_contract(sde, method, logqp, ts, y0, bm, names):
     if tensor_input:
         sde = base_sde.TupleSDE(sde)
         y0 = (y0,)
-    if not isinstance(y0, tuple) or any(not torch.is_tensor(y0_) for y0_ in y0):
-        raise ValueError("y0 must be a Tensor or a tuple of Tensors.")
+    if not isinstance(y0, tuple) or not all(torch.is_tensor(y0_) for y0_ in y0):
+        raise ValueError("`y0` must be a Tensor or a tuple of Tensors.")
 
     drift_shape = [fi.shape for fi in sde.f(ts[0], y0)]
     diffusion_shape = [gi.shape for gi in sde.g(ts[0], y0)]
@@ -145,7 +145,6 @@ def check_contract(sde, method, logqp, ts, y0, bm, names):
             raise ValueError(f"Drift must return a Tensor of the same shape as y0. Got drift shape {drift_shape_} but "
                              f"y0 shape {y0_.shape}.")
 
-    # TODO: Think more carefully about scalar noise shape checks.
     noise_channels = diffusion_shape[0][-1]
     if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general):
         batch_dimensions = diffusion_shape[0][:-2]
@@ -193,6 +192,11 @@ def check_contract(sde, method, logqp, ts, y0, bm, names):
             if diffusion_shape_[-1] != noise_channels:
                 raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
 
+    if not torch.is_tensor(ts):
+        if not (isinstance(ts, tuple) or isinstance(ts, list)) or not all(isinstance(t, (float, int)) for t in ts):
+            raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
+        ts = torch.tensor(ts, dtype=y0[0].dtype, device=y0[0].device)
+
     if bm is None:
         if method == METHODS.srk:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
@@ -200,10 +204,11 @@ def check_contract(sde, method, logqp, ts, y0, bm, names):
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0[0].dtype,
                               device=y0[0].device, levy_area_approximation=levy_area_approximation)
+
     if tensor_input:
         bm = TupleBrownian(bm)
 
-    return sde, y0, bm, tensor_input
+    return sde, y0, ts, bm, tensor_input
 
 
 def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):
