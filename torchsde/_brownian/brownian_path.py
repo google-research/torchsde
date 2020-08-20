@@ -54,6 +54,7 @@ class BrownianPath(base_brownian.BaseBrownian):
         Args:
             t0 (float or Tensor): Initial time.
             w0 (sequence of Tensor, optional): Initial state.
+                Defaults to a tensor of zeros with prescribed shape.
             shape (tuple of int, optional): The shape of each Brownian sample.
                 The last dimension is treated as the channel dimension and
                 any/all preceding dimensions are treated as batch dimensions.
@@ -158,7 +159,7 @@ class BrownianPath(base_brownian.BaseBrownian):
         return idx
 
     def _update_state_with_levy_area(self, t: float) -> int:
-        """Update the recorded Brownian state and space-time Levy area.
+        """Update the recorded Brownian state and 'shifted' space-time Levy area.
 
         Returns:
             The index of the old state or newly inserted state.
@@ -217,12 +218,25 @@ class BrownianPath(base_brownian.BaseBrownian):
         W, U = self._aggregate_W_U(idx_a, idx_b)
         h = self._ts[idx_b] - self._ts[idx_a]
         H = utils.U_to_H(W, U, h)
+        # TODO: Store and aggregate A; this would require a partial rewrite.
         A = utils.davie_foster_approximation(W, H, h, self.levy_area_approximation)
         return W, U, A
 
-    def _point_eval(self, t: float) -> torch.Tensor:
+    def _point_eval(self, t: float, return_U=False, return_A=False) -> TensorOrTensors:
         idx_a, idx_b = 0, self._update_state(t)
-        return self._aggregate_W(idx_a, idx_b) + self._w0
+        if return_U:
+            if return_A:
+                W, U, A = self._aggregate_W_U_A(idx_a, idx_b)
+                return W + self._w0, U, A
+            else:
+                W, U = self._aggregate_W_U(idx_a, idx_b)
+                return W + self._w0, U
+        else:
+            if return_A:
+                W, U, A = self._aggregate_W_U_A(idx_a, idx_b)
+                return W + self._w0, A
+            else:
+                return self._aggregate_W(idx_a, idx_b) + self._w0
 
     def _interval_eval(self, ta: float, tb: float, return_U=False, return_A=False) -> TensorOrTensors:
         if ta > tb:

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import bisect
 import math
 from typing import Optional
 
@@ -24,56 +23,6 @@ from ..types import TensorOrTensors
 
 _rsqrt3 = 1 / math.sqrt(3)
 _r12 = 1 / 12
-
-
-def search(ts: blist.blist, ws: blist.blist, t):
-    """Search for the state that corresponds to the time.
-
-    It is possible that `t` is not within the range of the sorted `ts`.
-
-    Returns:
-        (None, None, False) if `t` is not within the range of `ts`.
-        (int, Tensor, True) if `t` is in `ts`.
-        (int, Tensor, False) if `t` is not in `ts` but within the range.
-    """
-    if t == ts[-1]:  # Heuristic #1.
-        idx = len(ts) - 1
-        w = ws[idx]
-        found = True
-    elif len(ts) > 1 and t == ts[-2]:  # Heuristic #2.
-        idx = len(ts) - 2
-        w = ws[idx]
-        found = True
-    elif t == ts[0]:  # Heuristic #3.
-        idx = 0
-        w = ws[idx]
-        found = True
-    elif t > ts[-1] or t < ts[0]:  # `t` not within range.
-        idx = None
-        w = None
-        found = False
-    else:  # `t` within range.
-        idx = bisect.bisect_left(ts, t)
-        if t == ts[idx]:  # Found `t` in `ts`.
-            w = ws[idx]
-            found = True
-        else:
-            # Didn't find `t` in `ts`.
-            t0, t1 = ts[idx - 1], ts[idx]
-            w0, w1 = ws[idx - 1], ws[idx]
-            w = brownian_bridge(t0=t0, t1=t1, w0=w0, w1=w1, t=t)
-            found = False
-    return idx, w, found
-
-
-def search_and_insert(ts: blist.blist, ws: blist.blist, t):
-    """Search for the state value that corresponds to the time; modify the lists if necessary."""
-    # `t` has to already be in the range of `ts`.
-    idx, w, found = search(ts=ts, ws=ws, t=t)
-    if idx is not None and not found:
-        ts.insert(idx, t)
-        ws.insert(idx, w)
-    return w
 
 
 def randn_like(ref: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
@@ -90,14 +39,14 @@ def brownian_bridge(t0: float,
                     w1: torch.Tensor,
                     t: float,
                     seed: Optional[int] = None) -> torch.Tensor:
-    mean = ((t1 - t) * w0 + (t - t0) * w1) / (t1 - t0)
-    std = math.sqrt((t1 - t) * (t - t0) / (t1 - t0))
+    h0, h1, rh = t - t0, t1 - t, 1 / (t1 - t0)
+    mean, std = (w0 * h1 + w1 * h0) * rh, math.sqrt(h0 * h1 * rh)
     return mean + std * randn_like(ref=mean, seed=seed)
 
 
 def brownian_bridge_centered(h1: float, h: float, W_h: torch.Tensor, seed: Optional[int] = None) -> torch.Tensor:
-    mean = h1 * W_h / h
-    std = math.sqrt((h - h1) * h1 / h)
+    rh = 1 / h
+    mean, std = W_h * h1 * rh, math.sqrt((h - h1) * h1 * rh)
     return mean + std * randn_like(ref=mean, seed=seed)
 
 
@@ -107,6 +56,7 @@ def brownian_bridge_augmented(ref: torch.Tensor,
                               W_h: Optional[torch.Tensor] = None,
                               U_h: Optional[torch.Tensor] = None,
                               levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.space_time) -> TensorOrTensors:
+    # TODO: Replace h1 with h0, and h2 with h1.
     # Unconditional sampling.
     if h is None:
         # Slight code repetition for readability.

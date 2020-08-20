@@ -91,9 +91,9 @@ def _gdg_jvp_brute_force(sde, t, y, a):
 
 
 def _make_inputs():
-    t = torch.rand(()).to(device)
-    y = [torch.randn(batch_size, d).to(device)]
-    a = torch.randn(batch_size, m, m).to(device)
+    t = torch.rand((), device=device)
+    y = [torch.randn(batch_size, d, device=device)]
+    a = torch.randn(batch_size, m, m, device=device)
     a = [a - a.transpose(1, 2)]  # Anti-symmetric.
     sde = ForwardSDE(TupleSDE(SDE()))
     return sde, t, y, a
