@@ -124,7 +124,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             while curr_t < out_t:
                 next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
                     next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.
@@ -183,7 +182,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             while curr_t < out_t:
                 next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
                     next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.

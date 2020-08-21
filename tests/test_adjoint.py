@@ -22,7 +22,7 @@ import unittest
 import torch
 
 from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from tests.problems import Ex1, Ex2, Ex3, Ex3Additive
+from tests.problems import Ex1, Ex2, Ex3, Ex3Additivesd
 from tests.torch_test import TorchTestCase
 from torchsde import BrownianInterval, sdeint_adjoint
 

@@ -41,11 +41,8 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     def y_prime_f_factor(self, dt, f_eval):
         raise NotImplementedError
 
-    def step(self, t0, y0, dt):
-        assert dt > 0, 'Underflow in dt {}'.format(dt)
-
-        t1 = t0 + dt
-
+    def step(self, t0, t1, y0):
+        dt = t1 - t0
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
 
@@ -72,7 +69,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
             y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
             for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
         ]
-        return t1, y1
+        return y1
 
 
 class MilsteinIto(BaseMilstein):
