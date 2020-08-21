@@ -61,37 +61,37 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'
 
     @abc.abstractmethod
-    def step(self, t, next_t, y):
+    def step(self, t0, t1, y0):
         """Propose a step with step size from time t to time next_t, with
          current state y.
 
         Args:
-            t: float or torch.Tensor of size (,).
-            next_t: float or torch.Tensor of size (,).
-            y: torch.Tensor of size (batch_size, d).
+            t0: float or torch.Tensor of size (,).
+            t1: float or torch.Tensor of size (,).
+            y0: torch.Tensor of size (batch_size, d).
 
         Returns:
             y1, where y1 is a torch.Tensor of size (batch_size, d).
         """
         raise NotImplementedError
 
-    def step_logqp(self, t, next_t, y, logqp0):
-        y1 = self.step(t, next_t, y)
+    def step_logqp(self, t0, t1, y0, logqp0):
+        y1 = self.step(t0, t1, y0)
 
-        dt = next_t - t
+        dt = t1 - t0
         if self.sde.noise_type in (NOISE_TYPES.diagonal, NOISE_TYPES.scalar):
-            f_eval = self.sde.f(t, y)
-            g_eval = self.sde.g(t, y)
-            h_eval = self.sde.h(t, y)
+            f_eval = self.sde.f(t0, y0)
+            g_eval = self.sde.g(t0, y0)
+            h_eval = self.sde.h(t0, y0)
             u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
             logqp1 = [
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
             ]
         else:
-            f_eval = self.sde.f(t, y)
-            g_eval = self.sde.g(t, y)
-            h_eval = self.sde.h(t, y)
+            f_eval = self.sde.f(t0, y0)
+            g_eval = self.sde.g(t0, y0)
+            h_eval = self.sde.h(t0, y0)
 
             g_inv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
