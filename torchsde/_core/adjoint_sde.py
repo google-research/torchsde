@@ -157,6 +157,17 @@ class AdjointSDE(base_sde.BaseSDE):
         return (*f_eval_corrected, *vjp_y, vjp_params)
 
     ########################################
+    #                  g                   #
+    ########################################
+
+    def g(self, t, y):
+        # We don't want to define it, it's super inefficient to compute.
+        # In theory every part of the code which _could_ call it either does something else, or has some more
+        # informative error message to tell the user what went wrong.
+        # This is here as a fallback option.
+        raise RuntimeError("Adjoint `g` not defined. Please report a bug to torchsde.")
+
+    ########################################
     #                g_prod                #
     ########################################
 

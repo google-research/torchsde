@@ -105,35 +105,3 @@ def test_normality(brownian_class, device):
 
             _, pval = kstest(samples_, ref_dist.cdf)
             assert pval >= ALPHA
-
-
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
-def test_to_float32(brownian_class, device):
-    if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
-
-    t, bm = _setup(brownian_class, device, SMALL_BATCH_SIZE)
-    curr, prev, post = _dict_to_sorted_list(*bm.get_cache())
-    old = torch.cat(curr + prev + post, dim=0)
-
-    bm.to(torch.float32)
-    curr, prev, post = _dict_to_sorted_list(*bm.get_cache())
-    new = torch.cat(curr + prev + post, dim=0)
-    assert new.dtype == torch.float32
-    assert torch.allclose(old, new.double())
-
-
-@pytest.mark.parametrize("brownian_class", brownian_classes)
-def test_to_device(brownian_class):
-    if not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
-
-    t, bm = _setup(brownian_class, cpu, SMALL_BATCH_SIZE)
-    curr, prev, post = _dict_to_sorted_list(*bm.get_cache())
-    old = torch.cat(curr + prev + post, dim=0)
-
-    bm.to(gpu)
-    curr, prev, post = _dict_to_sorted_list(*bm.get_cache())
-    new = torch.cat(curr + prev + post, dim=0)
-    assert str(new.device).startswith('cuda')
-    assert torch.allclose(old, new.cpu())

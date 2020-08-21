@@ -506,8 +506,10 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 shape = (*self.shape, *self.shape[-1:])  # not self.shape[-1] as that may not exist
                 A = torch.zeros(shape, dtype=self.dtype, device=self.device)
         else:
-            if self._dt is None:
+            if self._dt is None or (tb - ta) < 0.1 * self._dt:
                 # If 'dt' wasn't specified, then take the first step as an estimate of the expected average step size
+                # If the increment is really small compared to our expected average step size, then our estimate was
+                # probably off: create a better dependency tree now.
                 self._create_dependency_tree(tb - ta)
 
             # Find the intervals that correspond to the query. We start our search at the last interval we accessed in

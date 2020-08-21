@@ -25,6 +25,7 @@ import torch
 
 from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
+from .. import adjoint_sde
 from .. import base_solver
 from .. import misc
 
@@ -46,6 +47,11 @@ class SRK(base_solver.BaseSDESolver):
             self.step = self.additive_step
         else:
             self.step = self.diagonal_or_scalar_step
+
+        if isinstance(sde, adjoint_sde.AdjointSDE):
+            raise ValueError(f"Derivative-free Milstein cannot be used for adjoint SDEs, because it requires "
+                             f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
+                             f"diffusion-vector product. Use a different method instead.")
 
         super(SRK, self).__init__(sde=sde, **kwargs)
 
