@@ -22,21 +22,22 @@ import torch
 
 from tests import basic_sde
 from tests.torch_test import TorchTestCase
-from torchsde import BrownianPath, sdeint
+from torchsde import BrownianInterval, sdeint
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+batch_size = 16
 d = 3
 m = 2
 t0 = 0.0
 t1 = 0.3
 T = 5
-batch_size = 16
 dt = 1e-2
-ts = torch.linspace(t0, t1, steps=T).to(device)
-y0 = torch.ones(batch_size, d).to(device)
+dtype = torch.get_default_dtype()
+ts = torch.linspace(t0, t1, steps=T, device=device)
+y0 = torch.ones(batch_size, d, device=device)
 
 basic_sdes = (
     basic_sde.BasicSDE1(d=d).to(device),
@@ -45,9 +46,16 @@ basic_sdes = (
     basic_sde.BasicSDE4(d=d).to(device),
 )
 
-bm_diagonal = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, d).to(device))
-bm_general = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, m).to(device))
-bm_scalar = BrownianPath(t0=ts[0], w0=torch.zeros(batch_size, 1).to(device))
+# Make bms explicitly for testing.
+bm_diagonal = BrownianInterval(
+    t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
+)
+bm_general = BrownianInterval(
+    t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device, levy_area_approximation='space-time'
+)
+bm_scalar = BrownianInterval(
+    t0=t0, t1=t1, shape=(batch_size, 1), dtype=dtype, device=device, levy_area_approximation='space-time'
+)
 
 
 class TestSdeint(TorchTestCase):
@@ -64,13 +72,13 @@ class TestSdeint(TorchTestCase):
         self.assertEqual(ans[0].shape, (T, batch_size, d))
         self.assertEqual(ans[1].shape, (T - 1, batch_size))
 
-    def test_sdeint_gen(self):
+    def test_sdeint_general(self):
         sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
         for method in ('euler',):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
             self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
 
-    def test_sdeint_add(self):
+    def test_sdeint_additive(self):
         sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
         for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
@@ -117,13 +125,14 @@ class TestSdeint(TorchTestCase):
             for method in ('milstein', 'srk'):
                 self._test_sdeint_logqp(sde, bm_diagonal, adaptive=True, method=method, dt=dt)
 
-    def test_sdeint_tuplesde(self):
+    def test_sdeint_tuple_sde(self):
         y0_ = (y0,)  # Make tuple input.
         sde = basic_sde.TupleSDE(d=d).to(device)
-        bm = lambda t: (bm_diagonal(t),)
-        with torch.no_grad():
-            ans = sdeint(sde, y0_, ts, bm, method='euler', dt=dt)
+
+        for method in ('euler', 'milstein', 'srk'):
+            ans = sdeint(sde, y0_, ts, method=method, dt=dt)
             self.assertTrue(isinstance(ans, tuple))
+            self.assertEqual(ans[0].size(), (T, batch_size, d))
 
     def _test_sdeint(self, sde, bm, adaptive, method, dt):
         # Using `f` as drift.
@@ -146,7 +155,8 @@ class TestSdeint(TorchTestCase):
         # Using `h` as drift.
         with torch.no_grad():
             ans, logqp = sdeint(
-                sde, y0, ts, bm, logqp=True, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'})
+                sde, y0, ts, bm, logqp=True, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'}
+            )
         self.assertEqual(ans.shape, (T, batch_size, d))
         self.assertEqual(logqp.shape, (T - 1, batch_size))
 

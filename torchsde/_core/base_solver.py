@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import abc
 import warnings
 
 import torch
 
-from ..settings import NOISE_TYPES
-
 from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
+from ..settings import NOISE_TYPES
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -36,7 +36,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
     def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
-        assert misc.is_seq_not_nested(y0), 'Initial value for integration should be a tuple of tensors.'
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
         assert sde.noise_type in self.noise_types, (
             f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
@@ -62,25 +61,25 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'
 
     @abc.abstractmethod
-    def step(self, t, y, dt):
-        """Propose a step with step size dt, starting at time t and state y.
+    def step(self, t, next_t, y):
+        """Propose a step with step size from time t to time next_t, with
+         current state y.
 
         Args:
             t: float or torch.Tensor of size (,).
+            next_t: float or torch.Tensor of size (,).
             y: torch.Tensor of size (batch_size, d).
-            dt: float or torch.Tensor of size (,).
 
         Returns:
-            (t1, y1), where t1 is a float or torch.Tensor of size (,)
-            and y1 is a torch.Tensor of size (batch_size, d).
+            y1, where y1 is a torch.Tensor of size (batch_size, d).
         """
         raise NotImplementedError
 
     def step_logqp(self, t, next_t, y, logqp0):
-        dt = next_t - t
-        y1 = self.step_(t, next_t, y)
+        y1 = self.step(t, next_t, y)
 
-        if self.sde.noise_type in ("diagonal", "scalar"):
+        dt = next_t - t
+        if self.sde.noise_type in (NOISE_TYPES.diagonal, NOISE_TYPES.scalar):
             f_eval = self.sde.f(t, y)
             g_eval = self.sde.g(t, y)
             h_eval = self.sde.h(t, y)
@@ -103,12 +102,6 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             ]
         return y1, logqp1
 
-    # TODO: adjust solvers and remove this
-    def step_(self, t, next_t, y):
-        dt = next_t - t
-        _, next_y = self.step(t, y, dt)
-        return next_y
-
     # TODO: unify integrate and integrate_logqp? My IDE spits out so many warnings about duplicate code.
     def integrate(self, ts):
         """Integrate along trajectory.
@@ -116,7 +109,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         Returns:
             A single state tensor of size (T, batch_size, d) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
@@ -131,12 +124,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             while curr_t < out_t:
                 next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
+                    delta_t = step_size
                     # Take 1 full step.
-                    next_y_full = self.step_(curr_t, next_t, curr_y)
+                    next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.
                     midpoint_t = 0.5 * (curr_t + next_t)
-                    midpoint_y = self.step_(curr_t, midpoint_t, curr_y)
-                    next_y = self.step_(midpoint_t, next_t, midpoint_y)
+                    midpoint_y = self.step(curr_t, midpoint_t, curr_y)
+                    next_y = self.step(midpoint_t, next_t, midpoint_y)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -158,7 +152,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                         curr_t, curr_y = next_t, next_y
                 else:
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t, curr_y = next_t, self.step_(curr_t, next_t, curr_y)
+                    curr_t, curr_y = next_t, self.step(curr_t, next_t, curr_y)
             ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
 
         ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
@@ -171,7 +165,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             A single state tensor of size (T, batch_size, d) (or tuple), and a single log-ratio tensor of
             size (T - 1, batch_size) (or tuple).
         """
-        assert misc.is_increasing(ts), 'Evaluation timestamps should be strictly increasing.'
+        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
@@ -189,8 +183,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             while curr_t < out_t:
                 next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
+                    delta_t = step_size
                     # Take 1 full step.
-                    next_y_full = self.step_(curr_t, next_t, curr_y)
+                    next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.
                     midpoint_t = 0.5 * (curr_t + next_t)
                     midpoint_y, midpoint_logqp = self.step_logqp(curr_t, midpoint_t, curr_y, curr_logqp)
@@ -222,6 +217,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                                                           y1=curr_y, logqp1=curr_logqp, t=out_t)
             ys.append(ret_y)
             [logqp_i.append(ret_logqp_i) for logqp_i, ret_logqp_i in zip(logqp, ret_logqp)]
+
 
         ans = [torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0))]
         logqp = [torch.stack(logqp_i, dim=0) for logqp_i in logqp]

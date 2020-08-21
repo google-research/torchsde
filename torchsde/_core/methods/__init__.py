@@ -12,25 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...settings import METHODS
+from ...settings import METHODS, SDE_TYPES
 
 from .euler import Euler
 from .midpoint import Midpoint
-from .milstein import Milstein
+from .milstein import MilsteinIto, MilsteinStratonovich
 from .srk import SRK
 from .heun import Heun
 
 
-def select(method):
+def select(method, sde_type):
     if method == METHODS.euler:
         return Euler
-    elif method == METHODS.milstein:
-        return Milstein
+    elif method == METHODS.milstein and sde_type == SDE_TYPES.ito:
+        return MilsteinIto
     elif method == METHODS.srk:
         return SRK
     elif method == METHODS.midpoint:
         return Midpoint
     elif method == METHODS.heun:
         return Heun
+    elif method == METHODS.milstein and sde_type == SDE_TYPES.stratonovich:
+        return MilsteinStratonovich
     else:
         raise ValueError(f"Method '{method}' does not match any known method.")

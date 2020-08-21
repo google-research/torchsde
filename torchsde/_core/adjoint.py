@@ -21,14 +21,14 @@ try:
     from ..brownian_lib import BrownianPath
 except Exception:  # noqa
     from .._brownian import BrownianPath
-from .._brownian import BaseBrownian, ReverseBrownian, TupleBrownian
-from ..settings import NOISE_TYPES
+from .._brownian import BaseBrownian, ReverseBrownian
 from ..types import TensorOrTensors, Scalar, Vector
+from .adjoint_sde import AdjointSDE  # Directly import to avoid conflicting names.
 
-from . import adjoint_sdes
 from . import base_sde
 from . import misc
 from . import sdeint
+from ..settings import METHODS, SDE_TYPES, NOISE_TYPES
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -80,7 +80,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _get_adjoint_sde(sde=sde, params=params)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, n_tensors=n_tensors)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs]
@@ -171,7 +171,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
         n_tensors, n_params = len(ans), len(params)
 
         reverse_bm = ReverseBrownian(bm)
-        adjoint_sde = _get_adjoint_sde(sde=sde, params=params, logqp=True)
+        adjoint_sde = AdjointSDE(forward_sde=sde, params=params, n_tensors=n_tensors, logqp=True)
 
         T = ans[0].size(0)
         adj_y = [grad_outputs_[-1] for grad_outputs_ in grad_outputs[:n_tensors]]
@@ -217,7 +217,7 @@ def sdeint_adjoint(sde,
                    bm: Optional[BaseBrownian] = None,
                    logqp: Optional[bool] = False,
                    method: Optional[str] = 'srk',
-                   adjoint_method: Optional[str] = 'milstein',
+                   adjoint_method: Optional[str] = None,
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
                    adjoint_adaptive: Optional[bool] = False,
@@ -232,12 +232,12 @@ def sdeint_adjoint(sde,
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:
-        sde (object): Object with methods `f` and `g` representing the drift and
-            diffusion. The output of `g` should be a single (or a tuple of)
-            tensor(s) of size (batch_size, d) for diagonal noise SDEs or
-            (batch_size, d, m) for SDEs of other noise types; d is the
-            dimensionality of state and m is the dimensionality of Brownian
-            motion.
+        sde (torch.nn.Module): Object with methods `f` and `g` representing the
+            drift and diffusion. The output of `g` should be a single
+            (or a tuple of) tensor(s) of size (batch_size, d) for diagonal
+            noise SDEs or (batch_size, d, m) for SDEs of other noise types; d
+            is the dimensionality of state and m is the dimensionality of
+            Brownian motion.
         y0 (sequence of Tensor): Tensors for initial state.
         ts (Tensor or sequence of float): Query times in non-descending order.
             The state at the first time of `ts` should be `y0`.
@@ -248,7 +248,8 @@ def sdeint_adjoint(sde,
         logqp (bool, optional): If `True`, also return the log-ratio penalty.
         method (str, optional): Name of numerical integration method.
         adjoint_method (str, optional): Name of numerical integration method for
-            backward adjoint solve.
+            backward adjoint solve. Defaults to a sensible choice depending on
+                the noise type of the supplied SDE.
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
@@ -282,8 +283,8 @@ def sdeint_adjoint(sde,
     if not isinstance(sde, nn.Module):
         raise ValueError('sde is required to be an instance of nn.Module.')
 
-    sde, y0, bm, tensor_input = sdeint.check_contract(sde=sde, method=method, logqp=logqp, ts=ts, y0=y0, bm=bm,
-                                                      names=names, adjoint_method=adjoint_method)
+    sde, y0, ts, bm, tensor_input = sdeint.check_contract(sde, y0, ts, bm, logqp, method, names)
+    adjoint_method = _check_and_select_default_adjoint_method(sde, adjoint_method)
 
     flat_params = misc.flatten(sde.parameters())
     if logqp:
@@ -299,24 +300,22 @@ def sdeint_adjoint(sde,
     return ys[0] if tensor_input else ys
 
 
-def _get_adjoint_sde(sde, params, logqp=False):
-    if sde.noise_type == NOISE_TYPES.diagonal:
-        if logqp:
-            return adjoint_sdes.AdjointSDEDiagonalLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEDiagonal(sde, params=params)
+def _check_and_select_default_adjoint_method(sde, adjoint_method: str) -> str:
+    sde_type, noise_type = sde.sde_type, sde.noise_type
 
-    elif sde.noise_type == NOISE_TYPES.scalar:
-        if logqp:
-            return adjoint_sdes.AdjointSDEScalarLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEScalar(sde, params=params)
+    if adjoint_method is None:  # Select the default based on noise type of forward.
+        adjoint_method = {
+            SDE_TYPES.ito: {
+                NOISE_TYPES.diagonal: METHODS.milstein,
+                NOISE_TYPES.additive: METHODS.euler,
+                NOISE_TYPES.scalar: METHODS.euler,  # TODO: Optimize this.
+            }.get(noise_type, "unsupported"),
+            SDE_TYPES.stratonovich: {
+                NOISE_TYPES.general: METHODS.midpoint,
+            }.get(noise_type, "unsupported")
+        }[sde_type]
 
-    elif sde.noise_type == NOISE_TYPES.additive:
-        if logqp:
-            return adjoint_sdes.AdjointSDEAdditiveLogqp(sde, params=params)
-        else:
-            return adjoint_sdes.AdjointSDEAdditive(sde, params=params)
+        if adjoint_method == "unsupported":
+            raise ValueError(f"Adjoint not supported for {sde_type} SDEs with noise type {noise_type}.")
 
-    else:
-        raise ValueError('Adjoint mode for general noise SDEs not supported.')
+    return adjoint_method

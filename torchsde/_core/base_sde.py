@@ -17,8 +17,8 @@ import abc
 import torch
 from torch import nn
 
-from ..settings import NOISE_TYPES, SDE_TYPES
 from . import misc
+from ..settings import NOISE_TYPES, SDE_TYPES
 
 
 class BaseSDE(abc.ABC, nn.Module):
@@ -38,47 +38,14 @@ class BaseSDE(abc.ABC, nn.Module):
         self.sde_type = sde_type
 
 
-class AdjointSDE(BaseSDE):
-    """Base class for reverse-time adjoint SDE.
-
-    Each forward SDE with different noise type has a different adjoint SDE.
-    """
-
-    def __init__(self, sde, noise_type):
-        # `noise_type` must be supplied! Since the adjoint might have a different noise type than the original SDE.
-        super(AdjointSDE, self).__init__(sde_type=sde.sde_type, noise_type=noise_type)
-        self._base_sde = sde
-
-    @abc.abstractmethod
-    def f(self, t, y):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def g(self, t, y):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def h(self, t, y):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def g_prod(self, t, y, v):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def gdg_prod(self, t, y, v):
-        raise NotImplementedError
-
-
 class ForwardSDE(BaseSDE):
 
     def __init__(self, sde):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
-
         self.f = sde.f
         self.g = sde.g
-        if hasattr(sde, 'h'):
+        if hasattr(sde, "h"):
             self.h = sde.h
 
         # Register the core function. This avoids polluting the codebase with if-statements.
