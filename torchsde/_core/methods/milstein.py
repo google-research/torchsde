@@ -34,8 +34,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
             options[METHOD_OPTIONS.grad_free] = False
         if options[METHOD_OPTIONS.grad_free]:
             if sde.noise_type == NOISE_TYPES.additive:
-                # dg in this case, and gdg_prod is already setup to handle that,
-                # whilst the grad_free code path isn't.
+                # dg=0 in this case, and gdg_prod is already setup to handle that, whilst the grad_free code path isn't.
                 options[METHOD_OPTIONS.grad_free] = False
         if options[METHOD_OPTIONS.grad_free]:
             if isinstance(sde, adjoint_sde.AdjointSDE):

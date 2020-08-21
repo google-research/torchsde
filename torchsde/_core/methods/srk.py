@@ -66,6 +66,7 @@ class SRK(base_solver.BaseSDESolver):
         I_kk = [(delta_bm_ ** 2. - dt) / 2. for delta_bm_ in I_k]
         I_kkk = [(delta_bm_ ** 3. - 3. * dt * delta_bm_) / 6. for delta_bm_ in I_k]
 
+        y1 = y0
         H0, H1 = [], []
         for s in range(srid2.STAGES):
             H0s, H1s = y0, y0  # Values at the current stage to be accumulated.
@@ -92,7 +93,7 @@ class SRK(base_solver.BaseSDESolver):
             ]
             y1 = [
                 y1_ + srid2.alpha[s] * f_eval_ * dt + g_weight_ * g_eval_
-                for y1_, f_eval_, g_eval_, g_weight_ in zip(y0, f_eval, g_eval, g_weight)
+                for y1_, f_eval_, g_eval_, g_weight_ in zip(y1, f_eval, g_eval, g_weight)
             ]
         return y1
 
@@ -100,6 +101,7 @@ class SRK(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k, I_k0 = self.bm(t0, t1, return_U=True)
 
+        y1 = y0
         H0 = []
         for i in range(sra1.STAGES):
             H0i = y0
@@ -117,6 +119,6 @@ class SRK(base_solver.BaseSDESolver):
             g_weight = [sra1.beta1[i] * I_k_ + sra1.beta2[i] * I_k0_ / dt for I_k_, I_k0_ in zip(I_k, I_k0)]
             y1 = [
                 y1_ + sra1.alpha[i] * f_eval_ * dt + misc.batch_mvp(g_eval_, g_weight_)
-                for y1_, f_eval_, g_eval_, g_weight_ in zip(y0, f_eval, g_eval, g_weight)
+                for y1_, f_eval_, g_eval_, g_weight_ in zip(y1, f_eval, g_eval, g_weight)
             ]
         return y1
