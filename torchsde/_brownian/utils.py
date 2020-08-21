@@ -159,7 +159,7 @@ def H_to_U(W: torch.Tensor, H: torch.Tensor, h: float) -> torch.Tensor:
     return h * (.5 * W + H)
 
 
-def check_tensor_info(*tensors, shape=None, dtype=None, device=None):
+def check_tensor_info(*tensors, name, shape=None, dtype=None, device=None):
     """Check if shapes, dtypes, and devices of input tensors all match prescribed values."""
     tensors = list(filter(torch.is_tensor, tensors))
 
@@ -178,13 +178,14 @@ def check_tensor_info(*tensors, shape=None, dtype=None, device=None):
     devices += [t.device for t in tensors]
 
     if len(shapes) == 0:
-        raise ValueError("Must either specify `shape` or pass in `w0` to implicitly define the shape.")
+        raise ValueError(f"Must either specify `shape` or pass in {name} to implicitly define the shape.")
 
     if not all(i == shapes[0] for i in shapes):
-        raise ValueError("Multiple shapes found. Make sure `shape` and `w0` are consistent.")
+        raise ValueError(f"Multiple shapes found. Make sure `shape` and {name} are consistent.")
     if not all(i == dtypes[0] for i in dtypes):
-        raise ValueError("Multiple dtypes found. Make sure `dtype` and `w0` are consistent.")
+        raise ValueError(f"Multiple dtypes found. Make sure `dtype` and {name} are consistent.")
     if not all(i == devices[0] for i in devices):
-        raise ValueError("Multiple devices found. Make sure `device` and `w0` are consistent.")
+        raise ValueError(f"Multiple devices found. Make sure `device` and {name} are consistent.")
 
-    return shapes, dtypes, devices
+    # Make sure shape is a tuple (not a torch.Size) for neat repr-printing purposes.
+    return tuple(shapes[0]), dtypes[0], devices[0]

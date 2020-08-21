@@ -79,7 +79,7 @@ class BrownianPath(base_brownian.BaseBrownian):
         if not utils.is_scalar(t0):
             raise ValueError('Initial time `t0` should be a float or 0-d torch.Tensor.')
 
-        utils.check_tensor_info(w0, shape=shape, dtype=dtype, device=device)
+        shape, dtype, device = utils.check_tensor_info(w0, shape=shape, dtype=dtype, device=device, name='`w0`')
 
         # Provide references so that point-based queries still work.
         t0 = float(t0)
