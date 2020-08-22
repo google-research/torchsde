@@ -313,39 +313,40 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         Args:
             t0 (float or Tensor): Initial time.
             t1 (float or Tensor): Terminal time.
-            shape (tuple of int, optional): The shape of each Brownian sample.
-                The last dimension is treated as the channel dimension and
-                any/all preceding dimensions are treated as batch dimensions.
+            shape (tuple of int): The shape of each Brownian sample.
+                If zero dimensional represents a scalar Brownian motion.
+                If one dimensional represents a batch of scalar Brownian motions.
+                If >two dimensional the last dimension represents the size of a
+                a multidimensional Brownian motion, and all previous dimensions
+                represent batch dimensions.
             dtype (torch.dtype): The dtype of each Brownian sample.
                 Defaults to the PyTorch default.
-            device (torch.device): The device of each Brownian sample.
-                Defaults to the current device.
+            device (str or torch.device): The device of each Brownian sample.
+                Defaults to the CPU.
             entropy (int): Global seed, defaults to `None` for random entropy.
-            dt (float): The expected average step size of the SDE solver.
-                Set it if you know it (e.g. when using a fixed-step solver);
-                else it will default to equal the first step this is evaluated
-                with. This allows us to set up a structure that should be
-                efficient to query at these intervals.
+            dt (float or Tensor): The expected average step size of the SDE
+                solver. Set it if you know it (e.g. when using a fixed-step
+                solver); else it will default to equal the first step this is
+                evaluated with. This allows us to set up a structure that should
+                be efficient to query at these intervals.
             pool_size (int): Size of the pooled entropy. If you care about
                 statistical randomness then increasing this will help (but will
                 slow things down).
             cache_size (int): How big a cache of recent calculations to use.
                 (As new calculations depend on old calculations, this speeds
                 things up dramatically, rather than recomputing things.)
-                The default is set to be pretty close to optimum: smaller
+                The default is set to be pretty close to the optimum: smaller
                 values imply more recalculation, whilst larger values imply
                 more time spent keeping track of the cache.
             levy_area_approximation (str): Whether to also approximate Levy
-                area. Defaults to None. Valid options are 'none',
+                area. Defaults to 'none'. Valid options are 'none',
                 'space-time', 'davie' or 'foster', corresponding to different
                 approximation types.
                 This is needed for some higher-order SDE solvers.
-            W (sequence of Tensor, optional): The increment of the Brownian
-                motion over the interval [t0, t1].
-                Will be generated randomly if not provided.
-            H (sequence of Tensor, optional): The space-time Levy area of the
-                Brownian motion over the interval [t0, t1].
-                Will be generated randomly if not provided.
+            W (Tensor): The increment of the Brownian motion over the interval
+                [t0, t1]. Will be generated randomly if not provided.
+            H (Tensor): The space-time Levy area of the Brownian motion over the
+                interval [t0, t1]. Will be generated randomly if not provided.
         """
 
         if not utils.is_scalar(t0):
@@ -362,51 +363,15 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         if dt is not None:
             dt = float(dt)
 
-        shapes = []
-        dtypes = []
-        devices = []
-        if torch.is_tensor(W):
-            shapes.append(W.shape)
-            dtypes.append(W.dtype)
-            devices.append(W.device)
-        if torch.is_tensor(H):
-            shapes.append(H.shape)
-            dtypes.append(H.dtype)
-            devices.append(H.device)
-        if shape is not None:
-            shapes.append(shape)
-        if dtype is None:
-            if len(dtypes) == 0:
-                dtypes.append(torch.get_default_dtype())
-        else:
-            dtypes.append(dtype)
-        if device is None:
-            if len(devices) == 0:
-                devices.append(torch.device('cpu'))
-        else:
-            devices.append(torch.device(device))
-        if len(shapes) == 0:
-            raise ValueError("Must either specify `shape` or pass in `W` or `H` to implicitly define the shape.")
-        # Make sure the reduce actually does a comparison, to get a bool datatype
-        shapes.append(shapes[-1])
-        dtypes.append(dtypes[-1])
-        devices.append(devices[-1])
-        if not all(i == shapes[0] for i in shapes):
-            raise ValueError(
-                "Multiple shapes found. Make sure whichever of `shape`, `W`, `H` that are passed are consistent.")
-        if not all(i == dtypes[0] for i in dtypes):
-            raise ValueError(
-                "Multiple dtypes found. Make sure whichever of `dtype`, `W`, `H` that are passed are consistent.")
-        if not all(i == devices[0] for i in devices):
-            raise ValueError(
-                "Multiple devices found. Make sure whichever of `device`, `W`, `H` that are passed are consistent.")
+        shape, dtype, device = utils.check_tensor_info(W, H, shape=shape, dtype=dtype, device=device,
+                                                       name='`W` or `H`')
 
         if entropy is None:
             entropy = random.randint(0, 2 ** 31 - 1)
 
-        self.shape = tuple(shapes[0])  # convert from torch.Size if necessary
-        self.dtype = dtypes[0]
-        self.device = devices[0]
+        self.shape = shape
+        self.dtype = dtype
+        self.device = device
         self._entropy = entropy
 
         # The central piece of our implementation: an LRU cache on the calculations for increments and space-time Levy
@@ -506,8 +471,10 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 shape = (*self.shape, *self.shape[-1:])  # not self.shape[-1] as that may not exist
                 A = torch.zeros(shape, dtype=self.dtype, device=self.device)
         else:
-            if self._dt is None:
+            if self._dt is None or (tb - ta) < 0.1 * self._dt:
                 # If 'dt' wasn't specified, then take the first step as an estimate of the expected average step size
+                # If the increment is really small compared to our expected average step size, then our estimate was
+                # probably off: create a better dependency tree now.
                 self._create_dependency_tree(tb - ta)
 
             # Find the intervals that correspond to the query. We start our search at the last interval we accessed in
@@ -541,7 +508,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
         U = None
         if self.have_H:
-            U = (tb - ta) * (H + 0.5 * W)
+            U = utils.H_to_U(W, H, tb - ta)
 
         if return_U:
             if return_A:

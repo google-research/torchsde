@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-THRESHOLD = 1e-5  # Voodoo constant chosen based on results comparing adjoint gradient and analytical gradient.
 
 import abc
 import warnings
@@ -62,36 +61,37 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         return f'{self.__class__.__name__} of strong order: {self.strong_order}'
 
     @abc.abstractmethod
-    def step(self, t, y, dt):
-        """Propose a step with step size dt, starting at time t and state y.
+    def step(self, t0, t1, y0):
+        """Propose a step with step size from time t to time next_t, with
+         current state y.
 
         Args:
-            t: float or torch.Tensor of size (,).
-            y: torch.Tensor of size (batch_size, d).
-            dt: float or torch.Tensor of size (,).
+            t0: float or torch.Tensor of size (,).
+            t1: float or torch.Tensor of size (,).
+            y0: torch.Tensor of size (batch_size, d).
 
         Returns:
-            (t1, y1), where t1 is a float or torch.Tensor of size (,)
-            and y1 is a torch.Tensor of size (batch_size, d).
+            y1, where y1 is a torch.Tensor of size (batch_size, d).
         """
         raise NotImplementedError
 
-    def step_logqp(self, t, y, dt, logqp0):
-        t1, y1 = self.step(t, y, dt)
+    def step_logqp(self, t0, t1, y0, logqp0):
+        y1 = self.step(t0, t1, y0)
 
+        dt = t1 - t0
         if self.sde.noise_type in (NOISE_TYPES.diagonal, NOISE_TYPES.scalar):
-            f_eval = self.sde.f(t, y)
-            g_eval = self.sde.g(t, y)
-            h_eval = self.sde.h(t, y)
+            f_eval = self.sde.f(t0, y0)
+            g_eval = self.sde.g(t0, y0)
+            h_eval = self.sde.h(t0, y0)
             u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
             logqp1 = [
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
             ]
         else:
-            f_eval = self.sde.f(t, y)
-            g_eval = self.sde.g(t, y)
-            h_eval = self.sde.h(t, y)
+            f_eval = self.sde.f(t0, y0)
+            g_eval = self.sde.g(t0, y0)
+            h_eval = self.sde.h(t0, y0)
 
             g_inv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
             u_eval = misc.seq_sub(f_eval, h_eval)
@@ -100,7 +100,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 logqp0_i + .5 * torch.sum(u_eval_i ** 2., dim=1) * dt
                 for logqp0_i, u_eval_i in zip(logqp0, u_eval)
             ]
-        return t1, y1, logqp1
+        return y1, logqp1
 
     # TODO: unify integrate and integrate_logqp? My IDE spits out so many warnings about duplicate code.
     def integrate(self, ts):
@@ -113,25 +113,27 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
-        curr_t = ts[0]
-        curr_y = y0
+
+        prev_t = curr_t = ts[0]
+        prev_y = curr_y = y0
+
         ys = [y0]
         prev_error_ratio = None
-        prev_t, prev_y = curr_t, curr_y
 
-        for next_t in ts[1:]:
-            while curr_t < next_t:
+        for out_t in ts[1:]:
+            while curr_t < out_t:
+                next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f = self.step(curr_t, curr_y, delta_t)
+                    next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.
-                    t05, y05 = self.step(curr_t, curr_y, delta_t / 2)
-                    t1h, y1h = self.step(t05, y05, delta_t / 2)
+                    midpoint_t = 0.5 * (curr_t + next_t)
+                    midpoint_y = self.step(curr_t, midpoint_t, curr_y)
+                    next_y = self.step(midpoint_t, next_t, midpoint_y)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
-                        error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
+                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
                             prev_step_size=step_size,
@@ -146,23 +148,11 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     # Accept step.
                     if error_estimate <= 1 or step_size <= dt_min:
                         prev_t, prev_y = curr_t, curr_y
-                        curr_t, curr_y = t1h, y1h
-                    del t1f, y1f
+                        curr_t, curr_y = next_t, next_y
                 else:
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t, curr_y = self.step(curr_t, curr_y, step_size)
-
-            # Sample paths of SDEs typically aren't differentiable, so it doesn't really make sense to interpolate
-            # using high-order polynomials. We try to avoid interpolation for as much as possible, but we also want to
-            # avoid stepping with super small step sizes (e.g. < 1e-9), in which case the solvers and Brownian motion
-            # data structures may produce pathological behavior.
-
-            # `curr_t` may overstep `next_t`. If `next_t` is close to either end, we interpolate.
-            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
-                curr_t, curr_y = interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=next_t)
-            else:
-                curr_t, curr_y = self.step(prev_t, prev_y, next_t - prev_t)
-            ys.append(curr_y)
+                    curr_t, curr_y = next_t, self.step(curr_t, next_t, curr_y)
+            ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
 
         ans = tuple(torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0)))
         return ans
@@ -178,28 +168,30 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         y0, dt, adaptive, rtol, atol, dt_min = (self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min)
 
         step_size = dt
-        curr_t = ts[0]
-        curr_y = y0
-        ys = [y0]
-        logqp = [[] for _ in y0]
-        prev_error_ratio = None
-        prev_t, prev_y = curr_t, curr_y
 
-        for next_t in ts[1:]:
+        prev_t = curr_t = ts[0]
+        prev_y = curr_y = y0
+
+        ys = [y0]
+        prev_error_ratio = None
+        logqp = [[] for _ in y0]
+
+        for out_t in ts[1:]:
             curr_logqp = [0. for _ in y0]
             prev_logqp = curr_logqp
-            while curr_t < next_t:
+            while curr_t < out_t:
+                next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
-                    delta_t = step_size
                     # Take 1 full step.
-                    t1f, y1f, logqp1f = self.step_logqp(curr_t, curr_y, delta_t, logqp0=curr_logqp)
+                    next_y_full = self.step(curr_t, next_t, curr_y)
                     # Take 2 half steps.
-                    t05, y05, logqp05 = self.step_logqp(curr_t, curr_y, delta_t / 2, logqp0=curr_logqp)
-                    t1h, y1h, logqp1h = self.step_logqp(t05, y05, delta_t / 2, logqp0=logqp05)
+                    midpoint_t = 0.5 * (curr_t + next_t)
+                    midpoint_y, midpoint_logqp = self.step_logqp(curr_t, midpoint_t, curr_y, curr_logqp)
+                    next_y, next_logqp = self.step_logqp(midpoint_t, next_t, midpoint_y, midpoint_logqp)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
-                        error_estimate = adaptive_stepping.compute_error(y1f, y1h, rtol, atol)
+                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, rtol, atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
                             prev_step_size=step_size,
@@ -214,20 +206,16 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     # Accept step.
                     if error_estimate <= 1 or step_size <= dt_min:
                         prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
-                        curr_t, curr_y, curr_logqp = t1h, y1h, logqp1h
-                    del t1f, y1f, logqp1f
+                        curr_t, curr_y, curr_logqp = next_t, next_y, next_logqp
                 else:
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
-                    curr_t, curr_y, curr_logqp = self.step_logqp(curr_t, curr_y, step_size, logqp0=curr_logqp)
+                    curr_y, curr_logqp = self.step_logqp(curr_t, next_t, curr_y, curr_logqp)
+                    curr_t = next_t
+            ret_y, ret_logqp = interp.linear_interp_logqp(t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t,
+                                                          y1=curr_y, logqp1=curr_logqp, t=out_t)
+            ys.append(ret_y)
+            [logqp_i.append(ret_logqp_i) for logqp_i, ret_logqp_i in zip(logqp, ret_logqp)]
 
-            if curr_t - next_t < THRESHOLD or next_t - prev_t < THRESHOLD:
-                curr_t, curr_y, curr_logqp = interp.linear_interp_logqp(
-                    t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t, y1=curr_y, logqp1=curr_logqp, t=next_t
-                )
-            else:
-                curr_t, curr_y, curr_logqp = self.step_logqp(prev_t, prev_y, next_t - prev_t, logqp0=prev_logqp)
-            ys.append(curr_y)
-            [logqp_i.append(curr_logqp_i) for logqp_i, curr_logqp_i in zip(logqp, curr_logqp)]
 
         ans = [torch.stack([ys[j][i] for j in range(len(ts))], dim=0) for i in range(len(y0))]
         logqp = [torch.stack(logqp_i, dim=0) for logqp_i in logqp]

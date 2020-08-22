@@ -30,11 +30,8 @@ class Midpoint(base_solver.BaseSDESolver):
             self.strong_order = 1.0
         super(Midpoint, self).__init__(sde=sde, **kwargs)
 
-    def step(self, t0, y0, dt):
-        assert dt > 0, 'Underflow in dt {}'.format(dt)
-
-        t1 = t0 + dt
-
+    def step(self, t0, t1, y0):
+        dt = t1 - t0
         I_k = self.bm(t0, t1)
 
         f_eval = self.sde.f(t0, y0)
@@ -56,4 +53,4 @@ class Midpoint(base_solver.BaseSDESolver):
             for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval_prime, g_prod_eval_prime)
         ]
 
-        return t1, y1
+        return y1

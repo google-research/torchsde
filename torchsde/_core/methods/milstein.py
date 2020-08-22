@@ -19,6 +19,7 @@ import torch
 
 from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS
 
+from .. import adjoint_sde
 from .. import base_solver
 
 
@@ -28,10 +29,21 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
-    def __init__(self, options, **kwargs):
+    def __init__(self, sde, options, **kwargs):
         if METHOD_OPTIONS.grad_free not in options:
             options[METHOD_OPTIONS.grad_free] = False
-        super(BaseMilstein, self).__init__(options=options, **kwargs)
+        if options[METHOD_OPTIONS.grad_free]:
+            if sde.noise_type == NOISE_TYPES.additive:
+                # dg=0 in this case, and gdg_prod is already setup to handle that, whilst the grad_free code path isn't.
+                options[METHOD_OPTIONS.grad_free] = False
+        if options[METHOD_OPTIONS.grad_free]:
+            if isinstance(sde, adjoint_sde.AdjointSDE):
+                # We need access to the diffusion to do things grad-free.
+                raise ValueError(f"Derivative-free Milstein cannot be used for adjoint SDEs, because it requires "
+                                 f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
+                                 f"diffusion-vector product. Use derivative-using Milstein instead: "
+                                 f"`adjoint_options=dict({METHOD_OPTIONS.grad_free}=False)`")
+        super(BaseMilstein, self).__init__(sde=sde, options=options, **kwargs)
 
     @abc.abstractmethod
     def v_term(self, I_k, dt):
@@ -41,19 +53,16 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     def y_prime_f_factor(self, dt, f_eval):
         raise NotImplementedError
 
-    def step(self, t0, y0, dt):
-        assert dt > 0, 'Underflow in dt {}'.format(dt)
-
-        t1 = t0 + dt
-
+    def step(self, t0, t1, y0):
+        dt = t1 - t0
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
 
         f_eval = self.sde.f(t0, y0)
-        g_eval = self.sde.g(t0, y0)
         g_prod_eval = self.sde.g_prod(t0, y0, I_k)
 
         if self.options[METHOD_OPTIONS.grad_free]:
+            g_eval = self.sde.g(t0, y0)
             g_prod_eval_v = self.sde.g_prod(t0, y0, v)
             sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
             y0_prime = [
@@ -72,7 +81,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
             y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
             for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
         ]
-        return t1, y1
+        return y1
 
 
 class MilsteinIto(BaseMilstein):

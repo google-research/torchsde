@@ -17,6 +17,7 @@ from typing import Optional, Dict, Any
 
 import torch
 
+from . import adjoint_sde
 from . import base_sde
 from . import methods
 from .._brownian import BaseBrownian, TupleBrownian, BrownianInterval
@@ -134,77 +135,84 @@ def check_contract(sde, y0, ts, bm, logqp, method, names):
     if not isinstance(y0, tuple) or not all(torch.is_tensor(y0_) for y0_ in y0):
         raise ValueError("`y0` must be a Tensor or a tuple of Tensors.")
 
-    drift_shape = [fi.shape for fi in sde.f(ts[0], y0)]
-    diffusion_shape = [gi.shape for gi in sde.g(ts[0], y0)]
+    if not torch.is_tensor(ts):
+        if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
+            raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
+        ts = torch.tensor(ts, dtype=y0[0].dtype, device=y0[0].device)
 
-    if len(drift_shape) != len(diffusion_shape) or len(drift_shape) != len(y0):
-        raise ValueError("drift, diffusion and y0 must all return the same number of Tensors.")
+    drift_shape = [fi.shape for fi in sde.f(ts[0], y0)]
 
     for drift_shape_, y0_ in zip(drift_shape, y0):
         if drift_shape_ != y0_.shape:
             raise ValueError(f"Drift must return a Tensor of the same shape as y0. Got drift shape {drift_shape_} but "
                              f"y0 shape {y0_.shape}.")
 
-    # TODO: Add back the scalar noise check and make it consistent with the underlying functionality.
-    noise_channels = diffusion_shape[0][-1]
-    if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general):
-        batch_dimensions = diffusion_shape[0][:-2]
-        for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
-            drift_shape_ = tuple(drift_shape_)
-            diffusion_shape_ = tuple(diffusion_shape_)
-            if len(drift_shape_) == 0:
-                raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
-            if len(diffusion_shape_) < 2:
-                raise ValueError(f"Diffusion must have shape (..., state_channels, noise_channels), but got shape "
-                                 f"{diffusion_shape_}.")
-            if drift_shape_ != diffusion_shape_[:-1]:
-                raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape "
-                                 f"{drift_shape_}, meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} "
-                                 f"channel dimensions, but diffusion shape {diffusion_shape_}, meaning "
-                                 f"{diffusion_shape_[:-2]} batch dimensions, {diffusion_shape_[-2]} channel dimensions "
-                                 f"and {diffusion_shape_[-1]} noise dimension.")
-            if diffusion_shape_[:-2] != batch_dimensions:
-                raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
-                                 "dimensions.")
-            if diffusion_shape_[-1] != noise_channels:
-                raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
-        if sde.noise_type == NOISE_TYPES.scalar:
-            if noise_channels != 1:
-                raise ValueError(f"Scalar noise must have only one channel; the diffusion has {noise_channels} noise "
-                                 f"channels.")
-    else:  # sde.noise_type == NOISE_TYPES.diagonal
-        batch_dimensions = diffusion_shape[0][:-1]
-        for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
-            drift_shape_ = tuple(drift_shape_)
-            diffusion_shape_ = tuple(diffusion_shape_)
-            if len(drift_shape_) == 0:
-                raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
-            if len(diffusion_shape_) == 0:
-                raise ValueError(f"Diffusion must have shape (..., state_channels), but got shape ().")
-            if drift_shape_ != diffusion_shape_:
-                raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape "
-                                 f"{drift_shape_}, meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} "
-                                 f"channel dimensions, but diffusion shape {diffusion_shape_}, meaning "
-                                 f"{diffusion_shape_[:-1]} batch dimensions, {diffusion_shape_[-1]} channel dimensions "
-                                 f"and {diffusion_shape_[-1]} noise dimension.")
-            if diffusion_shape_[:-1] != batch_dimensions:
-                raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
-                                 "dimensions.")
-            if diffusion_shape_[-1] != noise_channels:
-                raise ValueError("Every Tensor return by the diffusion must have the same number of noise channels.")
+    if isinstance(sde, adjoint_sde.AdjointSDE):
+        if bm is None:
+            raise ValueError("Adjoint SDEs should have a Brownian motion defined. Please report bug to torchsde.")
+    else:
+        diffusion_shape = [gi.shape for gi in sde.g(ts[0], y0)]
 
-    if not torch.is_tensor(ts):
-        if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
-            raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
-        ts = torch.tensor(ts, dtype=y0[0].dtype, device=y0[0].device)
+        if len(drift_shape) != len(diffusion_shape) or len(drift_shape) != len(y0):
+            raise ValueError("drift, diffusion and y0 must all return the same number of Tensors.")
 
-    if bm is None:
-        if method == METHODS.srk:
-            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
-        else:
-            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0[0].dtype,
-                              device=y0[0].device, levy_area_approximation=levy_area_approximation)
+        # TODO: Add back the scalar noise check and make it consistent with the underlying functionality.
+        noise_channels = diffusion_shape[0][-1]
+        if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general):
+            batch_dimensions = diffusion_shape[0][:-2]
+            for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
+                drift_shape_ = tuple(drift_shape_)
+                diffusion_shape_ = tuple(diffusion_shape_)
+                if len(drift_shape_) == 0:
+                    raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
+                if len(diffusion_shape_) < 2:
+                    raise ValueError(f"Diffusion must have shape (..., state_channels, noise_channels), but got shape "
+                                     f"{diffusion_shape_}.")
+                if drift_shape_ != diffusion_shape_[:-1]:
+                    raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape {drift_shape_}, "
+                                     f"meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} channel "
+                                     f"dimensions, but diffusion shape {diffusion_shape_}, meaning "
+                                     f"{diffusion_shape_[:-2]} batch dimensions, {diffusion_shape_[-2]} channel "
+                                     f"dimensions and {diffusion_shape_[-1]} noise dimension.")
+                if diffusion_shape_[:-2] != batch_dimensions:
+                    raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
+                                     "dimensions.")
+                if diffusion_shape_[-1] != noise_channels:
+                    raise ValueError("Every Tensor return by the diffusion must have the same number of noise "
+                                     "channels.")
+            if sde.noise_type == NOISE_TYPES.scalar:
+                if noise_channels != 1:
+                    raise ValueError(f"Scalar noise must have only one channel; the diffusion has {noise_channels} "
+                                     f"noise channels.")
+        else:  # sde.noise_type == NOISE_TYPES.diagonal
+            batch_dimensions = diffusion_shape[0][:-1]
+            for drift_shape_, diffusion_shape_ in zip(drift_shape, diffusion_shape):
+                drift_shape_ = tuple(drift_shape_)
+                diffusion_shape_ = tuple(diffusion_shape_)
+                if len(drift_shape_) == 0:
+                    raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
+                if len(diffusion_shape_) == 0:
+                    raise ValueError(f"Diffusion must have shape (..., state_channels), but got shape ().")
+                if drift_shape_ != diffusion_shape_:
+                    raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape {drift_shape_}, "
+                                     f"meaning {drift_shape_[:-1]} batch dimensions and {drift_shape_[-1]} channel "
+                                     f"dimensions, but diffusion shape {diffusion_shape_}, meaning "
+                                     f"{diffusion_shape_[:-1]} batch dimensions, {diffusion_shape_[-1]} channel "
+                                     f"dimensions and {diffusion_shape_[-1]} noise dimension.")
+                if diffusion_shape_[:-1] != batch_dimensions:
+                    raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
+                                     "dimensions.")
+                if diffusion_shape_[-1] != noise_channels:
+                    raise ValueError("Every Tensor return by the diffusion must have the same number of noise "
+                                     "channels.")
+
+        if bm is None:
+            if method == METHODS.srk:
+                levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
+            else:
+                levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
+            bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0[0].dtype,
+                                  device=y0[0].device, levy_area_approximation=levy_area_approximation)
 
     if tensor_input:
         bm = TupleBrownian(bm)

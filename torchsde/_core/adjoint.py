@@ -93,7 +93,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             aug_ans = sdeint.integrate(
                 sde=adjoint_sde,
                 y0=aug_y0,
-                ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
+                ts=torch.stack([-ts[i], -ts[i - 1]]),
                 bm=reverse_bm,
                 method=adjoint_method,
                 dt=dt,
@@ -185,7 +185,7 @@ class _SdeintLogqpAdjointMethod(torch.autograd.Function):
             aug_ans = sdeint.integrate(
                 sde=adjoint_sde,
                 y0=aug_y0,
-                ts=torch.tensor([-ts[i], -ts[i - 1]]).to(ts),
+                ts=torch.stack([-ts[i], -ts[i - 1]]),
                 bm=reverse_bm,
                 method=adjoint_method,
                 dt=dt,
