@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 
-import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
 from scipy import stats
 
-from tests.problems import Ex2
+from tests.problems import Ex2Scalar
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs_if_not_found, compute_mse
@@ -34,7 +34,7 @@ def inspect_sample():
     ts = torch.linspace(0., 5., steps=steps).to(device)
     dt = 1e-1
     y0 = torch.ones(batch_size, d).to(device)
-    sde = Ex2(d=d).to(device)
+    sde = Ex2Scalar(d=d).to(device)
     sde.noise_type = "scalar"
 
     with torch.no_grad():
@@ -54,7 +54,7 @@ def inspect_sample():
             ts, ys_euler, ys_milstein, ys_srk, ys_analytical)
 
     # Visualize sample path.
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_scalar')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_scalar')
     makedirs_if_not_found(img_dir)
 
     for i, (ys_euler_i, ys_milstein_i, ys_srk_i, ys_analytical_i) in enumerate(
@@ -74,7 +74,7 @@ def inspect_strong_order():
     ts = torch.tensor([0., 5.]).to(device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d).to(device)
-    sde = Ex2(d=d).to(device)
+    sde = Ex2Scalar(d=d).to(device)
 
     euler_mses_ = []
     milstein_mses_ = []
@@ -116,7 +116,7 @@ def inspect_strong_order():
     plt.yscale('log')
     plt.legend()
 
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_scalar')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_scalar')
     makedirs_if_not_found(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()
