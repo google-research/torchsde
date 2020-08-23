@@ -105,6 +105,11 @@ class Ex2(BaseSDE):
         return self._nfe
 
 
+class Ex2Scalar(Ex2):
+    def g(self, t, y):
+        return super(Ex2Scalar, self).g(t, y).unsqueeze(2)
+
+
 class Ex3(BaseSDE):
     def __init__(self, d=10, sde_type='ito'):
         super(Ex3, self).__init__(noise_type="diagonal", sde_type=sde_type)

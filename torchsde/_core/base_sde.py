@@ -48,117 +48,116 @@ class ForwardSDE(BaseSDE):
         if hasattr(sde, "h"):
             self.h = sde.h
 
-        # Register the core function. This avoids polluting the codebase with if-statements.
+        # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
+        # by making sure it's a one-time cost.
         self.g_prod = {
             NOISE_TYPES.diagonal: self.g_prod_diagonal,
-            NOISE_TYPES.additive: self.g_prod_additive_or_general,
-            NOISE_TYPES.scalar: self.g_prod_scalar,
-            NOISE_TYPES.general: self.g_prod_additive_or_general
-        }[sde.noise_type]
+        }.get(sde.noise_type, self.g_prod_default)
         self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal_or_scalar,
-            NOISE_TYPES.additive: self._skip,
-            NOISE_TYPES.scalar: self.gdg_prod_diagonal_or_scalar,
-            NOISE_TYPES.general: self.gdg_prod_general
-        }[sde.noise_type]
-        self.gdg_jvp_column_sum = {
-            NOISE_TYPES.diagonal: self._skip,
-            NOISE_TYPES.additive: self._skip,
-            NOISE_TYPES.scalar: self._skip,
-            NOISE_TYPES.general: self.gdg_jvp_column_sum_v2
-        }[sde.noise_type]
-        # TODO: Assign `gdg_jacobian_contraction`.
+            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+            NOISE_TYPES.additive: self._return_zero,
+        }.get(sde.noise_type, self.gdg_prod_default)
+        self.dg_ga_jvp_column_sum = {
+            NOISE_TYPES.diagonal: self._return_zero,
+            NOISE_TYPES.additive: self._return_zero,
+            NOISE_TYPES.scalar: self._return_zero,
+            NOISE_TYPES.general: self.dg_ga_jvp_column_sum_v2
+        }.get(sde.noise_type)
 
-    # g_prod functions.
+    ########################################
+    #                g_prod                #
+    ########################################
+
     def g_prod_diagonal(self, t, y, v):
-        return misc.seq_mul(self._base_sde.g(t, y), v)
+        return self._base_sde.g(t, y) * v
 
-    def g_prod_scalar(self, t, y, v):
-        return misc.seq_mul_bc(self._base_sde.g(t, y), v)
+    def g_prod_default(self, t, y, v):
+        return misc.batch_mvp(self._base_sde.g(t, y), v)
 
-    def g_prod_additive_or_general(self, t, y, v):
-        return misc.seq_batch_mvp(ms=self._base_sde.g(t, y), vs=v)
+    ########################################
+    #               gdg_prod               #
+    ########################################
 
-    # gdg_prod functions.
-    def gdg_prod_general(self, t, y, v):
-        # This function is used for Milstein. For general noise, Levy areas need to be supplied.
-        raise NotImplemented("This function should not be called.")
-
-    def gdg_prod_diagonal_or_scalar(self, t, y, v):
-        requires_grad = torch.is_grad_enabled()  # BP through solver.
+    # Computes: sum_{j, l} g_{j, l} d g_{j, l} d x_i v_l.
+    def gdg_prod_default(self, t, y, v):
+        requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
-            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
-            val = self._base_sde.g(t, y)
-            vjp_val = misc.grad(
-                outputs=val,
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self._base_sde.g(t, y)
+            vg_dg_vjp, = misc.grad(
+                outputs=g,
                 inputs=y,
-                grad_outputs=misc.seq_mul(val, v),
+                grad_outputs=g * v.unsqueeze(-2),
                 create_graph=requires_grad,
                 allow_unused=True
             )
-        return misc.convert_none_to_zeros(vjp_val, y)
+        return vg_dg_vjp
 
-    # gdg_jvp_column_sum functions.
-    # Computes: sum_{j,k,l} d sigma_{i,l} / d x_j sigma_{j,k} A_{k,l}.
-    def gdg_jvp_column_sum_v1(self, t, y, a):
-        # Assumes `a` is anti-symmetric and `base_sde` is not of diagonal noise.
+    def gdg_prod_diagonal(self, t, y, v):
+        requires_grad = torch.is_grad_enabled()
+        with torch.enable_grad():
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self._base_sde.g(t, y)
+            vg_dg_vjp, = misc.grad(
+                outputs=g,
+                inputs=y,
+                grad_outputs=g * v,
+                create_graph=requires_grad,
+                allow_unused=True
+            )
+        return vg_dg_vjp
+
+    ########################################
+    #              dg_ga_jvp               #
+    ########################################
+
+    # Computes: sum_{j,k,l} d g_{i,l} / d x_j g_{j,k} A_{k,l}.
+    def dg_ga_jvp_column_sum_v1(self, t, y, a):
+        # Assumes `a` is anti-symmetric and `_base_sde` is not of diagonal noise.
         requires_grad = torch.is_grad_enabled()  # BP through solver.
         with torch.enable_grad():
-            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
-            g_eval = self._base_sde.g(t, y)
-            v = [torch.bmm(g_eval_, a_) for g_eval_, a_ in zip(g_eval, a)]
-            gdg_jvp_eval = [
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self._base_sde.g(t, y)
+            ga = torch.bmm(g, a)
+            dg_ga_jvp = [
                 misc.jvp(
-                    outputs=[g_eval_[..., col_idx] for g_eval_ in g_eval],
+                    outputs=g[..., col_idx],
                     inputs=y,
-                    grad_inputs=[v_[..., col_idx] for v_ in v],
+                    grad_inputs=ga[..., col_idx],
                     retain_graph=True,
                     create_graph=requires_grad,
                     allow_unused=True
-                )
-                for col_idx in range(g_eval[0].size(-1))
+                )[0]
+                for col_idx in range(g.size(-1))
             ]
-            gdg_jvp_eval = misc.seq_add(*gdg_jvp_eval)
-        return misc.convert_none_to_zeros(gdg_jvp_eval, y)
+            dg_ga_jvp = sum(dg_ga_jvp)
+        return dg_ga_jvp
 
-    def gdg_jvp_column_sum_v2(self, t, y, a):
+    def dg_ga_jvp_column_sum_v2(self, t, y, a):
         # Faster, but more memory intensive.
         requires_grad = torch.is_grad_enabled()  # BP through solver.
         with torch.enable_grad():
-            y = [y_ if y_.requires_grad else y_.detach().requires_grad_(True) for y_ in y]
-            g_eval = self._base_sde.g(t, y)
-            v = [torch.bmm(g_eval_, a_) for g_eval_, a_ in zip(g_eval, a)]
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self._base_sde.g(t, y)
+            ga = torch.bmm(g, a)
 
-            batch_size, d, m = g_eval[0].size()  # TODO: Relax this assumption.
-            y_dup = [torch.repeat_interleave(y_, repeats=m, dim=0) for y_ in y]
-            g_eval_dup = self._base_sde.g(t, y_dup)
-            v_flat = [v_.transpose(1, 2).flatten(0, 1) for v_ in v]
-            gdg_jvp_eval = misc.jvp(
-                g_eval_dup, y_dup, grad_inputs=v_flat, create_graph=requires_grad, allow_unused=True
+            batch_size, d, m = g.size()
+            y_dup = torch.repeat_interleave(y, repeats=m, dim=0)
+            g_dup = self._base_sde.g(t, y_dup)
+            ga_flat = ga.transpose(1, 2).flatten(0, 1)
+            dg_ga_jvp, = misc.jvp(
+                outputs=g_dup,
+                inputs=y_dup,
+                grad_inputs=ga_flat,
+                create_graph=requires_grad,
+                allow_unused=True
             )
-            gdg_jvp_eval = misc.convert_none_to_zeros(gdg_jvp_eval, y)
-            gdg_jvp_eval = [t.reshape(batch_size, m, d, m).permute(0, 2, 1, 3) for t in gdg_jvp_eval]
-            gdg_jvp_eval = [t.diagonal(dim1=-2, dim2=-1).sum(-1) for t in gdg_jvp_eval]
-        return gdg_jvp_eval
+            dg_ga_jvp = dg_ga_jvp.reshape(batch_size, m, d, m).permute(0, 2, 1, 3)
+            dg_ga_jvp = dg_ga_jvp.diagonal(dim1=-2, dim2=-1).sum(-1)
+        return dg_ga_jvp
 
-    def _skip(self, t, y, v):  # noqa
-        return [0.] * len(y)
-
-
-class TupleSDE(BaseSDE):
-
-    def __init__(self, sde):
-        super(TupleSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
-        self._base_sde = sde
-
-    def f(self, t, y):
-        return self._base_sde.f(t, y[0]),
-
-    def g(self, t, y):
-        return self._base_sde.g(t, y[0]),
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y[0]),
+    def _return_zero(self, t, y, v):  # noqa
+        return 0.
 
 
 class RenameMethodsSDE(BaseSDE):

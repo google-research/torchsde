@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from . import base_brownian
 
 
@@ -50,11 +48,3 @@ class ReverseBrownian(_ModifiedBrownian):
         # Whether or not to negate the statistics depends on the return value of the adjoint SDE. Currently, the adjoint
         # returns negated drift and diffusion, so we don't negate here.
         return self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
-
-
-class TupleBrownian(_ModifiedBrownian):
-    def __call__(self, ta, tb, return_U=False, return_A=False):
-        statistics = self.base_brownian(ta, tb, return_U=return_U, return_A=return_A)
-        if torch.is_tensor(statistics):
-            return (statistics,)
-        return [(i,) for i in statistics]

@@ -19,9 +19,12 @@ import warnings
 import torch
 
 
-def handle_unused_kwargs(obj, unused_kwargs):
+def handle_unused_kwargs(unused_kwargs, msg=None):
     if len(unused_kwargs) > 0:
-        warnings.warn(f'{obj.__class__.__name__}: Unexpected arguments {unused_kwargs}')
+        if msg is not None:
+            warnings.warn(f"{msg}: Unexpected arguments {unused_kwargs}")
+        else:
+            warnings.warn(f"Unexpected arguments {unused_kwargs}")
 
 
 def flatten(sequence):
@@ -97,10 +100,13 @@ def batch_mvp(m, v):
 
 
 def grad(outputs, inputs, **kwargs):
+    if torch.is_tensor(inputs):
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
-        inputs = (inputs,)
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
     _grad = torch.autograd.grad(outputs, inputs, **kwargs)
     return convert_none_to_zeros(_grad, inputs)
@@ -109,12 +115,26 @@ def grad(outputs, inputs, **kwargs):
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
     # The present implementation avoids this.
+    if torch.is_tensor(inputs):
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
-        inputs = (inputs,)
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
     vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
     _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
+
+
+def flat_to_shape(tensor, shapes, length=()):
+    tensor_list = []
+    total = 0
+    for shape in shapes:
+        next_total = total + shape.numel()
+        # It's important that this be view((...)), not view(...). Else when length=(), shape=() it fails.
+        tensor_list.append(tensor[..., total:next_total].view((*length, *shape)))
+        total = next_total
+    return tensor_list

@@ -72,7 +72,7 @@ class BrownianPath(base_brownian.BaseBrownian):
         """
         # TODO: Couple of things to optimize: 1) search based on local window,
         #  2) avoid the `return_U` and `return_A` arguments.
-        handle_unused_kwargs(self, unused_kwargs)
+        handle_unused_kwargs(unused_kwargs, msg=self.__class__.__name__)
         del unused_kwargs
 
         super(BrownianPath, self).__init__()

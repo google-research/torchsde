@@ -42,7 +42,7 @@ class BrownianPath(base_brownian.BaseBrownian):
                  w0: torch.Tensor,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  **unused_kwargs):
-        handle_unused_kwargs(self, unused_kwargs)
+        handle_unused_kwargs(unused_kwargs, msg=self.__class__.__name__)
         del unused_kwargs
 
         super(BrownianPath, self).__init__()

@@ -16,7 +16,7 @@ from .base_brownian import BaseBrownian
 from .brownian_interval import BrownianInterval
 from .brownian_path import BrownianPath
 from .brownian_tree import BrownianTree
-from .modified import ReverseBrownian, TupleBrownian
+from .modified import ReverseBrownian
 
 BrownianInterval.__init__.__annotations__ = {}
 BrownianPath.__init__.__annotations__ = {}
