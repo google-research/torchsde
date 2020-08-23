@@ -17,17 +17,13 @@ from typing import Optional, Dict, Any
 import torch
 from torch import nn
 
-try:
-    from ..brownian_lib import BrownianPath
-except Exception:  # noqa
-    from .._brownian import BrownianPath
-from .._brownian import BaseBrownian, ReverseBrownian
-from ..types import TensorOrTensors, Scalar, Vector
-from .adjoint_sde import AdjointSDE  # Directly import to avoid conflicting names.
-
-from . import sdeint
+from . import base_sde
 from . import misc
+from . import sdeint
+from .adjoint_sde import AdjointSDE
+from .._brownian import BaseBrownian, ReverseBrownian
 from ..settings import METHODS, SDE_TYPES, NOISE_TYPES
+from ..types import TensorOrTensors, Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -177,7 +173,7 @@ def sdeint_adjoint(sde: nn.Module,
         raise ValueError("`sde` is required to be an instance of nn.Module.")
 
     sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
-    adjoint_method = _check_and_select_default_adjoint_method(sde, adjoint_method)
+    adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
     params = list(filter(lambda x: x.requires_grad, sde.parameters()))
 
     return _SdeintAdjointMethod.apply(  # noqa
@@ -186,7 +182,7 @@ def sdeint_adjoint(sde: nn.Module,
     )
 
 
-def _check_and_select_default_adjoint_method(sde, adjoint_method: str) -> str:
+def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str) -> str:
     sde_type, noise_type = sde.sde_type, sde.noise_type
 
     if adjoint_method is None:  # Select the default based on noise type of forward.

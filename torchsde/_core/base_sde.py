@@ -33,7 +33,7 @@ class BaseSDE(abc.ABC, nn.Module):
             raise ValueError(f"Expected noise type in {NOISE_TYPES}, but found {noise_type}")
         if sde_type not in SDE_TYPES:
             raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde_type}")
-        # Making these Python properties breaks `torch.jit.script`
+        # Making these Python properties breaks `torch.jit.script`.
         self.noise_type = noise_type
         self.sde_type = sde_type
 
