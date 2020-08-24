@@ -211,8 +211,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     prev_t, prev_y, prev_logqp = curr_t, curr_y, curr_logqp
                     curr_y, curr_logqp = self.step_logqp(curr_t, next_t, curr_y, curr_logqp)
                     curr_t = next_t
-            ret_y, ret_logqp = interp.linear_interp_logqp(t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t,
-                                                          y1=curr_y, logqp1=curr_logqp, t=out_t)
+        
+            if curr_t - out_t < 1e-7 or out_t - prev_t < dt_min:
+                ret_y, ret_logqp = interp.linear_interp_logqp(t0=prev_t, y0=prev_y, logqp0=prev_logqp, t1=curr_t,
+                                                              y1=curr_y, logqp1=curr_logqp, t=out_t)
+            else:
+                ret_y, ret_logqp = self.step_logqp(prev_t, out_t, prev_y, prev_logqp)
+
             ys.append(ret_y)
             [logqp_i.append(ret_logqp_i) for logqp_i, ret_logqp_i in zip(logqp, ret_logqp)]
 
