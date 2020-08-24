@@ -150,11 +150,10 @@ def sdeint_adjoint(sde: nn.Module,
         options (dict, optional): Dict of options for the integration method.
         adjoint_options (dict, optional): Dict of options for the integration
             method of the backward adjoint solve.
-        names (dict, optional): Dict of method names for drift, diffusion, and
-            prior drift. Expected keys are "drift", "diffusion", and
-            "prior_drift". Serves so that users can use methods with names not
-            in `("f", "g", "h")`, e.g. to use the method "foo" for the drift,
-            we would supply `names={"drift": "foo"}`.
+        names (dict, optional): Dict of method names for drift and diffusion.
+            Expected keys are "drift" and "diffusion". Serves so that users can
+            use methods with names not in `("f", "g")`, e.g. to use the
+            method "foo" for the drift, we supply `names={"drift": "foo"}`.
 
     Returns:
         A single state tensor of size (T, batch_size, d).

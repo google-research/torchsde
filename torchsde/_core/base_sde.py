@@ -160,7 +160,7 @@ class ForwardSDE(BaseSDE):
 
 class RenameMethodsSDE(BaseSDE):
 
-    def __init__(self, sde, drift='f', diffusion='g', prior_drift='h'):
+    def __init__(self, sde, drift='f', diffusion='g'):
         super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
         self._base_sde = sde
         self.f = getattr(sde, drift)
