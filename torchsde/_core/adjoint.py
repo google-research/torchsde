@@ -23,7 +23,7 @@ from . import sdeint
 from .adjoint_sde import AdjointSDE
 from .._brownian import BaseBrownian, ReverseBrownian
 from ..settings import METHODS, SDE_TYPES, NOISE_TYPES
-from ..types import TensorOrTensors, Scalar, Vector
+from ..types import Scalar, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -70,7 +70,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         dt_min = ctx.dt_min
         adjoint_options = ctx.adjoint_options
 
-        aug_state = (ys[-1], grad_ys[-1], *[torch.zeros_like(param) for param in params])
+        aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in params]
         shapes = [t.size() for t in aug_state]
         adjoint_sde = AdjointSDE(sde, params, shapes)
         reverse_bm = ReverseBrownian(bm)
@@ -92,21 +92,18 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             )
             aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
             aug_state[0] = ys[i - 1]
-            aug_state[1] += grad_ys[i - 1]
-
-        adj_y = aug_state[1]
-        adj_params = aug_state[2:]
+            aug_state[1] = aug_state[1] + grad_ys[i - 1]
 
         return (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, adj_y, *adj_params
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, *aug_state[1:]
         )
 
 
 def sdeint_adjoint(sde: nn.Module,
-                   y0: TensorOrTensors,
+                   y0: torch.Tensor,
                    ts: Vector,
                    bm: Optional[BaseBrownian] = None,
-                   method: Optional[str] = 'srk',
+                   method: Optional[str] = "srk",
                    adjoint_method: Optional[str] = None,
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
@@ -119,7 +116,7 @@ def sdeint_adjoint(sde: nn.Module,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
                    names: Optional[Dict[str, str]] = None,
-                   **unused_kwargs) -> TensorOrTensors:
+                   **unused_kwargs) -> torch.Tensor:
     """Numerically integrate an Itô SDE with stochastic adjoint support.
 
     Args:

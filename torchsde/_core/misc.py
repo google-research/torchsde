@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
-import operator
 import warnings
 
 import torch
@@ -52,47 +50,8 @@ def seq_add(*seqs):
     return [sum(seq) for seq in zip(*seqs)]
 
 
-def seq_mul(*seqs):
-    return [functools.reduce(operator.mul, seq) for seq in zip(*seqs)]
-
-
-def seq_mul_bc(*seqs):  # Supports broadcasting.
-    soln = []
-    for seq in zip(*seqs):
-        cumprod = seq[0]
-        for tensor in seq[1:]:
-            # Insert dummy dims at the end of the tensor with fewer dims.
-            num_missing_dims = cumprod.dim() - tensor.dim()
-            if num_missing_dims > 0:
-                new_size = tensor.size() + (1,) * num_missing_dims
-                tensor = tensor.reshape(*new_size)
-            elif num_missing_dims < 0:
-                new_size = cumprod.size() + (1,) * num_missing_dims
-                cumprod = cumprod.reshape(*new_size)
-            cumprod = cumprod * tensor
-        soln += [cumprod]
-    return soln
-
-
 def seq_sub(xs, ys):
     return [x - y for x, y in zip(xs, ys)]
-
-
-def seq_sub_div(xs, ys, zs):
-    return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
-
-
-def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon: float = 1e-7):
-    y = torch.where(
-        y.abs() > epsilon,
-        y,
-        torch.ones_like(y).fill_(epsilon) * y.sign()
-    )
-    return x / y
-
-
-def seq_batch_mvp(ms, vs):
-    return [batch_mvp(m, v) for m, v in zip(ms, vs)]
 
 
 def batch_mvp(m, v):

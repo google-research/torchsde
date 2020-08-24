@@ -22,11 +22,11 @@ from . import methods
 from . import misc
 from .._brownian import BaseBrownian, BrownianInterval
 from ..settings import SDE_TYPES, NOISE_TYPES, METHODS, LEVY_AREA_APPROXIMATIONS
-from ..types import TensorOrTensors, Scalar, Vector
+from ..types import Scalar, Vector
 
 
 def sdeint(sde: base_sde.BaseSDE,
-           y0: TensorOrTensors,
+           y0: torch.Tensor,
            ts: Vector,
            bm: Optional[BaseBrownian] = None,
            method: Optional[str] = "srk",
@@ -37,7 +37,7 @@ def sdeint(sde: base_sde.BaseSDE,
            dt_min: Optional[Scalar] = 1e-5,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
-           **unused_kwargs) -> TensorOrTensors:
+           **unused_kwargs) -> torch.Tensor:
     """Numerically integrate an Itô SDE.
 
     Args:
@@ -96,7 +96,7 @@ def check_contract(sde, y0, ts, bm, method, names):
     if names is None:
         names_to_change = {}
     else:
-        names_to_change = {key: names[key] for key in ("drift", "diffusion", "prior_drift") if key in names}
+        names_to_change = {key: names[key] for key in ("drift", "diffusion") if key in names}
     if len(names_to_change) > 0:
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
 

@@ -132,9 +132,6 @@ class ScalarSDE(AdditiveSDE):
         self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, 1)), requires_grad=True)
         self.noise_type = "scalar"
 
-    def g(self, t, y):
-        return self.g_param.repeat(y.size(0), 1, 1)
-
 
 class TupleSDE(SDEIto):
     def __init__(self, d=10):

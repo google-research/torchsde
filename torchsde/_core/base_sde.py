@@ -45,8 +45,6 @@ class ForwardSDE(BaseSDE):
         self._base_sde = sde
         self.f = sde.f
         self.g = sde.g
-        if hasattr(sde, "h"):
-            self.h = sde.h
 
         # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
         # by making sure it's a one-time cost.
@@ -167,8 +165,6 @@ class RenameMethodsSDE(BaseSDE):
         self._base_sde = sde
         self.f = getattr(sde, drift)
         self.g = getattr(sde, diffusion)
-        if hasattr(sde, prior_drift):
-            self.h = getattr(sde, prior_drift)
 
 
 class SDEIto(BaseSDE):
