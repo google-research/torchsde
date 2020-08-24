@@ -76,7 +76,6 @@ def _batch_jacobian(output, input_):
 
 
 def _dg_ga_jvp_brute_force(sde, t, y, a):
-    # Only returns the value for the first input-output pair.
     with torch.enable_grad():
         y = y.detach().requires_grad_(True) if not y.requires_grad else y
         g = sde.g(t, y)
