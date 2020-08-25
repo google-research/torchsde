@@ -109,6 +109,7 @@ class _Interval:
         return self._top.increment_and_space_time_levy_area_cache(self)
 
     def increment_and_space_time_levy_area_uncached(self):
+        # TODO: switch this over to a trampoline?
         if self._is_left:
             return self._parent.left_increment_and_space_time_levy_area()
         else:
@@ -408,7 +409,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}, but got "
                              f"'{levy_area_approximation}'.")
 
-        self._dt = None
+        self._dt = dt
         self._cache_size = cache_size
         self.levy_area_approximation = levy_area_approximation
 
@@ -424,7 +425,10 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         # element of the binary tree.
         self._last_interval = self
 
-        if dt is not None:  # We'll take dt = first step if it's not passed here
+        self._average_dt = 0
+        self._tree_dt = t1 - t0
+        self._num_evaluations = -100  # start off with a warmup period to get a decent estimate of the average
+        if dt is not None:
             # We pre-create a binary tree dependency between the points. If we don't do this then the forward pass is
             # still efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1],
             # making the backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and
@@ -471,11 +475,18 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 shape = (*self.shape, *self.shape[-1:])  # not self.shape[-1] as that may not exist
                 A = torch.zeros(shape, dtype=self.dtype, device=self.device)
         else:
-            if self._dt is None or (tb - ta) < 0.1 * self._dt:
-                # If 'dt' wasn't specified, then take the first step as an estimate of the expected average step size
-                # If the increment is really small compared to our expected average step size, then our estimate was
-                # probably off: create a better dependency tree now.
-                self._create_dependency_tree(tb - ta)
+            if self._dt is None:
+                self._num_evaluations += 1
+                # We start off with "negative" num evaluations, to give us a small warm-up period at the start.
+                if self._num_evaluations > 0:
+                    # Compute average step size so far
+                    dt = tb - ta
+                    self._average_dt = (dt + self._average_dt * (self._num_evaluations - 1)) / self._num_evaluations
+                    if self._average_dt < 0.5 * self._tree_dt:
+                        # If 'dt' wasn't specified, then check the average interval length against the size of the
+                        # bottom of the dependency tree. If we're below halfway then refine the tree by splitting all
+                        # the bottom pieces into two.
+                        self._create_dependency_tree(dt)
 
             # Find the intervals that correspond to the query. We start our search at the last interval we accessed in
             # the binary tree, as it's likely that the next query will come nearby.
@@ -522,8 +533,6 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 return W
 
     def _create_dependency_tree(self, dt):
-        self._dt = dt
-
         # For safety we take a max with 100: if people take very large cache sizes then this would then break the
         # logarithmic into linear, which causes RecursionErrors.
         if self._cache_size is None:  # cache_size=None corresponds to infinite cache.
@@ -531,10 +540,11 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         else:
             cache_size = min(self._cache_size, 100)
 
+        self._tree_dt = min(self._tree_dt, dt)
         # Rationale: We are prepared to hold `cache_size` many things in memory, so when making steps of size `dt`
         # then we can afford to have the intervals at the bottom of our binary tree be of size `dt * cache_size`.
         # For safety we then make this a bit smaller by multiplying by 0.8.
-        piece_length = dt * cache_size * 0.8
+        piece_length = self._tree_dt * cache_size * 0.8
 
         def _set_points(interval):
             start = interval._start
