@@ -17,6 +17,7 @@
 This should be eventually refactored and the file should be removed.
 """
 
+import sys
 import time
 
 import torch
@@ -24,8 +25,10 @@ from torch import nn
 
 from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde import settings
+from torchsde._core.adjoint_sde import AdjointSDE  # noqa
 from torchsde._core.base_sde import ForwardSDE  # noqa
 
+sys.setrecursionlimit(5000)
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 cpu, gpu = torch.device('cpu'), torch.device('cuda')
@@ -51,6 +54,7 @@ class SDE(nn.Module):
         super(SDE, self).__init__()
         self.noise_type = settings.NOISE_TYPES.general
         self.sde_type = settings.SDE_TYPES.stratonovich
+        self.p = nn.Parameter(torch.tensor(0.3))
 
     def f(self, t, y):
         return torch.sin(y) + t
@@ -135,6 +139,18 @@ def test_adjoint():
     torch.autograd.gradcheck(func, y0_, rtol=1e-4, atol=1e-3, eps=1e-8)
 
 
+def test_adjoint_dg_ga_jvp():
+    sde, t, y, a = _make_inputs()
+    params = list(filter(lambda x: x.requires_grad, sde.parameters()))
+    shapes = [y.size(), y.size()] + [p.size() for p in params]
+    adjoint_sde = AdjointSDE(sde, params=params, shapes=[y.size(), y.size()])
+    dg_ga_jvp = adjoint_sde.dg_ga_jvp_column_sum_v1(
+        t, y_aug=torch.cat([y.flatten(), y.flatten()], dim=0), a=a
+    )
+    assert dg_ga_jvp.size() == (sum(shape.numel() for shape in shapes),)
+
+
 test_dg_ga_jvp()
 check_efficiency()
 test_adjoint()
+test_adjoint_dg_ga_jvp()

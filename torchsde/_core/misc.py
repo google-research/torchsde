@@ -83,7 +83,9 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     outputs = make_seq_requires_grad(outputs)
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
+    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, create_graph=True, allow_unused=True)
+    vjp = make_seq_requires_grad(convert_none_to_zeros(vjp, inputs))
+
     _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
 

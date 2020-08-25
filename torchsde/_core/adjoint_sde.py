@@ -61,6 +61,10 @@ class AdjointSDE(base_sde.BaseSDE):
             NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
         }.get(sde.noise_type, self.gdg_prod_default)
 
+    def _unpack_y_aug(self, y_aug):
+        y, adj_y = misc.flat_to_shape(y_aug, self._shapes[:2])
+        return y.detach().requires_grad_(True), adj_y.detach().requires_grad_(True)
+
     def _flat_to_shape(self, y_aug):
         """Recover only first two tensors from the flattened augmented state."""
         return misc.flat_to_shape(y_aug, self._shapes[:2])
@@ -71,9 +75,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
         with torch.enable_grad():
-            y_aug = self._flat_to_shape(y_aug)
-            y = y_aug[0].detach().requires_grad_(True)
-            adj_y = y_aug[1].detach()
+            y, adj_y = self._unpack_y_aug(y_aug)
             f = self._base_sde.f(-t, y)
             vjp_y_and_params = misc.grad(
                 outputs=f,
@@ -88,9 +90,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
         with torch.enable_grad():
-            y_aug = self._flat_to_shape(y_aug)
-            y = y_aug[0].detach().requires_grad_(True)
-            adj_y = y_aug[1].detach()
+            y, adj_y = self._unpack_y_aug(y_aug)
             g = self._base_sde.g(-t, y)
             g_dg_vjp, = misc.grad(
                 outputs=g,
@@ -142,9 +142,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
     def g_prod(self, t, y_aug, v):
         with torch.enable_grad():
-            y_aug = self._flat_to_shape(y_aug)
-            y = y_aug[0].detach().requires_grad_(True)
-            adj_y = y_aug[1].detach()
+            y, adj_y = self._unpack_y_aug(y_aug)
             g_prod = self._base_sde.g_prod(-t, y, v)
             vjp_y_and_params = misc.grad(
                 outputs=g_prod,
@@ -163,9 +161,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
     def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
         with torch.enable_grad():
-            y_aug = self._flat_to_shape(y_aug)
-            y = y_aug[0].detach().requires_grad_(True)
-            adj_y = y_aug[1].detach()
+            y, adj_y = self._unpack_y_aug(y_aug)
             g = self._base_sde.g(-t, y)
             vg_dg_vjp, = misc.grad(
                 outputs=g,
@@ -201,3 +197,53 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
         return misc.flatten((vg_dg_vjp, *vjp_y_and_params))
+
+    ########################################
+    #              dg_ga_jvp               #
+    ########################################
+
+    # Diffusion of adjoint outputs matrix of size (d + d + p) x m,
+    # where d is the dimension of state, p is the dimension of parameter,
+    # and m is the dimension of Brownian motion.
+
+    # Indexing the diffusion of the original system by column, the diffusion of the adjoint is
+    #     -g_1                -g_2          ...         -g_m
+    # dg_1 dy^T a         dg_2 dy^T a       ...     dg_m dy^T a
+    # dg_1 dθ^T a         dg_2 dθ^T a       ...     dg_m dθ^T a
+
+    def dg_ga_jvp_column_sum_v1(self, t, y_aug, a):
+        # Assumes `a` is anti-symmetric and `_base_sde` is not of diagonal noise.
+        with torch.enable_grad():
+            y, adj_y = self._unpack_y_aug(y_aug)
+            g = self._base_sde.g(-t, y)
+
+            adj_g = [
+                misc.grad(outputs=g[..., col_idx],
+                          inputs=[y] + self._params,
+                          grad_outputs=adj_y,
+                          create_graph=True,
+                          allow_unused=True)
+                for col_idx in range(g.size(-1))
+            ]
+            # Transpose nested list and stack columns.
+            adj_g = [-g] + [torch.stack(args, dim=-1) for args in zip(*adj_g)]
+            # Matmul with Levy area. The term for parameters isn't exactly correct,
+            # since it's approximating \sum_i a_i b_i with (\sum_i a_i) (\sum_i b_i).
+            # The problem is due to there not being a simple way to consider parameter
+            # gradients for each batch entry individually.
+            adj_ga = [torch.bmm(t.detach(), a) for t in adj_g[:2]]
+            adj_ga += [torch.mm(t.detach().flatten(0, -1).unsqueeze(0), a.sum(0)).reshape(t.size()) for t in adj_g[2:]]
+
+            # Need the unflattened structure here, since inputs must be unflattened.
+            dg_ga_jvp = [
+                misc.jvp(
+                    outputs=[t[..., col_idx] for t in adj_g],
+                    inputs=[y, adj_y] + self._params,
+                    grad_inputs=[t[..., col_idx] for t in adj_ga],
+                    retain_graph=True,
+                    allow_unused=True
+                )
+                for col_idx in range(g.size(-1))
+            ]
+            dg_ga_jvp = [sum(args) for args in zip(*dg_ga_jvp)]
+        return misc.flatten(dg_ga_jvp)
