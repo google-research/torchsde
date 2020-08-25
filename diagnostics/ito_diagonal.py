@@ -102,8 +102,8 @@ def inspect_strong_order():
             milstein_grad_free_mse = compute_mse(ys_milstein_grad_free, ys_analytical)
             srk_mse = compute_mse(ys_srk, ys_analytical)
 
-            euler_mse_, milstein_mse_, milstein_grad_free_mse_, srk_mse_ = to_numpy(euler_mse, milstein_mse,
-                                                                                    milstein_grad_free_mse, srk_mse)
+            euler_mse_, milstein_mse_, milstein_grad_free_mse_, srk_mse_ = to_numpy(
+                euler_mse, milstein_mse, milstein_grad_free_mse, srk_mse)
 
             euler_mses_.append(euler_mse_)
             milstein_mses_.append(milstein_mse_)
