@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 
-import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -43,7 +43,8 @@ def inspect_sample():
         ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun', names={'drift': 'f_corr'})
         ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint', names={'drift': 'f_corr'})
         ys_milstein_strat = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'})
-        ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'}, options={'grad_free': True})
+        ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'},
+                                        options={'grad_free': True})
         ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
         ys_heun = ys_heun.squeeze().t()
@@ -93,7 +94,8 @@ def inspect_strong_order():
             _, ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun', names={'drift': 'f_corr'})
             _, ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint', names={'drift': 'f_corr'})
             _, ys_milstein_strat = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'})
-            _, ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'}, options={'grad_free': True})
+            _, ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein',
+                                               names={'drift': 'f_corr'}, options={'grad_free': True})
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
             heun_mse = compute_mse(ys_heun, ys_analytical)
@@ -101,7 +103,9 @@ def inspect_strong_order():
             milstein_strat_mse = compute_mse(ys_milstein_strat, ys_analytical)
             mil_strat_grad_free_mse = compute_mse(ys_mil_strat_grad_free, ys_analytical)
 
-            heun_mse_, midpoint_mse_, milstein_strat_mse_, mil_strat_grad_free_mse_ = to_numpy(heun_mse, midpoint_mse, milstein_strat_mse, mil_strat_grad_free_mse)
+            heun_mse_, midpoint_mse_, milstein_strat_mse_, mil_strat_grad_free_mse_ = to_numpy(heun_mse, midpoint_mse,
+                                                                                               milstein_strat_mse,
+                                                                                               mil_strat_grad_free_mse)
 
             heun_mses_.append(heun_mse_)
             midpoint_mses_.append(midpoint_mse_)

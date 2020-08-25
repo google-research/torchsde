@@ -61,10 +61,13 @@ bm_scalar = BrownianInterval(
 class TestSdeint(TorchTestCase):
 
     def test_rename_methods(self):
-        # Test renaming works with a subset of names when `logqp=False`.
+        # Test renaming works with a subset of names.
         sde = basic_sde.CustomNamesSDE().to(device)
         ans = sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward'})
         self.assertEqual(ans.shape, (T, batch_size, d))
+
+    def test_rename_methods_logqp(self):
+        self.skipTest("Temporarily deprecating logqp.")
 
         # Test renaming works with a subset of names when `logqp=True`.
         sde = basic_sde.CustomNamesSDELogqp().to(device)
@@ -76,18 +79,36 @@ class TestSdeint(TorchTestCase):
         sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
         for method in ('euler',):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+
+    def test_sdeint_general_logqp(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
+        sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
+        for method in ('euler',):
             self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
 
     def test_sdeint_additive(self):
         sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
         for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+
+    def test_sdeint_additive_logqp(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
+        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
+        for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
 
     def test_sde_scalar(self):
         sde = basic_sde.ScalarSDE(d=d, m=m).to(device)
         for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
+
+    def test_sde_scalar_logqp(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
+        sde = basic_sde.ScalarSDE(d=d, m=m).to(device)
+        for method in ('euler', 'milstein', 'srk'):
             self._test_sdeint_logqp(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
 
     def test_srk_determinism(self):
@@ -116,23 +137,18 @@ class TestSdeint(TorchTestCase):
                 self._test_sdeint(sde, bm_diagonal, adaptive=True, method=method, dt=dt)
 
     def test_sdeint_logqp_fixed(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         for sde in basic_sdes:
             for method in ('euler', 'milstein', 'srk'):
                 self._test_sdeint_logqp(sde, bm_diagonal, adaptive=False, method=method, dt=dt)
 
     def test_sdeint_logqp_adaptive(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         for sde in basic_sdes:
             for method in ('milstein', 'srk'):
                 self._test_sdeint_logqp(sde, bm_diagonal, adaptive=True, method=method, dt=dt)
-
-    def test_sdeint_tuple_sde(self):
-        y0_ = (y0,)  # Make tuple input.
-        sde = basic_sde.TupleSDE(d=d).to(device)
-
-        for method in ('euler', 'milstein', 'srk'):
-            ans = sdeint(sde, y0_, ts, method=method, dt=dt)
-            self.assertTrue(isinstance(ans, tuple))
-            self.assertEqual(ans[0].size(), (T, batch_size, d))
 
     def _test_sdeint(self, sde, bm, adaptive, method, dt):
         # Using `f` as drift.

@@ -14,13 +14,12 @@
 
 """Stratonovich Heun method (strong order 1.0 scheme) from
 
-Burrage K., Burrage P. M. and Tian T. 2004 "Numerical methods for strong solutions 
+Burrage K., Burrage P. M. and Tian T. 2004 "Numerical methods for strong solutions
 of stochastic differential equations: an overview" Proc. R. Soc. Lond. A. 460: 373–402.
 """
 
-from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
-
 from .. import base_solver
+from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
 class Heun(base_solver.BaseSDESolver):
@@ -40,20 +39,14 @@ class Heun(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        f = self.sde.f(t0, y0)
+        g_prod = self.sde.g_prod(t0, y0, I_k)
 
-        y0_prime = [
-            y0_ + dt * f_eval_ + g_prod_eval_
-            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval, g_prod_eval)
-        ]
+        y0_prime = y0 + dt * f + g_prod
 
-        f_eval_prime = self.sde.f(t1, y0_prime)
-        g_prod_eval_prime = self.sde.g_prod(t1, y0_prime, I_k)
+        f_prime = self.sde.f(t1, y0_prime)
+        g_prod_prime = self.sde.g_prod(t1, y0_prime, I_k)
 
-        y1 = [
-            y0_ + (dt * (f_eval_ + f_eval_prime_) + g_prod_eval_ + g_prod_eval_prime_) * 0.5
-            for y0_, f_eval_, f_eval_prime_, g_prod_eval_, g_prod_eval_prime_ in zip(y0, f_eval, f_eval_prime, g_prod_eval, g_prod_eval_prime)
-        ]
+        y1 = y0 + (dt * (f + f_prime) + g_prod + g_prod_prime) * 0.5
 
         return y1

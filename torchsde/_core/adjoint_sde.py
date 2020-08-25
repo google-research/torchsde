@@ -13,148 +13,117 @@
 # limitations under the License.
 
 
+from typing import Sequence
+
 import torch
 
 from . import base_sde
 from . import misc
 from ..settings import SDE_TYPES, NOISE_TYPES
+from ..types import TensorOrTensors
 
 
 class AdjointSDE(base_sde.BaseSDE):
 
-    def __init__(self, forward_sde, params, n_tensors, logqp=False):
+    def __init__(self,
+                 sde: base_sde.ForwardSDE,
+                 params: TensorOrTensors,
+                 shapes: Sequence[torch.Size]):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
-        sde_type = forward_sde.sde_type
+        sde_type = sde.sde_type
         noise_type = {
             NOISE_TYPES.general: NOISE_TYPES.general,
             NOISE_TYPES.additive: NOISE_TYPES.general,
             NOISE_TYPES.scalar: NOISE_TYPES.scalar,
             NOISE_TYPES.diagonal: NOISE_TYPES.diagonal,
-        }[forward_sde.noise_type]
-
+        }.get(sde.noise_type)
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
-        self._base_sde = forward_sde
+
+        self._base_sde = sde
         self._params = params
-        self._n_tensors = n_tensors
+        self._shapes = shapes
 
-        # Register the core function. This avoids polluting the codebase with if-statements and speeds things up.
-        # The `sde_type` and `noise_type` of the forward SDE determines the registered functions.
-        if logqp:
-            self.f = {
-                SDE_TYPES.ito: {
-                    NOISE_TYPES.diagonal: self.f_corrected_diagonal_logqp,
-                    NOISE_TYPES.additive: self.f_uncorrected_logqp,
-                    NOISE_TYPES.scalar: self.f_corrected_default_logqp,
-                    NOISE_TYPES.general: self.f_corrected_default_logqp
-                }[forward_sde.noise_type],
-                SDE_TYPES.stratonovich: self.f_uncorrected_logqp
-            }[forward_sde.sde_type]
+        # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
+        # by making sure it's a one-time cost. The `sde_type` and `noise_type` of the forward SDE determines the
+        # registered functions.
+        self.f = {
+            SDE_TYPES.ito: {
+                NOISE_TYPES.diagonal: self.f_corrected_diagonal,
+                NOISE_TYPES.additive: self.f_uncorrected,
+                NOISE_TYPES.scalar: self.f_corrected_default,
+                NOISE_TYPES.general: self.f_corrected_default
+            }.get(sde.noise_type),
+            SDE_TYPES.stratonovich: self.f_uncorrected
+        }.get(sde.sde_type)
+        self.gdg_prod = {
+            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+        }.get(sde.noise_type, self.gdg_prod_default)
 
-            self.g_prod = {
-                NOISE_TYPES.diagonal: self.g_prod_diagonal_logqp
-            }.get(forward_sde.noise_type, self.g_prod_default_logqp)
-
-            self.gdg_prod = {
-                NOISE_TYPES.diagonal: self.gdg_prod_diagonal_logqp,
-            }.get(forward_sde.noise_type, self.gdg_prod_default_logqp)
-        else:
-            self.f = {
-                SDE_TYPES.ito: {
-                    NOISE_TYPES.diagonal: self.f_corrected_diagonal,
-                    NOISE_TYPES.additive: self.f_uncorrected,
-                    NOISE_TYPES.scalar: self.f_corrected_default,
-                    NOISE_TYPES.general: self.f_corrected_default
-                }[forward_sde.noise_type],
-                SDE_TYPES.stratonovich: self.f_uncorrected
-            }[forward_sde.sde_type]
-
-            self.g_prod = {
-                NOISE_TYPES.diagonal: self.g_prod_diagonal
-            }.get(forward_sde.noise_type, self.g_prod_default)
-
-            self.gdg_prod = {
-                NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-            }.get(forward_sde.noise_type, self.gdg_prod_default)
+    def _flat_to_shape(self, y_aug):
+        """Recover only first two tensors from the flattened augmented state."""
+        return misc.flat_to_shape(y_aug, self._shapes[:2])
 
     ########################################
     #                  f                   #
     ########################################
 
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
-
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            minus_adj_y = [-adj_y_.detach() for adj_y_ in adj_y]
-            minus_f = [-f_ for f_ in sde.f(-t, y)]
+            y_aug = self._flat_to_shape(y_aug)
+            y = y_aug[0].detach().requires_grad_(True)
+            adj_y = y_aug[1].detach()
+            f = self._base_sde.f(-t, y)
             vjp_y_and_params = misc.grad(
-                outputs=minus_f,
-                inputs=y + params,
-                grad_outputs=minus_adj_y,
-                allow_unused=True,
+                outputs=f,
+                inputs=[y] + self._params,
+                grad_outputs=adj_y,
+                allow_unused=True
             )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-        return (*minus_f, *vjp_y, vjp_params)
+        return misc.flatten((-f, *vjp_y_and_params))
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
         raise NotImplementedError
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
-
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            g_eval = sde.g(-t, y)
-            gdg = misc.grad(
-                outputs=g_eval,
+            y_aug = self._flat_to_shape(y_aug)
+            y = y_aug[0].detach().requires_grad_(True)
+            adj_y = y_aug[1].detach()
+            g = self._base_sde.g(-t, y)
+            g_dg_vjp, = misc.grad(
+                outputs=g,
                 inputs=y,
-                grad_outputs=g_eval,
+                grad_outputs=g,
                 allow_unused=True,
                 create_graph=True
             )
-            f_eval = sde.f(-t, y)
-            # Stratonovich correction for reverse-time.
-            f_eval_corrected = misc.seq_sub(gdg, f_eval)
+            # Double Stratonovich correction.
+            f = self._base_sde.f(-t, y) - g_dg_vjp
             vjp_y_and_params = misc.grad(
-                outputs=f_eval_corrected,
-                inputs=y + params,
-                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
+                outputs=f,
+                inputs=[y] + self._params,
+                grad_outputs=adj_y,
                 allow_unused=True,
                 create_graph=True
             )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-            adj_times_dgdx = misc.grad(
-                outputs=g_eval,
+            # Convert the adjoint Stratonovich SDE to Itô form.
+            a_dg_vjp, = misc.grad(
+                outputs=g,
                 inputs=y,
                 grad_outputs=adj_y,
                 allow_unused=True,
                 create_graph=True
             )
-
-            # Converting the *adjoint* Stratonovich backward SDE to Itô.
             extra_vjp_y_and_params = misc.grad(
-                outputs=g_eval,
-                inputs=y + params,
-                grad_outputs=adj_times_dgdx,
+                outputs=g,
+                inputs=[y] + self._params,
+                grad_outputs=a_dg_vjp,
                 allow_unused=True,
             )
-            extra_vjp_y, extra_vjp_params = extra_vjp_y_and_params[:n_tensors], extra_vjp_y_and_params[n_tensors:]
-            extra_vjp_params = misc.flatten(extra_vjp_params)
-
-            vjp_y = misc.seq_add(vjp_y, extra_vjp_y)
-            vjp_params = vjp_params + extra_vjp_params
-
-        return (*f_eval_corrected, *vjp_y, vjp_params)
+            vjp_y_and_params = misc.seq_add(vjp_y_and_params, extra_vjp_y_and_params)
+        return misc.flatten((-f, *vjp_y_and_params))
 
     ########################################
     #                  g                   #
@@ -171,47 +140,19 @@ class AdjointSDE(base_sde.BaseSDE):
     #                g_prod                #
     ########################################
 
-    def g_prod_default(self, t, y_aug, v):  # For Ito/Stratonovich general/additive/scalar.
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
-
+    def g_prod(self, t, y_aug, v):
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            minus_adj_y = [-adj_y_.detach() for adj_y_ in adj_y]
-            minus_g = [-g_ for g_ in sde.g(-t, y)]
-            minus_g_prod = misc.seq_batch_mvp(minus_g, v)
-            minus_g_weighted = [(minus_g_ * v_.unsqueeze(-2)).sum(-1) for minus_g_, v_ in zip(minus_g, v)]
+            y_aug = self._flat_to_shape(y_aug)
+            y = y_aug[0].detach().requires_grad_(True)
+            adj_y = y_aug[1].detach()
+            g_prod = self._base_sde.g_prod(-t, y, v)
             vjp_y_and_params = misc.grad(
-                outputs=minus_g_weighted,
-                inputs=y + params,
-                grad_outputs=minus_adj_y,
+                outputs=g_prod,
+                inputs=[y] + self._params,
+                grad_outputs=adj_y,
                 allow_unused=True,
             )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-        return (*minus_g_prod, *vjp_y, vjp_params)
-
-    def g_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
-
-        with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            g_eval = [-g_ for g_ in sde.g(-t, y)]
-            g_prod_eval = misc.seq_mul(g_eval, v)
-            vjp_y_and_params = misc.grad(
-                outputs=g_eval,
-                inputs=y + params,
-                grad_outputs=[-v_ * adj_y_ for v_, adj_y_ in zip(v, adj_y)],
-                allow_unused=True,
-            )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-        return (*g_prod_eval, *vjp_y, vjp_params)
+        return misc.flatten((-g_prod, *vjp_y_and_params))
 
     ########################################
     #               gdg_prod               #
@@ -221,208 +162,42 @@ class AdjointSDE(base_sde.BaseSDE):
         raise NotImplementedError
 
     def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]
-
         with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach().requires_grad_(True) for adj_y_ in adj_y]
-
-            g_eval = sde.g(-t, y)
-            gdg_times_v = misc.grad(
-                outputs=g_eval,
+            y_aug = self._flat_to_shape(y_aug)
+            y = y_aug[0].detach().requires_grad_(True)
+            adj_y = y_aug[1].detach()
+            g = self._base_sde.g(-t, y)
+            vg_dg_vjp, = misc.grad(
+                outputs=g,
                 inputs=y,
-                grad_outputs=misc.seq_mul(g_eval, v),
+                grad_outputs=v * g,
                 allow_unused=True,
                 create_graph=True,
             )
-            dgdy = misc.grad(
-                outputs=g_eval,
+            dgdy, = misc.grad(
+                outputs=g.sum(),
                 inputs=y,
-                grad_outputs=[torch.ones_like(y_) for y_ in y],
                 allow_unused=True,
                 create_graph=True,
             )
             prod_partials_adj_y_and_params = misc.grad(
-                outputs=g_eval,
-                inputs=y + params,
-                grad_outputs=misc.seq_mul(adj_y, v, dgdy),
+                outputs=g,
+                inputs=[y] + self._params,
+                grad_outputs=adj_y * v * dgdy,
                 allow_unused=True,
-                create_graph=True,
+                create_graph=True
             )
-            prod_partials_adj_y = prod_partials_adj_y_and_params[:n_tensors]
-            prod_partials_params = prod_partials_adj_y_and_params[n_tensors:]
-            prod_partials_params = misc.flatten(prod_partials_params)
-
-            gdg_v = misc.grad(
-                outputs=g_eval,
+            avg_dg_vjp, = misc.grad(
+                outputs=g,
                 inputs=y,
-                grad_outputs=[p.detach() for p in misc.seq_mul(adj_y, v, g_eval)],
+                grad_outputs=(adj_y * v * g).detach(),
                 allow_unused=True,
                 create_graph=True
             )
             mixed_partials_adj_y_and_params = misc.grad(
-                outputs=gdg_v,
-                inputs=y + params,
-                grad_outputs=[torch.ones_like(p) for p in gdg_v],
+                outputs=avg_dg_vjp.sum(),
+                inputs=[y] + self._params,
                 allow_unused=True,
             )
-            mixed_partials_adj_y = mixed_partials_adj_y_and_params[:n_tensors]
-            mixed_partials_params = mixed_partials_adj_y_and_params[n_tensors:]
-            mixed_partials_params = misc.flatten(mixed_partials_params)
-
-        return (
-            *gdg_times_v,
-            *misc.seq_sub(prod_partials_adj_y, mixed_partials_adj_y),
-            prod_partials_params - mixed_partials_params
-        )
-
-    ########################################
-    #               f_logqp                #
-    ########################################
-
-    def f_uncorrected_logqp(self, t, y_aug):
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
-
-        with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            f_eval = sde.f(-t, y)
-            f_eval = [-f_eval_ for f_eval_ in f_eval]
-            vjp_y_and_params = misc.grad(
-                outputs=f_eval,
-                inputs=y + params,
-                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
-                allow_unused=True,
-                create_graph=True
-            )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-            # Vector field change due to log-ratio term, i.e. ||u||^2 / 2.
-            g_eval = sde.g(-t, y)
-            h_eval = sde.h(-t, y)
-
-            g_inv_eval = [torch.pinverse(g_eval_) for g_eval_ in g_eval]
-            u_eval = misc.seq_sub(f_eval, h_eval)
-            u_eval = [torch.bmm(g_inv_eval_, u_eval_) for g_inv_eval_, u_eval_ in zip(g_inv_eval, u_eval)]
-            log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
-            corr_vjp_y_and_params = misc.grad(
-                outputs=log_ratio_correction,
-                inputs=y + params,
-                grad_outputs=adj_l,
-                allow_unused=True,
-            )
-            corr_vjp_y, corr_vjp_params = corr_vjp_y_and_params[:n_tensors], corr_vjp_y_and_params[n_tensors:]
-            corr_vjp_params = misc.flatten(corr_vjp_params)
-
-            vjp_y = misc.seq_add(vjp_y, corr_vjp_y)
-            vjp_params = vjp_params + corr_vjp_params
-
-        return (*f_eval, *vjp_y, *vjp_l, vjp_params)
-
-    def f_corrected_default_logqp(self, t, y_aug):
-        raise NotImplementedError
-
-    def f_corrected_diagonal_logqp(self, t, y_aug):
-        sde, params, n_tensors = self._base_sde, self._params, self._n_tensors
-        y, adj_y, adj_l = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors], y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
-
-        with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) for y_ in y]
-            adj_y = [adj_y_.detach() for adj_y_ in adj_y]
-
-            g_eval = sde.g(-t, y)
-            gdg = misc.grad(
-                outputs=g_eval,
-                inputs=y,
-                grad_outputs=g_eval,
-                allow_unused=True,
-                create_graph=True,
-            )
-
-            f_eval = sde.f(-t, y)
-            f_eval_corrected = misc.seq_sub(gdg, f_eval)
-            vjp_y_and_params = misc.grad(
-                outputs=f_eval_corrected,
-                inputs=y + params,
-                grad_outputs=[-adj_y_ for adj_y_ in adj_y],
-                allow_unused=True,
-                create_graph=True
-            )
-            vjp_y, vjp_params = vjp_y_and_params[:n_tensors], vjp_y_and_params[n_tensors:]
-            vjp_params = misc.flatten(vjp_params)
-
-            adj_times_dgdx = misc.grad(
-                outputs=g_eval,
-                inputs=y,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                create_graph=True
-            )
-            extra_vjp_y_and_params = misc.grad(
-                outputs=g_eval,
-                inputs=y + params,
-                grad_outputs=adj_times_dgdx,
-                allow_unused=True,
-                create_graph=True,
-            )
-            extra_vjp_y, extra_vjp_params = extra_vjp_y_and_params[:n_tensors], extra_vjp_y_and_params[n_tensors:]
-            extra_vjp_params = misc.flatten(extra_vjp_params)
-
-            # Vector field change due to log-ratio term, i.e. ||u||^2 / 2.
-            h_eval = sde.h(-t, y)
-            u_eval = misc.seq_sub_div(f_eval, h_eval, g_eval)
-            log_ratio_correction = [.5 * torch.sum(u_eval_ ** 2., dim=1) for u_eval_ in u_eval]
-            corr_vjp_y_and_params = misc.grad(
-                outputs=log_ratio_correction,
-                inputs=y + params,
-                grad_outputs=adj_l,
-                allow_unused=True,
-            )
-            corr_vjp_y, corr_vjp_params = corr_vjp_y_and_params[:n_tensors], corr_vjp_y_and_params[n_tensors:]
-            corr_vjp_params = misc.flatten(corr_vjp_params)
-
-            vjp_y = misc.seq_add(vjp_y, extra_vjp_y, corr_vjp_y)
-            vjp_params = vjp_params + extra_vjp_params + corr_vjp_params
-
-        return (*f_eval_corrected, *vjp_y, *vjp_l, vjp_params)
-
-    ########################################
-    #             g_prod_logqp             #
-    ########################################
-
-    def g_prod_default_logqp(self, t, y_aug, v):
-        n_tensors = self._n_tensors
-        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
-        results = self.g_prod_default(t, y_aug, v)
-        g_prod_eval, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
-        return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
-
-    def g_prod_diagonal_logqp(self, t, y_aug, v):
-        n_tensors = self._n_tensors
-        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
-        results = self.g_prod_diagonal(t, y_aug, v)
-        g_prod_eval, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
-        return (*g_prod_eval, *vjp_y, *vjp_l, vjp_params)
-
-    ########################################
-    #             gdg_prod_logqp           #
-    ########################################
-
-    def gdg_prod_diagonal_logqp(self, t, y_aug, v):
-        n_tensors = self._n_tensors
-        adj_l = y_aug[2 * n_tensors:3 * n_tensors]
-        vjp_l = [torch.zeros_like(adj_l_) for adj_l_ in adj_l]
-        results = self.gdg_prod_diagonal(t, y_aug, v)
-        gdg_v, vjp_y, vjp_params = results[:n_tensors], results[n_tensors:2 * n_tensors], results[2 * n_tensors]
-        return (*gdg_v, *vjp_y, *vjp_l, vjp_params)
-
-    def gdg_prod_default_logqp(self, t, y_aug, v):
-        raise NotImplementedError
+            vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
+        return misc.flatten((vg_dg_vjp, *vjp_y_and_params))

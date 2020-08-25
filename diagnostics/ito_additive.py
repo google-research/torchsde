@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 
-import argparse
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import tqdm
-import numpy as np
 from scipy import stats
 
 from tests.basic_sde import AdditiveSDE
@@ -51,7 +51,7 @@ def inspect_samples():
         ts_, ys_em_, ys_srk_, ys_true_ = to_numpy(ts, ys_em, ys_srk, ys_true)
 
     # Visualize sample path.
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_additive')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_additive')
     makedirs_if_not_found(img_dir)
 
     for i, (ys_em_i, ys_srk_i, ys_true_i) in enumerate(zip(ys_em_, ys_srk_, ys_true_)):
@@ -105,7 +105,7 @@ def inspect_strong_order():
     plt.yscale('log')
     plt.legend()
 
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_additive')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_additive')
     makedirs_if_not_found(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()

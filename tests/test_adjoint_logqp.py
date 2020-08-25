@@ -43,18 +43,26 @@ methods = ('milstein', 'srk')
 class TestAdjointLogqp(TorchTestCase):
 
     def test_basic_sde1(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         sde = BasicSDE1(d).to(device)
         _test_forward_and_backward(sde)
 
     def test_basic_sde2(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         sde = BasicSDE2(d).to(device)
         _test_forward_and_backward(sde)
 
     def test_basic_sde3(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         sde = BasicSDE3(d).to(device)
         _test_forward_and_backward(sde)
 
     def test_basic_sde4(self):
+        self.skipTest("Temporarily deprecating logqp.")
+
         sde = BasicSDE4(d).to(device)
         _test_forward_and_backward(sde)
 

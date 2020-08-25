@@ -12,3 +12,4 @@ benchmarks/plots/
 CMakeLists.txt
 restats
 *-darwin.so
+**.pyc

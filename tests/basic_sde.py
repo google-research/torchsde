@@ -129,11 +129,8 @@ class AdditiveSDE(SDEIto):
 class ScalarSDE(AdditiveSDE):
     def __init__(self, d=10, m=3):
         super(ScalarSDE, self).__init__(d=d, m=m)
-        self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d)), requires_grad=True)
+        self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, 1)), requires_grad=True)
         self.noise_type = "scalar"
-
-    def g(self, t, y):
-        return self.g_param.repeat(y.size(0), 1)
 
 
 class TupleSDE(SDEIto):

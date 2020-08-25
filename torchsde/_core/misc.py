@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
-import operator
 import warnings
 
 import torch
 
 
-def handle_unused_kwargs(obj, unused_kwargs):
+def handle_unused_kwargs(unused_kwargs, msg=None):
     if len(unused_kwargs) > 0:
-        warnings.warn(f'{obj.__class__.__name__}: Unexpected arguments {unused_kwargs}')
+        if msg is not None:
+            warnings.warn(f"{msg}: Unexpected arguments {unused_kwargs}")
+        else:
+            warnings.warn(f"Unexpected arguments {unused_kwargs}")
 
 
 def flatten(sequence):
@@ -49,47 +50,8 @@ def seq_add(*seqs):
     return [sum(seq) for seq in zip(*seqs)]
 
 
-def seq_mul(*seqs):
-    return [functools.reduce(operator.mul, seq) for seq in zip(*seqs)]
-
-
-def seq_mul_bc(*seqs):  # Supports broadcasting.
-    soln = []
-    for seq in zip(*seqs):
-        cumprod = seq[0]
-        for tensor in seq[1:]:
-            # Insert dummy dims at the end of the tensor with fewer dims.
-            num_missing_dims = cumprod.dim() - tensor.dim()
-            if num_missing_dims > 0:
-                new_size = tensor.size() + (1,) * num_missing_dims
-                tensor = tensor.reshape(*new_size)
-            elif num_missing_dims < 0:
-                new_size = cumprod.size() + (1,) * num_missing_dims
-                cumprod = cumprod.reshape(*new_size)
-            cumprod = cumprod * tensor
-        soln += [cumprod]
-    return soln
-
-
 def seq_sub(xs, ys):
     return [x - y for x, y in zip(xs, ys)]
-
-
-def seq_sub_div(xs, ys, zs):
-    return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
-
-
-def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon: float = 1e-7):
-    y = torch.where(
-        y.abs() > epsilon,
-        y,
-        torch.ones_like(y).fill_(epsilon) * y.sign()
-    )
-    return x / y
-
-
-def seq_batch_mvp(ms, vs):
-    return [batch_mvp(m, v) for m, v in zip(ms, vs)]
 
 
 def batch_mvp(m, v):
@@ -97,10 +59,13 @@ def batch_mvp(m, v):
 
 
 def grad(outputs, inputs, **kwargs):
+    if torch.is_tensor(inputs):
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
-        inputs = (inputs,)
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
     _grad = torch.autograd.grad(outputs, inputs, **kwargs)
     return convert_none_to_zeros(_grad, inputs)
@@ -109,12 +74,26 @@ def grad(outputs, inputs, **kwargs):
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
     # The present implementation avoids this.
+    if torch.is_tensor(inputs):
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
     outputs = make_seq_requires_grad(outputs)
-    if torch.is_tensor(inputs):  # Workaround for PyTorch bug #39784.
-        inputs = (inputs,)
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
     vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
     _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
+
+
+def flat_to_shape(tensor, shapes, length=()):
+    tensor_list = []
+    total = 0
+    for shape in shapes:
+        next_total = total + shape.numel()
+        # It's important that this be view((...)), not view(...). Else when length=(), shape=() it fails.
+        tensor_list.append(tensor[..., total:next_total].view((*length, *shape)))
+        total = next_total
+    return tensor_list
