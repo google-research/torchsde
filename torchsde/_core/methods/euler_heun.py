@@ -19,7 +19,7 @@ from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 class EulerHeun(base_solver.BaseSDESolver):
     weak_order = 1.0
     sde_type = SDE_TYPES.stratonovich
-    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
+    noise_types = NOISE_TYPES.all()
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
     def __init__(self, sde, **kwargs):
@@ -33,13 +33,13 @@ class EulerHeun(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        f = self.sde.f(t0, y0)
+        g_prod = self.sde.g_prod(t0, y0, I_k)
 
-        y0_prime = y0 + g_prod_eval        
+        y0_prime = y0 + g_prod        
 
-        g_prod_eval_prime = self.sde.g_prod(t1, y0_prime, I_k)
+        g_prod_prime = self.sde.g_prod(t1, y0_prime, I_k)
 
-        y1 = y0 + dt * f_eval + (g_prod_eval + g_prod_eval_prime) * 0.5        
+        y1 = y0 + dt * f + (g_prod + g_prod_prime) * 0.5        
 
         return y1
