@@ -32,9 +32,9 @@ def inspect_samples():
     batch_size, d, m = 32, 1, 5
     steps = 10
 
-    ts = torch.linspace(0., 5., steps=steps).to(device)
+    ts = torch.linspace(0., 5., steps=steps, device=device)
     dt = 3e-1
-    y0 = torch.ones(batch_size, d).to(device)
+    y0 = torch.ones(batch_size, d, device=device)
     sde = AdditiveSDE(d=d, m=m).to(device)
 
     with torch.no_grad():
@@ -66,9 +66,9 @@ def inspect_samples():
 
 def inspect_strong_order():
     batch_size, d, m = 4096, 5, 5
-    ts = torch.tensor([0., 5.]).to(device)
+    ts = torch.tensor([0., 5.], device=device)
     dts = tuple(2 ** -i for i in range(1, 9))
-    y0 = torch.ones(batch_size, d).to(device)
+    y0 = torch.ones(batch_size, d, device=device)
     sde = Ex3Additive(d=d).to(device)
 
     euler_mses_ = []

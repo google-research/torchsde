@@ -16,7 +16,9 @@
 import torch
 from torch import nn
 
-from torchsde import SDEIto
+from torchsde import SDEIto, BaseSDE
+
+from torchsde.settings import SDE_TYPES
 
 
 class BasicSDE1(SDEIto):
@@ -110,9 +112,9 @@ class GeneralSDE(SDEIto):
         return torch.sigmoid(y)
 
 
-class AdditiveSDE(SDEIto):
-    def __init__(self, d=10, m=3):
-        super(AdditiveSDE, self).__init__(noise_type="additive")
+class AdditiveSDE(BaseSDE):
+    def __init__(self, d=10, m=3, sde_type=SDE_TYPES.ito):
+        super(AdditiveSDE, self).__init__(noise_type="additive", sde_type=sde_type)
         self.f_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
         self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, m)), requires_grad=True)
 
