@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
-
 from .. import base_solver
+from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
 class Midpoint(base_solver.BaseSDESolver):
@@ -34,23 +33,17 @@ class Midpoint(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        f = self.sde.f(t0, y0)
+        g_prod = self.sde.g_prod(t0, y0, I_k)
 
         half_dt = 0.5 * dt
 
         t0_prime = t0 + half_dt
-        y0_prime = [
-            y0_ + half_dt * f_eval_ + 0.5 * g_prod_eval_
-            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval, g_prod_eval)
-        ]
+        y0_prime = y0 + half_dt * f + 0.5 * g_prod
 
-        f_eval_prime = self.sde.f(t0_prime, y0_prime)
-        g_prod_eval_prime = self.sde.g_prod(t0_prime, y0_prime, I_k)
+        f_prime = self.sde.f(t0_prime, y0_prime)
+        g_prod_prime = self.sde.g_prod(t0_prime, y0_prime, I_k)
 
-        y1 = [
-            y0_ + dt * f_eval_ + g_prod_eval_
-            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval_prime, g_prod_eval_prime)
-        ]
+        y1 = y0 + dt * f_prime + g_prod_prime
 
         return y1

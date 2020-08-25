@@ -24,7 +24,7 @@ from torch import nn
 
 from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde import settings
-from torchsde._core.base_sde import ForwardSDE, TupleSDE  # noqa
+from torchsde._core.base_sde import ForwardSDE  # noqa
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -75,38 +75,34 @@ def _batch_jacobian(output, input_):
     return torch.stack(jacs, dim=0)
 
 
-def _gdg_jvp_brute_force(sde, t, y, a):
-    # Only returns the value for the first input-output pair.
+def _dg_ga_jvp_brute_force(sde, t, y, a):
     with torch.enable_grad():
-        y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
-        g_eval = sde.g(t, y)
-        v = [torch.bmm(g_eval_, a_) for g_eval_, a_ in zip(g_eval, a)]
+        y = y.detach().requires_grad_(True) if not y.requires_grad else y
+        g = sde.g(t, y)
+        ga = torch.bmm(g, a)
 
-        y0, g_eval0, v0 = y[0], g_eval[0], v[0]
-        num_brownian = g_eval0.size(-1)
-        jacobians_by_column = [_batch_jacobian(g_eval0[..., l], y0) for l in range(num_brownian)]
-        return [
-            sum(torch.bmm(jacobians_by_column[l], v0[..., l].unsqueeze(-1)).squeeze() for l in range(num_brownian))
-        ]
+        num_brownian = g.size(-1)
+        jacobians_by_column = [_batch_jacobian(g[..., l], y) for l in range(num_brownian)]
+        return sum(torch.bmm(jacobians_by_column[l], ga[..., l].unsqueeze(-1)).squeeze() for l in range(num_brownian))
 
 
 def _make_inputs():
     t = torch.rand((), device=device)
-    y = [torch.randn(batch_size, d, device=device)]
+    y = torch.randn(batch_size, d, device=device)
     a = torch.randn(batch_size, m, m, device=device)
-    a = [a - a.transpose(1, 2)]  # Anti-symmetric.
-    sde = ForwardSDE(TupleSDE(SDE()))
+    a = a - a.transpose(1, 2)  # Anti-symmetric.
+    sde = ForwardSDE(SDE())
     return sde, t, y, a
 
 
-def test_gdg_jvp():
+def test_dg_ga_jvp():
     sde, t, y, a = _make_inputs()
-    outs_brute_force = _gdg_jvp_brute_force(sde, t, y, a)  # Reference.
-    outs = sde.gdg_jvp_column_sum(t, y, a)
-    outs_v2 = sde.gdg_jvp_column_sum_v2(t, y, a)
-    for out_brute_force, out, out_v2 in zip(outs_brute_force, outs, outs_v2):
-        assert torch.allclose(out_brute_force, out)
-        assert torch.allclose(out_brute_force, out_v2)
+    outs_brute_force = _dg_ga_jvp_brute_force(sde, t, y, a)  # Reference.
+    outs = sde.dg_ga_jvp_column_sum_v1(t, y, a)
+    outs_v2 = sde.dg_ga_jvp_column_sum_v2(t, y, a)
+    assert torch.is_tensor(outs_brute_force) and torch.is_tensor(outs) and torch.is_tensor(outs_v2)
+    assert torch.allclose(outs_brute_force, outs)
+    assert torch.allclose(outs_brute_force, outs_v2)
 
 
 def _time_function(func, reps=10):
@@ -118,11 +114,11 @@ def _time_function(func, reps=10):
 def check_efficiency():
     sde, t, y, a = _make_inputs()
 
-    func1 = lambda: sde.gdg_jvp_column_sum_v1(t, y, a)  # Linear in m.
+    func1 = lambda: sde.dg_ga_jvp_column_sum_v1(t, y, a)  # Linear in m.
     time_elapse = _time_function(func1)
     print(f'Time elapse for loop: {time_elapse:.4f}')
 
-    func2 = lambda: sde.gdg_jvp_column_sum_v2(t, y, a)  # Almost constant in m.
+    func2 = lambda: sde.dg_ga_jvp_column_sum_v2(t, y, a)  # Almost constant in m.
     time_elapse = _time_function(func2)
     print(f'Time elapse for duplicate: {time_elapse:.4f}')
 
@@ -139,6 +135,6 @@ def test_adjoint():
     torch.autograd.gradcheck(func, y0_, rtol=1e-4, atol=1e-3, eps=1e-8)
 
 
-test_gdg_jvp()
+test_dg_ga_jvp()
 check_efficiency()
 test_adjoint()

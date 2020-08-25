@@ -27,7 +27,7 @@ _r12 = 1 / 12
 
 class BrownianReturn:
     __slots__ = ('W', 'U', 'A')
-    
+
     def __init__(self, W, U=None, A=None):
         self.W = W
         self.U = U

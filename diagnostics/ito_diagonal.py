@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import os
 
-import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -56,7 +56,7 @@ def inspect_sample():
             ts, ys_euler, ys_milstein, ys_milstein_grad_free, ys_srk, ys_analytical)
 
     # Visualize sample path.
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_diagonal')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_diagonal')
     makedirs_if_not_found(img_dir)
 
     for i, (ys_euler_i, ys_milstein_i, ys_milstein_grad_free_i, ys_srk_i, ys_analytical_i) in enumerate(
@@ -92,7 +92,8 @@ def inspect_strong_order():
             # Only take end value.
             _, ys_euler = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler')
             _, ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
-            _, ys_milstein_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', options={'grad_free': True})
+            _, ys_milstein_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein',
+                                              options={'grad_free': True})
             _, ys_srk = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='srk')
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
@@ -101,7 +102,8 @@ def inspect_strong_order():
             milstein_grad_free_mse = compute_mse(ys_milstein_grad_free, ys_analytical)
             srk_mse = compute_mse(ys_srk, ys_analytical)
 
-            euler_mse_, milstein_mse_, milstein_grad_free_mse_, srk_mse_ = to_numpy(euler_mse, milstein_mse, milstein_grad_free_mse, srk_mse)
+            euler_mse_, milstein_mse_, milstein_grad_free_mse_, srk_mse_ = to_numpy(
+                euler_mse, milstein_mse, milstein_grad_free_mse, srk_mse)
 
             euler_mses_.append(euler_mse_)
             milstein_mses_.append(milstein_mse_)
@@ -125,7 +127,7 @@ def inspect_strong_order():
     plt.yscale('log')
     plt.legend()
 
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'srk_diagonal')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_diagonal')
     makedirs_if_not_found(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()

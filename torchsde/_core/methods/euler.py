@@ -33,12 +33,8 @@ class Euler(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        f = self.sde.f(t0, y0)
+        g_prod = self.sde.g_prod(t0, y0, I_k)
 
-        y1 = [
-            y0_ + f_eval_ * dt + g_prod_eval_
-            for y0_, f_eval_, g_prod_eval_ in zip(y0, f_eval, g_prod_eval)
-        ]
-
+        y1 = y0 + f * dt + g_prod
         return y1

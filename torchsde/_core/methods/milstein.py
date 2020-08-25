@@ -13,14 +13,12 @@
 # limitations under the License.
 
 import abc
-import math
 
 import torch
 
-from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS
-
 from .. import adjoint_sde
 from .. import base_solver
+from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS
 
 
 class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
@@ -50,7 +48,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def y_prime_f_factor(self, dt, f_eval):
+    def y_prime_f_factor(self, dt, f):
         raise NotImplementedError
 
     def step(self, t0, t1, y0):
@@ -58,47 +56,39 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
 
-        f_eval = self.sde.f(t0, y0)
-        g_prod_eval = self.sde.g_prod(t0, y0, I_k)
+        f = self.sde.f(t0, y0)
+        g_prod_I_k = self.sde.g_prod(t0, y0, I_k)
 
         if self.options[METHOD_OPTIONS.grad_free]:
-            g_eval = self.sde.g(t0, y0)
-            g_prod_eval_v = self.sde.g_prod(t0, y0, v)
-            sqrt_dt = torch.sqrt(dt) if isinstance(dt, torch.Tensor) else math.sqrt(dt)
-            y0_prime = [
-                y0_ + self.y_prime_f_factor(dt, f_eval_) + g_eval_ * sqrt_dt
-                for y0_, f_eval_, g_eval_ in zip(y0, f_eval, g_eval)
-            ]            
-            g_prod_eval_prime = self.sde.g_prod(t0, y0_prime, v)
-            gdg_prod_eval = [
-                (g_prod_eval_prime_ - g_prod_eval_v_) / sqrt_dt
-                for g_prod_eval_prime_, g_prod_eval_v_ in zip(g_prod_eval_prime, g_prod_eval_v)
-            ]
+            g = self.sde.g(t0, y0)
+            g_prod_v = self.sde.g_prod(t0, y0, v)
+            sqrt_dt = torch.sqrt(dt)
+            y0_prime = y0 + self.y_prime_f_factor(dt, f) + g * sqrt_dt
+            g_prod_v_prime = self.sde.g_prod(t0, y0_prime, v)
+            gdg_prod = (g_prod_v_prime - g_prod_v) / sqrt_dt
         else:
-            gdg_prod_eval = self.sde.gdg_prod(t0, y0, v)
-        
-        y1 = [
-            y0_i + f_eval_i * dt + g_prod_eval_i + .5 * gdg_prod_eval_i
-            for y0_i, f_eval_i, g_prod_eval_i, gdg_prod_eval_i in zip(y0, f_eval, g_prod_eval, gdg_prod_eval)
-        ]
+            gdg_prod = self.sde.gdg_prod(t0, y0, v)
+
+        y1 = y0 + f * dt + g_prod_I_k + .5 * gdg_prod
+
         return y1
 
 
 class MilsteinIto(BaseMilstein):
     sde_type = SDE_TYPES.ito
-    
-    def v_term(self, I_k, dt):
-        return [delta_bm_ ** 2 - dt for delta_bm_ in I_k]
 
-    def y_prime_f_factor(self, dt, f_eval):
-        return dt * f_eval
+    def v_term(self, I_k, dt):
+        return I_k ** 2 - dt
+
+    def y_prime_f_factor(self, dt, f):
+        return dt * f
 
 
 class MilsteinStratonovich(BaseMilstein):
     sde_type = SDE_TYPES.stratonovich
 
     def v_term(self, I_k, dt):
-        return [delta_bm_ ** 2 for delta_bm_ in I_k]
+        return I_k ** 2
 
-    def y_prime_f_factor(self, dt, f_eval):
+    def y_prime_f_factor(self, dt, f):
         return 0.

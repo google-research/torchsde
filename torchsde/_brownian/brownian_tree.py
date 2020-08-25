@@ -86,7 +86,7 @@ class BrownianTree(base_brownian.BaseBrownian):
                 approximation type. This is needed for some higher-order SDE
                 solvers.
         """
-        handle_unused_kwargs(self, unused_kwargs)
+        handle_unused_kwargs(unused_kwargs, msg=self.__class__.__name__)
         del unused_kwargs
 
         super(BrownianTree, self).__init__()
