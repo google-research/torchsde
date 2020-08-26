@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools as ft
 import math
 import random
 import warnings
 from typing import Optional, Tuple, Union
 
+import boltons.cacheutils
 import numpy as np
 import torch
 
@@ -85,19 +85,14 @@ class _Interval:
     # space-time Levy area of the parent interval to compute our own increment and space-time Levy area, and it's likely
     # that our parent exists in the cache, as if we're being queried then our parent was probably queried recently as
     # well.
-    # Note that we don't call the cache directly because the global BrownianInterval overrides
-    # _increment_and_space_time_levy_area to return its own increment and space-time Levy area, effectively holding them
-    # permanently in the cache.
-    # If the request isn't found in the LRU cache then it heads into increment_and_space_time_levy_area_uncached.
+    # (The top-level BrownianInterval overrides _increment_and_space_time_levy_area to return its own increment and
+    # space-time Levy area, effectively holding them permanently in the cache.)
     #
+    # If the request isn't found in the LRU cache then it computes it from its parent.
     # Now it turns out that the size of our increment and space-time Levy area is really most naturally thought of as a
     # property of our parent: it depends on our parent's increment, space-time Levy area, and whether we are the left or
-    # right interval within our parent. So increment_and_space_time_levy_area_uncached in turn checks if we are on the
-    # left or right of our parent and dispatches to the parent.
-    #
-    # left_increment_and_space_time_levy_area and right_increment_and_space_time_levy_area then really do the
-    # calculation. As helper functions, they have _brownian_bridge and _common_levy_computation that factor out their
-    # common code.
+    # right interval within our parent. So _increment_and_space_time_levy_area in turn checks if we are on the
+    # left or right of our parent and does most of the computation using the parent's attributes.
 
     def increment_and_levy_area(self):
         W, H = self._increment_and_space_time_levy_area()
@@ -106,80 +101,67 @@ class _Interval:
         return W, H, A
 
     def _increment_and_space_time_levy_area(self):
-        return self._top.increment_and_space_time_levy_area_cache(self)
-
-    def increment_and_space_time_levy_area_uncached(self):
         # TODO: switch this over to a trampoline?
-        if self._is_left:
-            return self._parent.left_increment_and_space_time_levy_area()
-        else:
-            return self._parent.right_increment_and_space_time_levy_area()
 
-    def left_increment_and_space_time_levy_area(self):
-        if self._top.have_H:
-            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._common_levy_computation()
+        # It's quite important that this whole block of code be inline, without any additional function calls between
+        # it and calling parent._increment_and_space_time_levy_area().
+        # The recursion can in normal usage grow quite large - and if there's any additional stack frames in the way,
+        # large enough to violate the default recursion limit.
+        # This is also the reason we have an inlined LRU cache rather than wrapping with functools.lru_cache.
 
-            first_coeff = left_diff * h_reciprocal
-            second_coeff = 6 * first_coeff * right_diff * h_reciprocal
+        try:
+            return self._top._increment_and_space_time_levy_area_cache[self]
+        except KeyError:
+            parent = self._parent
 
-            left_W = first_coeff * W + second_coeff * H + third_coeff * X1
-            left_H = first_coeff ** 2 * H - a * X1 + c * right_diff * X2
-        else:
-            # Don't compute space-time Levy area unless we need to
-            left_W = self._brownian_bridge(is_left=True)
-            left_H = None
-        return left_W, left_H
+            W, H = parent._increment_and_space_time_levy_area()
+            h_reciprocal = 1 / (parent._end - parent._start)
+            left_diff = parent._midway - parent._start
+            right_diff = parent._end - parent._midway
 
-    def right_increment_and_space_time_levy_area(self):
-        if self._top.have_H:
-            left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff = self._common_levy_computation()
+            if self._top.have_H:
+                left_diff_squared = left_diff ** 2
+                right_diff_squared = right_diff ** 2
+                left_diff_cubed = left_diff * left_diff_squared
+                right_diff_cubed = right_diff * right_diff_squared
 
-            first_coeff = right_diff * h_reciprocal
-            second_coeff = 6 * first_coeff * left_diff * h_reciprocal
+                v = 0.5 * math.sqrt(left_diff * right_diff / (left_diff_cubed + right_diff_cubed))
 
-            right_W = first_coeff * W - second_coeff * H - third_coeff * X1
-            right_H = first_coeff ** 2 * H - b * X1 - c * left_diff * X2
-        else:
-            # Don't compute space-time Levy area unless we need to
-            right_W = self._brownian_bridge(is_left=False)
-            right_H = None
-        return right_W, right_H
+                a = v * left_diff_squared * h_reciprocal
+                b = v * right_diff_squared * h_reciprocal
+                c = v * _rsqrt3
 
-    def _brownian_bridge(self, is_left):
-        W, _ = self._increment_and_space_time_levy_area()
-        h_reciprocal = 1 / (self._end - self._start)
-        mean = (self._midway - self._start) * W * h_reciprocal
-        var = (self._end - self._midway) * (self._midway - self._start) * h_reciprocal
-        noise = self._randn(self._W_seed)
-        left_W = mean + math.sqrt(var) * noise
-        if is_left:
-            return left_W
-        else:
-            return W - left_W
+                X1 = parent._randn(parent._W_seed)
+                X2 = parent._randn(parent._H_seed)
 
-    def _common_levy_computation(self):
-        W, H = self._increment_and_space_time_levy_area()
+                third_coeff = 2 * (a * left_diff + b * right_diff) * h_reciprocal
 
-        left_diff = self._midway - self._start
-        right_diff = self._end - self._midway
-        left_diff_squared = left_diff ** 2
-        right_diff_squared = right_diff ** 2
-        left_diff_cubed = left_diff * left_diff_squared
-        right_diff_cubed = right_diff * right_diff_squared
+                if self._is_left:
+                    first_coeff = left_diff * h_reciprocal
+                    second_coeff = 6 * first_coeff * right_diff * h_reciprocal
+                    out_W = first_coeff * W + second_coeff * H + third_coeff * X1
+                    out_H = first_coeff ** 2 * H - a * X1 + c * right_diff * X2
+                else:
+                    first_coeff = right_diff * h_reciprocal
+                    second_coeff = 6 * first_coeff * left_diff * h_reciprocal
+                    out_W = first_coeff * W - second_coeff * H - third_coeff * X1
+                    out_H = first_coeff ** 2 * H - b * X1 - c * left_diff * X2
+            else:
+                # Don't compute space-time Levy area unless we need to
 
-        h_reciprocal = 1 / (self._end - self._start)
-        v = 0.5 * math.sqrt(left_diff * right_diff / (left_diff_cubed + right_diff_cubed))
+                mean = left_diff * W * h_reciprocal
+                var = left_diff * right_diff * h_reciprocal
+                noise = parent._randn(parent._W_seed)
+                left_W = mean + math.sqrt(var) * noise
 
-        a = v * left_diff_squared * h_reciprocal
-        b = v * right_diff_squared * h_reciprocal
-        c = v * _rsqrt3
+                if self._is_left:
+                    out_W = left_W
+                else:
+                    out_W = W - left_W
+                out_H = None
 
-        X1 = self._randn(self._W_seed)
-        X2 = self._randn(self._H_seed)
-
-        third_coeff = 2 * (a * left_diff + b * right_diff) * h_reciprocal
-
-        return left_diff, right_diff, h_reciprocal, a, b, c, W, H, X1, X2, third_coeff
+            self._top._increment_and_space_time_levy_area_cache[self] = (out_W, out_H)
+            return out_W, out_H
 
     def _randn(self, seed):
         # We generate random noise deterministically wrt some seed; this seed is determined by the generator.
@@ -260,6 +242,8 @@ class _Interval:
     def _split(self, midway):  # Create two children
         self._midway = midway
 
+        # TODO: put generator creation for 'self' here, not for the children
+
         # Use splittable PRNGs to generate noise.
         # TODO: spawning is slow (about half the runtime), because of the tuple addition to create the child's
         #  spawn_key: our spawn_key + (index,). Find a clever solution?
@@ -293,7 +277,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
     """
 
     __slots__ = ('shape', 'dtype', 'device', '_w_h', '_entropy', '_dt', '_cache_size', 'levy_area_approximation',
-                 '_last_interval', 'increment_and_space_time_levy_area_cache')
+                 '_last_interval', '_increment_and_space_time_levy_area_cache')
 
     def __init__(self,
                  t0: Scalar,
@@ -375,13 +359,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         self.device = device
         self._entropy = entropy
 
-        # The central piece of our implementation: an LRU cache on the calculations for increments and space-time Levy
-        # area.
-        @ft.lru_cache(cache_size)
-        def increment_and_space_time_levy_area_cache(interval):
-            return interval.increment_and_space_time_levy_area_uncached()
-
-        self.increment_and_space_time_levy_area_cache = increment_and_space_time_levy_area_cache
+        self._increment_and_space_time_levy_area_cache = boltons.cacheutils.LRU(max_size=cache_size)
 
         generator = np.random.SeedSequence(entropy=entropy, pool_size=pool_size)
         # First three states are reserved as in _Initial
