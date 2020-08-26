@@ -26,7 +26,7 @@ from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs_if_not_found, compute_mse
 
-from tests.problems import Ex1Additive
+from tests.problems import Ex3Additive
 
 def inspect_sample():
     batch_size, d, m = 32, 1, 5
@@ -87,7 +87,7 @@ def inspect_strong_order():
     ts = torch.tensor([0., 5.], device=device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex1Additive(d=d, sde_type='stratonovich').to(device)
+    sde = Ex3Additive(d=d, sde_type='stratonovich').to(device)
 
     heun_mses_ = []
     euler_heun_mses_ = []
@@ -101,12 +101,11 @@ def inspect_strong_order():
 
         for dt in tqdm.tqdm(dts):
             # Only take end value.
-            _, ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun', names={'drift': 'f_corr'})
-            _, ys_euler_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler_heun', names={'drift': 'f_corr'})
-            _, ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint', names={'drift': 'f_corr'})
-            _, ys_milstein_strat = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'})
-            _, ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'},
-                                               options={'grad_free': True})
+            _, ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun')
+            _, ys_euler_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='euler_heun')
+            _, ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint')
+            _, ys_milstein_strat = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein')
+            _, ys_mil_strat_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', options={'grad_free': True})
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
             heun_mse = compute_mse(ys_heun, ys_analytical)

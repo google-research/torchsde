@@ -159,19 +159,10 @@ class Ex3(BaseSDE):
     def nfe(self):
         return self._nfe
 
-class Ex1Additive(Ex1):
-    def __init__(self, d=10, sde_type='ito'):
-        super(Ex1Additive, self).__init__(d=d, sde_type=sde_type)
-        self.noise_type = 'additive'
-
-    def g(self, t, y):
-        # Conform to additive noise SDE signature.
-        gval = super(Ex1Additive, self).g(t=t, y=y)
-        return torch.diag_embed(gval)
 
 class Ex3Additive(Ex3):
-    def __init__(self, d=10):
-        super(Ex3Additive, self).__init__(d=d)
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex3Additive, self).__init__(d=d, sde_type=sde_type)
         self.noise_type = 'additive'
 
     def g(self, t, y):
