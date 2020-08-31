@@ -56,11 +56,8 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._return_zero,
         }.get(sde.noise_type, self.gdg_prod_default)
         self.dg_ga_jvp_column_sum = {
-            NOISE_TYPES.diagonal: self._return_zero,
-            NOISE_TYPES.additive: self._return_zero,
-            NOISE_TYPES.scalar: self._return_zero,
             NOISE_TYPES.general: self.dg_ga_jvp_column_sum_v2
-        }.get(sde.noise_type)
+        }.get(sde.noise_type, self._return_zero)
 
     ########################################
     #                g_prod                #
@@ -82,7 +79,7 @@ class ForwardSDE(BaseSDE):
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self._base_sde.g(t, y)
-            vg_dg_vjp, = misc.grad(
+            vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
                 grad_outputs=g * v.unsqueeze(-2),
@@ -96,7 +93,7 @@ class ForwardSDE(BaseSDE):
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self._base_sde.g(t, y)
-            vg_dg_vjp, = misc.grad(
+            vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
                 grad_outputs=g * v,
