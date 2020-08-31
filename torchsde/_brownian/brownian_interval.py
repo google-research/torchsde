@@ -15,7 +15,6 @@
 import math
 import random
 import warnings
-from typing import Optional, Tuple, Union
 
 import boltons.cacheutils
 import numpy as np
@@ -24,7 +23,7 @@ import torch
 from . import base_brownian
 from . import utils
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
+from ..types import Scalar, Optional, Tuple, Union
 
 _rsqrt3 = 1 / math.sqrt(3)
 

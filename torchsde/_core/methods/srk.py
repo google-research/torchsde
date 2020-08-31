@@ -35,9 +35,9 @@ class SRK(base_solver.BaseSDESolver):
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-    levy_area_approximations = [LEVY_AREA_APPROXIMATIONS.space_time,
+    levy_area_approximations = (LEVY_AREA_APPROXIMATIONS.space_time,
                                 LEVY_AREA_APPROXIMATIONS.davie,
-                                LEVY_AREA_APPROXIMATIONS.foster]
+                                LEVY_AREA_APPROXIMATIONS.foster)
 
     def __init__(self, sde, **kwargs):
         if sde.noise_type == NOISE_TYPES.additive:
@@ -46,7 +46,7 @@ class SRK(base_solver.BaseSDESolver):
             self.step = self.diagonal_or_scalar_step
 
         if isinstance(sde, adjoint_sde.AdjointSDE):
-            raise ValueError(f"Derivative-free Milstein cannot be used for adjoint SDEs, because it requires "
+            raise ValueError(f"Stochastic Runge–Kutta methods cannot be used for adjoint SDEs, because it requires "
                              f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
                              f"diffusion-vector product. Use a different method instead.")
 

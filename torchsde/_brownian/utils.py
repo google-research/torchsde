@@ -13,13 +13,12 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 import blist
 import torch
 
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import TensorOrTensors
+from ..types import TensorOrTensors, Optional
 
 _rsqrt3 = 1 / math.sqrt(3)
 _r12 = 1 / 12

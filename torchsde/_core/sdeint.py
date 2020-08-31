@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import warnings
-from typing import Optional, Dict, Any
 
 import torch
 
@@ -22,11 +21,11 @@ from . import methods
 from . import misc
 from .._brownian import BaseBrownian, BrownianInterval
 from ..settings import SDE_TYPES, NOISE_TYPES, METHODS, LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar, Vector
+from ..types import Scalar, Vector, Optional, Dict, Any, Tensor
 
 
 def sdeint(sde: base_sde.BaseSDE,
-           y0: torch.Tensor,
+           y0: Tensor,
            ts: Vector,
            bm: Optional[BaseBrownian] = None,
            method: Optional[str] = "srk",
@@ -37,7 +36,7 @@ def sdeint(sde: base_sde.BaseSDE,
            dt_min: Optional[Scalar] = 1e-5,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
-           **unused_kwargs) -> torch.Tensor:
+           **unused_kwargs) -> Tensor:
     """Numerically integrate an Itô SDE.
 
     Args:

@@ -14,7 +14,6 @@
 
 import random
 import warnings
-from typing import Optional
 
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
@@ -23,7 +22,7 @@ from .._brownian import base_brownian
 from .._brownian import utils
 from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
+from ..types import Scalar, Optional
 
 
 class BrownianTree(base_brownian.BaseBrownian):
