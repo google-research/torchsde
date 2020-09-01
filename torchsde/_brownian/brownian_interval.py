@@ -22,7 +22,7 @@ import torch
 from . import base_brownian
 from . import utils
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar, Optional, Tuple, Union
+from ..types import Scalar, Optional, Tuple, Union, Tensor
 
 _rsqrt3 = 1 / math.sqrt(3)
 
@@ -288,8 +288,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  pool_size: int = 8,
                  cache_size: Optional[int] = 45,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                 W: Optional[torch.Tensor] = None,
-                 H: Optional[torch.Tensor] = None,
+                 W: Optional[Tensor] = None,
+                 H: Optional[Tensor] = None,
                  **kwargs):
         """Initialize the Brownian interval.
 
