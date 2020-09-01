@@ -14,6 +14,8 @@
 
 import os
 
+import numpy as np
+from scipy import stats
 import torch
 
 
@@ -38,11 +40,26 @@ def compute_mse(x, y, normdim=1, meandim=0):
     sqrnormdiff = normdiff ** 2.
     mse = sqrnormdiff.mean(dim=meandim)
     assert mse.size() == ()
-    return mse
+    return _to_numpy_single(mse)
 
 
-def makedirs_if_not_found(*dirs):
+def makedirs(*dirs):
     for d in dirs:
         assert isinstance(d, str)
         if not os.path.exists(d):
             os.makedirs(d)
+
+
+def log(x):
+    if not isinstance(x, np.ndarray):
+        return np.log(np.array(x))
+    return np.log(x)
+
+
+def half_log(x):
+    return .5 * log(x)
+
+
+def regress_slope(x, y):
+    k, _, _, _, _ = stats.linregress(x, y)
+    return k

@@ -24,7 +24,7 @@ from scipy import stats
 from tests.problems import Ex1
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from .utils import to_numpy, makedirs_if_not_found, compute_mse
+from .utils import to_numpy, makedirs, compute_mse
 
 
 def inspect_sample():
@@ -58,7 +58,7 @@ def inspect_sample():
 
     # Visualize sample path.
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
-    makedirs_if_not_found(img_dir)
+    makedirs(img_dir)
 
     for i, (ys_heun_i, ys_midpoint_i, ys_milstein_strat_i, ys_mil_strat_grad_free_i, ys_analytical_i) in enumerate(
             zip(ys_heun_, ys_midpoint_, ys_milstein_strat_, ys_mil_strat_grad_free_, ys_analytical_)):
@@ -130,7 +130,7 @@ def inspect_strong_order():
     plt.legend()
 
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
-    makedirs_if_not_found(img_dir)
+    makedirs(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()
 

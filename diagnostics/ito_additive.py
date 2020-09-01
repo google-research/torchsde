@@ -25,7 +25,7 @@ from tests.basic_sde import AdditiveSDE
 from tests.problems import Ex3Additive
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from .utils import to_numpy, makedirs_if_not_found, compute_mse
+from .utils import to_numpy, makedirs, compute_mse
 
 
 def inspect_samples():
@@ -52,7 +52,7 @@ def inspect_samples():
 
     # Visualize sample path.
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_additive')
-    makedirs_if_not_found(img_dir)
+    makedirs(img_dir)
 
     for i, (ys_em_i, ys_srk_i, ys_true_i) in enumerate(zip(ys_em_, ys_srk_, ys_true_)):
         plt.figure()
@@ -106,7 +106,7 @@ def inspect_strong_order():
     plt.legend()
 
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_additive')
-    makedirs_if_not_found(img_dir)
+    makedirs(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()
 
