@@ -73,11 +73,11 @@ def inspect_strong_order(y0: Tensor,
     mses = []
     for dt in tqdm.tqdm(dts):
         solns = [sdeint(sde, y0, ts, bm, method=method, dt=dt)[-1] for method in methods]
-        mses_for_dt = [utils.compute_mse(soln, true) for soln in solns]
+        mses_for_dt = [utils.mse(soln, true) for soln in solns]
         mses.append(mses_for_dt)
 
     slopes = [
-        utils.regress_slope(utils.log(dts), utils.half_log(mses_for_method))
+        utils.linregress_slope(utils.log(dts), utils.half_log(mses_for_method))
         for mses_for_method in zip(*mses)
     ]
 

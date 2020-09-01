@@ -14,13 +14,12 @@
 
 import os
 
-import numpy as np
 import torch
 
 from tests.problems import Ex2
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from . import inspect
+from . import inspect, utils
 
 
 def main():
@@ -51,7 +50,6 @@ def main():
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float64)
-    torch.manual_seed(1147481649)
-    np.random.seed(1147481649)
+    utils.manual_seed()
 
     main()

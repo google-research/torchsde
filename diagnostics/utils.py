@@ -13,14 +13,18 @@
 # limitations under the License.
 
 import os
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from scipy import stats
 
+from torchsde.types import Optional, Tensor, Sequence, Union
+
 
 def to_numpy(*args):
+    """Convert a sequence which might contain Tensors to numpy arrays."""
     if len(args) == 1:
         arg = args[0]
         if isinstance(arg, torch.Tensor):
@@ -30,32 +34,34 @@ def to_numpy(*args):
         return tuple(_to_numpy_single(arg) if isinstance(arg, torch.Tensor) else arg for arg in args)
 
 
-def _to_numpy_single(arg):
+def _to_numpy_single(arg: torch.Tensor) -> np.ndarray:
     return arg.detach().cpu().numpy()
 
 
-def compute_mse(x, y, norm_dim=1, mean_dim=0):
+def mse(x: Tensor, y: Tensor, norm_dim: Optional[int] = 1, mean_dim: Optional[int] = 0) -> np.ndarray:
+    """Compute mean squared error."""
     return _to_numpy_single((torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim))
 
 
-def makedirs(*dirs):
-    for d in dirs:
-        assert isinstance(d, str)
-        if not os.path.exists(d):
-            os.makedirs(d)
+def makedirs(*dirs: str):
+    """Create directories if not already present according to a sequence of strings."""
+    [os.makedirs(d) for d in dirs if not os.path.exists(d)]
 
 
-def log(x):
+def log(x: Union[Sequence[float], np.ndarray]) -> np.ndarray:
+    """Compute element-wise log of a sequence of floats."""
     if not isinstance(x, np.ndarray):
         return np.log(np.array(x))
     return np.log(x)
 
 
-def half_log(x):
+def half_log(x: Union[Sequence[float], np.ndarray]) -> np.ndarray:
+    """Compute element-wise half-log of a sequence of floats."""
     return .5 * log(x)
 
 
-def regress_slope(x, y):
+def linregress_slope(x, y):
+    """Return the slope of a least-squares regression for two sets of measurements."""
     k, _, _, _, _ = stats.linregress(x, y)
     return k
 
@@ -108,3 +114,10 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, hists=None, options
     plt.tight_layout()
     plt.savefig(img_path)
     plt.close()
+
+
+def manual_seed(seed: Optional[int] = 1147481649):
+    """Set seeds for default generators of 1) torch, 2) numpy, and 3) Python's random library."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)

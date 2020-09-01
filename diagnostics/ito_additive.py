@@ -14,18 +14,17 @@
 
 import os
 
-import numpy as np
 import torch
 
 from tests.basic_sde import AdditiveSDE
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from . import inspect
+from . import inspect, utils
 
 
 def main():
     small_batch_size, large_batch_size, d, m = 16, 8192, 3, 5
-    t0, t1, steps, dt = 0., 5., 10, 1e-1
+    t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
     sde = AdditiveSDE(d=d, m=m).to(device)
@@ -50,7 +49,6 @@ def main():
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     torch.set_default_dtype(torch.float64)
-    torch.manual_seed(1147481649)
-    np.random.seed(1147481649)
+    utils.manual_seed()
 
     main()

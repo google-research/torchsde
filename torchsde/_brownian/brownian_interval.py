@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-import random
 import warnings
 
 import boltons.cacheutils
@@ -350,8 +349,9 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         shape, dtype, device = utils.check_tensor_info(W, H, shape=shape, dtype=dtype, device=device,
                                                        name='`W` or `H`')
 
+        # Let numpy dictate randomness, so we have fewer seeds to set for reproducibility.
         if entropy is None:
-            entropy = random.randint(0, 2 ** 31 - 1)
+            entropy = np.random.randint(0, 2 ** 31 - 1)
 
         self.shape = shape
         self.dtype = dtype
