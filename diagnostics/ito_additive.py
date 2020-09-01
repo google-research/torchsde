@@ -19,7 +19,8 @@ import torch
 from tests.basic_sde import AdditiveSDE
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from . import inspect, utils
+from . import inspect
+from . import utils
 
 
 def main():
