@@ -18,42 +18,17 @@ import logging
 import os
 import time
 
-import matplotlib.pyplot as plt
 import numpy.random as npr
 import torch
 
 import torchsde
+from diagnostics import utils
 
 t0, t1 = 0.0, 1.0
 reps, steps = 3, 100
 small_batch_size, small_d = 128, 5
 large_batch_size, large_d = 256, 128
 huge_batch_size, huge_d = 512, 256
-
-
-def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
-    if plots is None: plots = ()
-    if scatters is None: scatters = ()
-    if options is None: options = {}
-
-    plt.figure(dpi=300)
-    if 'xscale' in options: plt.xscale(options['xscale'])
-    if 'yscale' in options: plt.yscale(options['yscale'])
-    if 'xlabel' in options: plt.xlabel(options['xlabel'])
-    if 'ylabel' in options: plt.ylabel(options['ylabel'])
-    if 'title' in options: plt.title(options['title'])
-
-    for entry in plots:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        plt.plot(entry['x'], entry['y'], **kwargs)
-    for entry in scatters:
-        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
-        plt.scatter(entry['x'], entry['y'], **kwargs)
-
-    if len(plots) > 0 or len(scatters) > 0: plt.legend()
-    plt.tight_layout()
-    plt.savefig(img_path)
-    plt.close()
 
 
 def _time_query(bm, ts):
@@ -111,7 +86,7 @@ def sequential_access():
 
     xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
 
-    swiss_knife_plotter(
+    utils.swiss_knife_plotter(
         img_path,
         plots=[
             {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
@@ -148,7 +123,7 @@ def random_access():
 
     xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
 
-    swiss_knife_plotter(
+    utils.swiss_knife_plotter(
         img_path,
         plots=[
             {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
@@ -255,7 +230,7 @@ def solver_access(func=_time_sdeint):
 
     xaxis = [small_batch_size * small_d, large_batch_size * large_batch_size, huge_batch_size * huge_d]
 
-    swiss_knife_plotter(
+    utils.swiss_knife_plotter(
         img_path,
         plots=[
             {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},

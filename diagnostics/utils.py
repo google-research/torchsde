@@ -14,9 +14,10 @@
 
 import os
 
+import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
 import torch
+from scipy import stats
 
 
 def to_numpy(*args):
@@ -35,11 +36,8 @@ def _to_numpy_single(arg):
     return arg.detach().cpu().numpy()
 
 
-def compute_mse(x, y, normdim=1, meandim=0):
-    normdiff = torch.norm(x - y, dim=normdim)
-    sqrnormdiff = normdiff ** 2.
-    mse = sqrnormdiff.mean(dim=meandim)
-    assert mse.size() == ()
+def compute_mse(x, y, norm_dim=1, mean_dim=0):
+    mse = (torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim)
     return _to_numpy_single(mse)
 
 
@@ -63,3 +61,28 @@ def half_log(x):
 def regress_slope(x, y):
     k, _, _, _, _ = stats.linregress(x, y)
     return k
+
+
+def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
+    if plots is None: plots = ()
+    if scatters is None: scatters = ()
+    if options is None: options = {}
+
+    plt.figure(dpi=300)
+    if 'xscale' in options: plt.xscale(options['xscale'])
+    if 'yscale' in options: plt.yscale(options['yscale'])
+    if 'xlabel' in options: plt.xlabel(options['xlabel'])
+    if 'ylabel' in options: plt.ylabel(options['ylabel'])
+    if 'title' in options: plt.title(options['title'])
+
+    for entry in plots:
+        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        plt.plot(entry['x'], entry['y'], **kwargs)
+    for entry in scatters:
+        kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        plt.scatter(entry['x'], entry['y'], **kwargs)
+
+    if len(plots) > 0 or len(scatters) > 0: plt.legend()
+    plt.tight_layout()
+    plt.savefig(img_path)
+    plt.close()

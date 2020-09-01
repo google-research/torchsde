@@ -14,7 +14,6 @@
 
 import os
 
-import matplotlib.pyplot as plt
 import torch
 import tqdm
 
@@ -35,7 +34,7 @@ def inspect_sample():
                           levy_area_approximation=LEVY_AREA_APPROXIMATIONS.foster)
 
     with torch.no_grad():
-        true = sdeint(sde, y0=y0, ts=ts, dt=2 ** -12, bm=bm, method="midpoint")
+        true = sdeint(sde, y0=y0, ts=ts, dt=2 ** -13, bm=bm, method="midpoint")
 
         midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method="midpoint")
         log_ode_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method="log_ode_midpoint")
@@ -46,15 +45,15 @@ def inspect_sample():
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_general')
     utils.makedirs(img_dir)
 
-    # TODO: Use `swiss_knife_plotter` from benchmarks.
     for i, (midpoint_i, log_ode_midpoint_i, true_i) in enumerate(zip(midpoint, log_ode_midpoint, true)):
-        plt.figure()
-        plt.plot(ts, midpoint_i, label='midpoint')
-        plt.plot(ts, log_ode_midpoint_i, label='log_ode_midpoint')
-        plt.plot(ts, true_i, label='analytical')
-        plt.legend()
-        plt.savefig(os.path.join(img_dir, f'{i}'))
-        plt.close()
+        utils.swiss_knife_plotter(
+            img_path=os.path.join(img_dir, f'{i}'),
+            plots=[
+                {'x': ts, 'y': midpoint_i, 'label': 'midpoint'},
+                {'x': ts, 'y': log_ode_midpoint_i, 'label': 'log_ode_midpoint'},
+                {'x': ts, 'y': true_i, 'label': 'true'},
+            ]
+        )
 
 
 def inspect_strong_order():
@@ -87,15 +86,14 @@ def inspect_strong_order():
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_general')
     utils.makedirs(img_dir)
 
-    # TODO: Use `swiss_knife_plotter` from benchmarks.
-    plt.figure()
-    plt.plot(dts, midpoint_mses, label=f'midpoint(k={midpoint_slope:.4f})')
-    plt.plot(dts, log_ode_midpoint_mses, label=f'log_ode_midpoint(k={log_ode_midpoint_slope:.4f})')
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.legend()
-    plt.savefig(os.path.join(img_dir, 'rate'))
-    plt.close()
+    utils.swiss_knife_plotter(
+        img_path=os.path.join(img_dir, 'rate'),
+        plots=[
+            {'x': dts, 'y': midpoint_mses, 'label': f'midpoint(k={midpoint_slope:.4f})'},
+            {'x': dts, 'y': log_ode_midpoint_mses, 'label': f'log_ode_midpoint(k={log_ode_midpoint_slope:.4f})'}
+        ],
+        options={'xscale': 'log', 'yscale': 'log'}
+    )
 
 
 if __name__ == '__main__':
