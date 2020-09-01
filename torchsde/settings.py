@@ -23,16 +23,16 @@ class ContainerMeta(type):
     def __contains__(cls, item):
         return item in cls.all()
 
+
 # TODO: consider moving all these enums into some appropriate section of the code, rather than having them be global
 #  like this. (e.g. instead set METHODS = {'euler': Euler, ...} in methods/__init__.py)
-
-
 class METHODS(metaclass=ContainerMeta):
     euler = 'euler'
     milstein = 'milstein'
     srk = 'srk'
     midpoint = 'midpoint'
     heun = 'heun'
+    log_ode_midpoint = 'log_ode_midpoint'
 
 
 class NOISE_TYPES(metaclass=ContainerMeta):  # noqa
