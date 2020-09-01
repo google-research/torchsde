@@ -20,8 +20,7 @@ Rackauckas, Christopher, and Qing Nie. "Adaptive methods for stochastic
 differential equations via natural embeddings and rejection sampling with memory."
 Discrete and continuous dynamical systems. Series B 22.7 (2017): 2731.
 
-Ex4 is constructed to test the log-ODE scheme for Stratonovich SDEs with general
-noise.
+Ex4 is constructed to test schemes for SDEs with general noise.
 """
 
 import torch
@@ -177,8 +176,8 @@ def _column_wise_func(y, t, i):
 
 
 class Ex4(BaseSDE):
-    def __init__(self, d, m):
-        super(Ex4, self).__init__(sde_type=SDE_TYPES.stratonovich, noise_type=NOISE_TYPES.general)
+    def __init__(self, d, m, sde_type=SDE_TYPES.ito):
+        super(Ex4, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.general)
         self.d = d
         self.m = m
 
