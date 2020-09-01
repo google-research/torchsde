@@ -104,6 +104,13 @@ class Ex2(BaseSDE):
     def nfe(self):
         return self._nfe
 
+class Ex1Scalar(Ex1):
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex1Scalar, self).__init__(d=d, sde_type=sde_type)
+        self.noise_type = "scalar"
+
+    def g(self, t, y):
+        return super(Ex1Scalar, self).g(t, y).unsqueeze(2)
 
 class Ex2Scalar(Ex2):
     def __init__(self, d=10, sde_type='ito'):
@@ -154,8 +161,8 @@ class Ex3(BaseSDE):
 
 
 class Ex3Additive(Ex3):
-    def __init__(self, d=10):
-        super(Ex3Additive, self).__init__(d=d)
+    def __init__(self, d=10, sde_type='ito'):
+        super(Ex3Additive, self).__init__(d=d, sde_type=sde_type)
         self.noise_type = 'additive'
 
     def g(self, t, y):
