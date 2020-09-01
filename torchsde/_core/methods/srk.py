@@ -19,8 +19,6 @@ of stochastic differential equations." SIAM Journal on Numerical Analysis 48,
 no. 3 (2010): 922-952.
 """
 
-import torch
-
 from .tableaus import sra1, srid2
 from .. import adjoint_sde
 from .. import base_solver
@@ -59,7 +57,7 @@ class SRK(base_solver.BaseSDESolver):
     def diagonal_or_scalar_step(self, t0, t1, y0):
         dt = t1 - t0
         rdt = 1 / dt
-        sqrt_dt = torch.sqrt(dt)
+        sqrt_dt = dt.sqrt()
         I_k, I_k0 = self.bm(t0, t1, return_U=True)
         I_kk = (I_k ** 2 - dt) * _r2
         I_kkk = (I_k ** 3 - 3 * dt * I_k) * _r6
