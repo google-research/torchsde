@@ -31,7 +31,7 @@ class LogODEMidpoint(base_solver.BaseSDESolver):
 
     def __init__(self, sde, **kwargs):
         if isinstance(sde, adjoint_sde.AdjointSDE):
-            raise ValueError(f"LogODELieTrotter cannot be used for adjoint SDEs, because it requires "
+            raise ValueError(f"Log-ODE schemes cannot be used for adjoint SDEs, because they require "
                              f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
                              f"diffusion-vector product. Use a different method instead.")
         super(LogODEMidpoint, self).__init__(sde=sde, **kwargs)
