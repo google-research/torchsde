@@ -33,6 +33,7 @@ class METHODS(metaclass=ContainerMeta):
     midpoint = 'midpoint'
     heun = 'heun'
     log_ode_midpoint = 'log_ode_midpoint'
+    euler_heun = 'euler_heun'
 
 
 class NOISE_TYPES(metaclass=ContainerMeta):  # noqa
@@ -54,5 +55,5 @@ class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):  # noqa
     foster = 'foster'  # Compute Foster's correction to Davie's approximation to Levy area
 
 
-class METHOD_OPTIONS(metaclass=ContainerMeta):
+class METHOD_OPTIONS(metaclass=ContainerMeta):  # noqa
     grad_free = 'grad_free'

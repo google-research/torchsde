@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .euler import Euler
+from .euler_heun import EulerHeun
 from .heun import Heun
 from .log_ode import LogODEMidpoint
 from .midpoint import Midpoint
@@ -36,5 +37,7 @@ def select(method, sde_type):
         return MilsteinStratonovich
     elif method == METHODS.log_ode_midpoint:
         return LogODEMidpoint
+    elif method == METHODS.euler_heun:
+        return EulerHeun
     else:
         raise ValueError(f"Method '{method}' does not match any known method.")

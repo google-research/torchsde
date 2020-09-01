@@ -21,7 +21,7 @@ import torch
 import tqdm
 from scipy import stats
 
-from tests.problems import Ex1
+from tests.problems import Ex1Scalar
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs, compute_mse
@@ -34,10 +34,11 @@ def inspect_sample():
     ts = torch.linspace(0., 5., steps=steps, device=device)
     dt = 1e-1
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex1(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1Scalar(d=d, sde_type='stratonovich').to(device)
+    sde.noise_type = "scalar"
 
     with torch.no_grad():
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=y0.shape, dtype=y0.dtype, device=device,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
                               levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun', names={'drift': 'f_corr'})
@@ -45,7 +46,7 @@ def inspect_sample():
         ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint', names={'drift': 'f_corr'})
         ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'})
         ys_milstein_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'},
-                                        options={'grad_free': True})
+                                       options={'grad_free': True})
         ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
         ys_heun = ys_heun.squeeze().t()
@@ -59,12 +60,12 @@ def inspect_sample():
             ts, ys_heun, ys_euler_heun, ys_midpoint, ys_milstein, ys_milstein_grad_free, ys_analytical)
 
     # Visualize sample path.
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_scalar')
     makedirs(img_dir)
 
     for i, (ys_heun_i, ys_euler_heun_i, ys_midpoint_i, ys_milstein_i, ys_milstein_grad_free_i, ys_analytical_i) \
             in enumerate(
-            zip(ys_heun_, ys_euler_heun_, ys_midpoint_, ys_milstein_, ys_milstein_grad_free_, ys_analytical_)):
+        zip(ys_heun_, ys_euler_heun_, ys_midpoint_, ys_milstein_, ys_milstein_grad_free_, ys_analytical_)):
         plt.figure()
         plt.plot(ts_, ys_heun_i, label='heun')
         plt.plot(ts_, ys_euler_heun_i, label='euler_heun')
@@ -82,7 +83,8 @@ def inspect_strong_order():
     ts = torch.tensor([0., 5.], device=device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex1(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1Scalar(d=d, sde_type='stratonovich').to(device)
+    sde.noise_type = "scalar"
 
     heun_mses_ = []
     euler_heun_mses_ = []
@@ -91,7 +93,7 @@ def inspect_strong_order():
     milstein_grad_free_mses_ = []
 
     with torch.no_grad():
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=y0.shape, dtype=y0.dtype, device=device,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
                               levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         for dt in tqdm.tqdm(dts):
@@ -101,7 +103,7 @@ def inspect_strong_order():
             _, ys_midpoint = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='midpoint', names={'drift': 'f_corr'})
             _, ys_milstein = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein', names={'drift': 'f_corr'})
             _, ys_milstein_grad_free = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='milstein',
-                                               names={'drift': 'f_corr'}, options={'grad_free': True})
+                                              names={'drift': 'f_corr'}, options={'grad_free': True})
             _, ys_analytical = sde.analytical_sample(y0=y0, ts=ts, bm=bm)
 
             heun_mse = compute_mse(ys_heun, ys_analytical)
@@ -111,8 +113,8 @@ def inspect_strong_order():
             milstein_grad_free_mse = compute_mse(ys_milstein_grad_free, ys_analytical)
 
             heun_mse_, euler_heun_mse_, midpoint_mse_, milstein_mse_, milstein_grad_free_mse_ = to_numpy(
-                heun_mse, 
-                euler_heun_mse, 
+                heun_mse,
+                euler_heun_mse,
                 midpoint_mse,
                 milstein_mse,
                 milstein_grad_free_mse
@@ -143,8 +145,8 @@ def inspect_strong_order():
     plt.yscale('log')
     plt.legend()
 
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
-    makedirs(img_dir)
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_scalar')
+    makedirs_if_not_found(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()
 
