@@ -23,13 +23,11 @@ from scipy import stats
 def to_numpy(*args):
     if len(args) == 1:
         arg = args[0]
-        if not isinstance(arg, torch.Tensor):
-            raise ValueError('Input should be one or a list of torch tensors.')
-        return _to_numpy_single(args[0])
+        if isinstance(arg, torch.Tensor):
+            arg = _to_numpy_single(arg)
+        return arg
     else:
-        if not all(isinstance(arg, torch.Tensor) for arg in args):
-            raise ValueError('Input should be one or a list of torch tensors.')
-        return tuple(_to_numpy_single(arg) for arg in args)
+        return tuple(_to_numpy_single(arg) if isinstance(arg, torch.Tensor) else arg for arg in args)
 
 
 def _to_numpy_single(arg):
@@ -37,8 +35,7 @@ def _to_numpy_single(arg):
 
 
 def compute_mse(x, y, norm_dim=1, mean_dim=0):
-    mse = (torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim)
-    return _to_numpy_single(mse)
+    return _to_numpy_single((torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim))
 
 
 def makedirs(*dirs):
@@ -63,9 +60,26 @@ def regress_slope(x, y):
     return k
 
 
-def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
+def swiss_knife_plotter(img_path, plots=None, scatters=None, hists=None, options=None):
+    """A multi-functional *standalone* wrapper; reduces boilerplate.
+
+    Args:
+        img_path (str): A path to the place where the image should be written.
+        plots (list of dict, optional): A list of curves that needs `plt.plot`.
+        scatters (list of dict, optional): A list of scatter plots that needs `plt.scatter`.
+        hists (list of histograms, optional): A list of histograms that needs `plt.hist`.
+        options (dict, optional): A dictionary of optional arguments, such as title, xlabel, ylabel, etc.
+
+    Returns:
+        Nothing.
+    """
+    img_dir = os.path.dirname(img_path)
+    if not os.path.exists(img_dir):
+        os.makedirs(img_dir)
+
     if plots is None: plots = ()
     if scatters is None: scatters = ()
+    if hists is None: hists = ()
     if options is None: options = {}
 
     plt.figure(dpi=300)
@@ -77,10 +91,18 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, options=None):
 
     for entry in plots:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        entry['x'], entry['y'] = to_numpy(entry['x'], entry['y'])
         plt.plot(entry['x'], entry['y'], **kwargs)
+
     for entry in scatters:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
+        entry['x'], entry['y'] = to_numpy(entry['x'], entry['y'])
         plt.scatter(entry['x'], entry['y'], **kwargs)
+
+    for entry in hists:
+        kwargs = {key: entry[key] for key in entry if key != 'x'}
+        entry['x'] = to_numpy(entry['x'])
+        plt.hist(entry['x'], **kwargs)
 
     if len(plots) > 0 or len(scatters) > 0: plt.legend()
     plt.tight_layout()
