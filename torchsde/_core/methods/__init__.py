@@ -19,6 +19,7 @@ from .midpoint import Midpoint
 from .milstein import MilsteinIto, MilsteinStratonovich
 from .srk import SRK
 from .heun import Heun
+from .euler_heun import EulerHeun
 
 
 def select(method, sde_type):
@@ -34,5 +35,7 @@ def select(method, sde_type):
         return Heun
     elif method == METHODS.milstein and sde_type == SDE_TYPES.stratonovich:
         return MilsteinStratonovich
+    elif method == METHODS.euler_heun:
+        return EulerHeun
     else:
         raise ValueError(f"Method '{method}' does not match any known method.")

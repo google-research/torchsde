@@ -21,7 +21,7 @@ import torch
 import tqdm
 from scipy import stats
 
-from tests.problems import Ex1
+from tests.problems import Ex1Scalar
 from torchsde import sdeint, BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from .utils import to_numpy, makedirs_if_not_found, compute_mse
@@ -34,10 +34,11 @@ def inspect_sample():
     ts = torch.linspace(0., 5., steps=steps, device=device)
     dt = 1e-1
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex1(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1Scalar(d=d, sde_type='stratonovich').to(device)
+    sde.noise_type = "scalar"
 
     with torch.no_grad():
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=y0.shape, dtype=y0.dtype, device=device,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
                               levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         ys_heun = sdeint(sde, y0=y0, ts=ts, dt=dt, bm=bm, method='heun', names={'drift': 'f_corr'})
@@ -59,7 +60,7 @@ def inspect_sample():
             ts, ys_heun, ys_euler_heun, ys_midpoint, ys_milstein, ys_milstein_grad_free, ys_analytical)
 
     # Visualize sample path.
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_scalar')
     makedirs_if_not_found(img_dir)
 
     for i, (ys_heun_i, ys_euler_heun_i, ys_midpoint_i, ys_milstein_i, ys_milstein_grad_free_i, ys_analytical_i) \
@@ -82,7 +83,8 @@ def inspect_strong_order():
     ts = torch.tensor([0., 5.], device=device)
     dts = tuple(2 ** -i for i in range(1, 9))
     y0 = torch.ones(batch_size, d, device=device)
-    sde = Ex1(d=d, sde_type='stratonovich').to(device)
+    sde = Ex1Scalar(d=d, sde_type='stratonovich').to(device)
+    sde.noise_type = "scalar"
 
     heun_mses_ = []
     euler_heun_mses_ = []
@@ -91,7 +93,7 @@ def inspect_strong_order():
     milstein_grad_free_mses_ = []
 
     with torch.no_grad():
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=y0.shape, dtype=y0.dtype, device=device,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(batch_size, 1), dtype=y0.dtype, device=device,
                               levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time)
 
         for dt in tqdm.tqdm(dts):
@@ -143,7 +145,7 @@ def inspect_strong_order():
     plt.yscale('log')
     plt.legend()
 
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
+    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_scalar')
     makedirs_if_not_found(img_dir)
     plt.savefig(os.path.join(img_dir, 'rate'))
     plt.close()

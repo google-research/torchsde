@@ -58,7 +58,7 @@ def batch_mvp(m, v):
     return torch.bmm(m, v.unsqueeze(-1)).squeeze(dim=-1)
 
 
-def grad(outputs, inputs, **kwargs):
+def vjp(outputs, inputs, **kwargs):
     if torch.is_tensor(inputs):
         inputs = [inputs]
     _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
@@ -67,13 +67,12 @@ def grad(outputs, inputs, **kwargs):
         outputs = [outputs]
     outputs = make_seq_requires_grad(outputs)
 
-    _grad = torch.autograd.grad(outputs, inputs, **kwargs)
-    return convert_none_to_zeros(_grad, inputs)
+    _vjp = torch.autograd.grad(outputs, inputs, **kwargs)
+    return convert_none_to_zeros(_vjp, inputs)
 
 
 def jvp(outputs, inputs, grad_inputs=None, **kwargs):
-    # `torch.autograd.functional.jvp` takes in `func` and requires re-evaluation.
-    # The present implementation avoids this.
+    # Unlike `torch.autograd.functional.jvp`, this function avoids repeating forward computation.
     if torch.is_tensor(inputs):
         inputs = [inputs]
     _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
@@ -83,8 +82,10 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     outputs = make_seq_requires_grad(outputs)
 
     dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
-    vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, **kwargs)
-    _jvp = torch.autograd.grad(vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
+    _vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, create_graph=True, allow_unused=True)
+    _vjp = make_seq_requires_grad(convert_none_to_zeros(_vjp, inputs))
+
+    _jvp = torch.autograd.grad(_vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
 

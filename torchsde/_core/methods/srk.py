@@ -99,8 +99,9 @@ class SRK(base_solver.BaseSDESolver):
             H0i = y0
             for j in range(i):
                 f = self.sde.f(t0 + sra1.C0[j] * dt, H0[j])
-                g_prod = self.sde.g_prod(t0 + sra1.C1[j] * dt, y0, I_k0)
-                H0i = H0i + sra1.A0[i][j] * f * dt + sra1.B0[i][j] * g_prod * rdt
+                g_weight = sra1.B0[i][j] * I_k0 * rdt
+                g_prod = self.sde.g_prod(t0 + sra1.C1[j] * dt, y0, g_weight)
+                H0i = H0i + sra1.A0[i][j] * f * dt + g_prod
             H0.append(H0i)
 
             f = self.sde.f(t0 + sra1.C0[i] * dt, H0i)
