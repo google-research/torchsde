@@ -19,7 +19,7 @@ import torch
 
 Tensor = torch.Tensor
 Tensors = Sequence[Tensor]
-TensorOrTensors = Union[Tensor, Sequence[Tensor]]
+TensorOrTensors = Union[Tensor, Tensors]
 
 Scalar = Union[float, Tensor]
 Vector = Union[Sequence[float], Tensor]
