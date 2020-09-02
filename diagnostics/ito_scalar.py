@@ -31,7 +31,7 @@ def main():
     sde = Ex2Scalar(d=d).to(device)
 
     methods = ('euler', 'srk', 'milstein')
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_scalar')
+    img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'ito_scalar')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(

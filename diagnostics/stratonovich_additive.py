@@ -31,7 +31,7 @@ def main():
     sde = AdditiveSDE(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Don't test Milstein methods, since there's no advantage to use extra resource to compute 0s.
     methods = ('heun', 'euler_heun', 'midpoint')
-    img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_additive')
+    img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'stratonovich_additive')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
