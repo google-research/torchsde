@@ -23,10 +23,7 @@ class Midpoint(base_solver.BaseSDESolver):
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
     def __init__(self, sde, **kwargs):
-        if sde.noise_type == NOISE_TYPES.general:
-            self.strong_order = 0.5
-        else:
-            self.strong_order = 1.0
+        self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(Midpoint, self).__init__(sde=sde, **kwargs)
 
     def step(self, t0, t1, y0):
