@@ -35,7 +35,7 @@ def select(method, sde_type):
         return Heun
     elif method == METHODS.milstein and sde_type == SDE_TYPES.stratonovich:
         return MilsteinStratonovich
-    elif method == METHODS.log_ode:
+    elif method == METHODS.log_ode_midpoint:
         return LogODEMidpoint
     elif method == METHODS.euler_heun:
         return EulerHeun
