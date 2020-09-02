@@ -23,8 +23,7 @@ from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
 class LogODEMidpoint(base_solver.BaseSDESolver):
-    strong_order = 0.5
-    weak_order = 1.0
+    weak_order = 2.0
     sde_type = SDE_TYPES.stratonovich
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.scalar, NOISE_TYPES.general)
     levy_area_approximations = (LEVY_AREA_APPROXIMATIONS.davie, LEVY_AREA_APPROXIMATIONS.foster)
@@ -34,6 +33,7 @@ class LogODEMidpoint(base_solver.BaseSDESolver):
             raise ValueError(f"Log-ODE schemes cannot be used for adjoint SDEs, because they require "
                              f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
                              f"diffusion-vector product. Use a different method instead.")
+        self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(LogODEMidpoint, self).__init__(sde=sde, **kwargs)
 
     def step(self, t0, t1, y0):
