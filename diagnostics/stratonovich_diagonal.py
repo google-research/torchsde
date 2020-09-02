@@ -19,7 +19,7 @@ import torch
 from tests.problems import Ex1
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES
-from . import inspect
+from . import inspection
 from . import utils
 
 
@@ -29,24 +29,24 @@ def main():
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
     sde = Ex1(d=d, sde_type=SDE_TYPES.stratonovich).to(device)
-    # TODO: Add gradient-free Milstein.
-    #  Either split out g-f Milstein to be a separate method or change how inspection functions work.
-    methods = ('heun', 'euler_heun', 'midpoint', 'milstein')
+    methods = ('heun', 'euler_heun', 'midpoint', 'milstein', 'milstein')
+    options = (None, None, None, None, dict(grad_free=True))
+    labels = ('heun', 'euler_heun', 'midpoint', 'milstein', 'grad-free milstein')
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_diagonal')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(small_batch_size, d), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspect.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
+    inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods, options=options, labels=labels)
 
     y0 = torch.full((large_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(large_batch_size, d), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspect.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods, options=options, labels=labels)
 
 
 if __name__ == '__main__':

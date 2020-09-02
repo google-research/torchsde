@@ -108,7 +108,6 @@ class ForwardSDE(BaseSDE):
 
     # Computes: sum_{j,k,l} d g_{i,l} / d x_j g_{j,k} A_{k,l}.
     def dg_ga_jvp_column_sum_v1(self, t, y, a):
-        # Assumes `a` is anti-symmetric and `_base_sde` is not of diagonal noise.
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)

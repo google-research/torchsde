@@ -38,11 +38,11 @@ class Midpoint(base_solver.BaseSDESolver):
 
         half_dt = 0.5 * dt
 
-        t0_prime = t0 + half_dt
-        y0_prime = y0 + half_dt * f + 0.5 * g_prod
+        t_prime = t0 + half_dt
+        y_prime = y0 + half_dt * f + 0.5 * g_prod
 
-        f_prime = self.sde.f(t0_prime, y0_prime)
-        g_prod_prime = self.sde.g_prod(t0_prime, y0_prime, I_k)
+        f_prime = self.sde.f(t_prime, y_prime)
+        g_prod_prime = self.sde.g_prod(t_prime, y_prime, I_k)
 
         y1 = y0 + dt * f_prime + g_prod_prime
 

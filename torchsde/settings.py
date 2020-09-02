@@ -32,7 +32,7 @@ class METHODS(metaclass=ContainerMeta):
     srk = 'srk'
     midpoint = 'midpoint'
     heun = 'heun'
-    log_ode_midpoint = 'log_ode_midpoint'
+    log_ode = 'log_ode_midpoint'
     euler_heun = 'euler_heun'
 
 

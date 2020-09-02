@@ -43,27 +43,14 @@ def mse(x: Tensor, y: Tensor, norm_dim: Optional[int] = 1, mean_dim: Optional[in
     return _to_numpy_single((torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim))
 
 
-def makedirs(*dirs: str):
-    """Create directories if not already present according to a sequence of strings."""
-    [os.makedirs(d) for d in dirs if not os.path.exists(d)]
-
-
 def log(x: Union[Sequence[float], np.ndarray]) -> np.ndarray:
     """Compute element-wise log of a sequence of floats."""
-    if not isinstance(x, np.ndarray):
-        return np.log(np.array(x))
-    return np.log(x)
-
-
-def half_log(x: Union[Sequence[float], np.ndarray]) -> np.ndarray:
-    """Compute element-wise half-log of a sequence of floats."""
-    return .5 * log(x)
+    return np.log(np.array(x))
 
 
 def linregress_slope(x, y):
     """Return the slope of a least-squares regression for two sets of measurements."""
-    k, _, _, _, _ = stats.linregress(x, y)
-    return k
+    return stats.linregress(x, y)[0]
 
 
 def swiss_knife_plotter(img_path, plots=None, scatters=None, hists=None, options=None):

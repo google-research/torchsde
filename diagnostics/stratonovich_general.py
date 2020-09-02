@@ -19,7 +19,7 @@ import torch
 from tests.problems import Ex4
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES
-from . import inspect
+from . import inspection
 from . import utils
 
 
@@ -29,22 +29,22 @@ def main():
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
     sde = Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
-    methods = ('midpoint', 'log_ode_midpoint')
+    methods = ('midpoint', 'log_ode')
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'stratonovich_general')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(small_batch_size, m), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.foster, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.foster
     )
-    inspect.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
+    inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
 
     y0 = torch.full((large_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(large_batch_size, m), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.foster, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.foster
     )
-    inspect.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
 
 
 if __name__ == '__main__':

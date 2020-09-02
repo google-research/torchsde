@@ -19,7 +19,7 @@ import torch
 from tests.problems import Ex2
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
-from . import inspect
+from . import inspection
 from . import utils
 
 
@@ -30,22 +30,24 @@ def main():
     dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
     sde = Ex2(d=d).to(device)
 
-    methods = ('euler', 'srk', 'milstein')
+    methods = ('euler', 'srk', 'milstein', 'milstein')
+    options = (None, None, None, dict(grad_free=True))
+    labels = ('euler', 'srk', 'milstein', 'grad-free milstein')
     img_dir = os.path.join('.', 'diagnostics', 'plots', 'ito_diagonal')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(small_batch_size, d), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspect.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
+    inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods, options=options, labels=labels)
 
     y0 = torch.full((large_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(large_batch_size, d), dtype=y0.dtype, device=device,
-        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time, pool_size=16
+        levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspect.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods, options=options, labels=labels)
 
 
 if __name__ == '__main__':

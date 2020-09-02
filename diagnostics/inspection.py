@@ -31,15 +31,26 @@ def inspect_samples(y0: Tensor,
                     bm: BaseBrownian,
                     img_dir: str,
                     methods: Tuple[str, ...],
+                    options: Optional[Tuple] = None,
                     vis_dim=0,
-                    dt_true: Optional[float] = 2 ** -12):
+                    dt_true: Optional[float] = 2 ** -12,
+                    labels: Optional[Tuple[str, ...]] = None):
+    if options is None:
+        options = (None,) * len(methods)
+    if labels is None:
+        labels = methods
+
     sde = copy.deepcopy(sde).requires_grad_(False)
 
-    solns = [sdeint(sde, y0, ts, bm, method=method, dt=dt) for method in methods]
+    solns = [
+        sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)
+        for method, options_ in zip(methods, options)
+    ]
 
     method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
     true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)
-    methods += ('true',)
+
+    labels += ('true',)
     solns += [true]
 
     # (T, batch_size, d) -> (T, batch_size) -> (batch_size, T).
@@ -49,8 +60,8 @@ def inspect_samples(y0: Tensor,
         utils.swiss_knife_plotter(
             img_path=os.path.join(img_dir, f'{i}'),
             plots=[
-                {'x': ts, 'y': sample, 'label': method}
-                for sample, method in zip(samples, methods)
+                {'x': ts, 'y': sample, 'label': label}
+                for sample, label in zip(samples, labels)
             ]
         )
 
@@ -63,7 +74,14 @@ def inspect_strong_order(y0: Tensor,
                          bm: BaseBrownian,
                          img_dir: str,
                          methods: Tuple[str, ...],
-                         dt_true: Optional[float] = 2 ** -12):
+                         options: Optional[Tuple] = None,
+                         dt_true: Optional[float] = 2 ** -12,
+                         labels: Optional[Tuple[str, ...]] = None):
+    if options is None:
+        options = (None,) * len(methods)
+    if labels is None:
+        labels = methods
+
     sde = copy.deepcopy(sde).requires_grad_(False)
 
     ts = torch.tensor([t0, t1], device=y0.device)
@@ -72,20 +90,23 @@ def inspect_strong_order(y0: Tensor,
 
     mses = []
     for dt in tqdm.tqdm(dts):
-        solns = [sdeint(sde, y0, ts, bm, method=method, dt=dt)[-1] for method in methods]
+        solns = [
+            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
+            for method, options_ in zip(methods, options)
+        ]
         mses_for_dt = [utils.mse(soln, true) for soln in solns]
         mses.append(mses_for_dt)
 
     slopes = [
-        utils.linregress_slope(utils.log(dts), utils.half_log(mses_for_method))
+        utils.linregress_slope(utils.log(dts), .5 * utils.log(mses_for_method))
         for mses_for_method in zip(*mses)
     ]
 
     utils.swiss_knife_plotter(
         img_path=os.path.join(img_dir, 'rate'),
         plots=[
-            {'x': dts, 'y': mses_for_method, 'label': f'{method}(k={slope:.4f})'}
-            for mses_for_method, method, slope in zip(zip(*mses), methods, slopes)
+            {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})'}
+            for mses_for_method, label, slope in zip(zip(*mses), labels, slopes)
         ],
         options={'xscale': 'log', 'yscale': 'log'}
     )
