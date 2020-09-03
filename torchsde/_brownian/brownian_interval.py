@@ -540,11 +540,11 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f"t1={self._end:.3f}, "
                 f"shape={self.shape}, "
                 f"dtype={self.dtype}, "
-                f"device={self.device}, "
+                f"device={repr(self.device)}, "
                 f"entropy={self._entropy}, "
                 f"dt={dt}, "
                 f"cache_size={self._cache_size}, "
-                f"levy_area_approximation={self.levy_area_approximation}"
+                f"levy_area_approximation={repr(self.levy_area_approximation)}"
                 f")")
 
     def to(self, *args, **kwargs):
