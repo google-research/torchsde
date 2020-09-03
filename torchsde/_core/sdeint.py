@@ -180,6 +180,8 @@ def check_contract(sde, y0, ts, bm, method, names):
     if bm is None:
         if method == METHODS.srk:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.space_time
+        elif method == METHODS.log_ode_midpoint:
+            levy_area_approximation = LEVY_AREA_APPROXIMATIONS.foster
         else:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0.dtype,
