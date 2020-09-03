@@ -25,9 +25,9 @@ from . import utils
 
 def main():
     small_batch_size, large_batch_size, d, m = 16, 8192, 3, 5
-    t0, t1, steps, dt = 0., 2., 10, 1e-1
+    t0, t1, steps, dt = 0., 1., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
-    dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
+    dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
     sde = Ex1Scalar(d=d, sde_type=SDE_TYPES.stratonovich).to(device)
     methods = ('heun', 'euler_heun', 'midpoint', 'milstein', 'milstein')
     options = (None, None, None, None, dict(grad_free=True))
