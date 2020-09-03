@@ -477,23 +477,18 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             if len(intervals) > 1:
                 # If we have multiple intervals then add up their increments and Levy areas.
 
-                # Clone to avoid modifying the W, H, A that may exist in the cache
-                W = W.clone()
-                if self.have_H:
-                    H = H.clone()
-                if self.have_A:
-                    A = A.clone()
-
                 for interval in intervals[1:]:
                     Wi, Hi, Ai = interval.increment_and_levy_area()
                     if self.have_H:
-                        H += Hi + (interval.end - interval.start) * W
+                        term1 = (interval.end - interval.start) * (Hi + 0.5 * W)
+                        term2 = (interval.start - ta) * (H - 0.5 * Wi)
+                        H = (term1 + term2) / (interval.end - ta)
                     if self.have_A and len(self.shape) not in (0, 1):
                         # If len(self.shape) in (0, 1) then we treat our scalar / single dimension as a batch
                         # dimension, so we have zero Levy area. (And these unsqueezes will result in a tensor of shape
                         # (batch, batch) which is wrong.)
-                        A += Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
-                    W += Wi
+                        A = A + Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
+                    W = W + Wi
 
         U = None
         if self.have_H:
