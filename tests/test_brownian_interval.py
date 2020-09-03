@@ -29,7 +29,7 @@ import pytest
 import torchsde
 from torchsde._brownian import utils
 
-torch.manual_seed(1147481648)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 
 D = 3
