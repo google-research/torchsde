@@ -83,18 +83,21 @@ def inspect_strong_order(y0: Tensor,
         labels = methods
 
     sde = copy.deepcopy(sde).requires_grad_(False)
-
     ts = torch.tensor([t0, t1], device=y0.device)
+
+    solns = []
+    for dt in tqdm.tqdm(dts):
+        solns.append([
+            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
+            for method, options_ in zip(methods, options)
+        ])
+
     method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
     true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
 
     mses = []
-    for dt in tqdm.tqdm(dts):
-        solns = [
-            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
-            for method, options_ in zip(methods, options)
-        ]
-        mses_for_dt = [utils.mse(soln, true) for soln in solns]
+    for dt, solns_ in zip(dts, solns):
+        mses_for_dt = [utils.mse(soln, true) for soln in solns_]
         mses.append(mses_for_dt)
 
     slopes = [
