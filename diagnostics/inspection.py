@@ -33,7 +33,7 @@ def inspect_samples(y0: Tensor,
                     methods: Tuple[str, ...],
                     options: Optional[Tuple] = None,
                     vis_dim=0,
-                    dt_true: Optional[float] = 2 ** -13,
+                    dt_true: Optional[float] = 2 ** -14,
                     labels: Optional[Tuple[str, ...]] = None):
     if options is None:
         options = (None,) * len(methods)
@@ -75,7 +75,7 @@ def inspect_orders(y0: Tensor,
                    img_dir: str,
                    methods: Tuple[str, ...],
                    options: Optional[Tuple] = None,
-                   dt_true: Optional[float] = 2 ** -13,
+                   dt_true: Optional[float] = 2 ** -14,
                    labels: Optional[Tuple[str, ...]] = None,
                    test_func: Optional[Callable] = lambda x: (x ** 2).flatten(start_dim=1).sum(dim=1)):
     if options is None:
@@ -87,8 +87,10 @@ def inspect_orders(y0: Tensor,
     ts = torch.tensor([t0, t1], device=y0.device)
 
     solns = [
-        [sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
-         for method, options_ in zip(methods, options)]
+        [
+            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
+            for method, options_ in zip(methods, options)
+        ]
         for dt in tqdm.tqdm(dts)
     ]
 
