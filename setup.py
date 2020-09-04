@@ -57,7 +57,7 @@ setuptools.setup(
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
     url="https://github.com/google-research/torchsde",
-    packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
+    packages=setuptools.find_packages(exclude=['diagnostics', 'tests', 'benchmarks']),
     ext_modules=[
         extension_func(name='torchsde._brownian_lib',
                        sources=sources,
