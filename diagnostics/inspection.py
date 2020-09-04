@@ -94,8 +94,11 @@ def inspect_orders(y0: Tensor,
         for dt in tqdm.tqdm(dts)
     ]
 
-    method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
-    true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
+    if hasattr(sde, 'analytical_sample'):
+        true = sde.analytical_sample(y0, ts, bm)[-1]
+    else:
+        method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
+        true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
 
     mses = []
     maes = []

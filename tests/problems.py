@@ -33,6 +33,7 @@ from torchsde.settings import NOISE_TYPES, SDE_TYPES
 class Ex1(BaseSDE):
     def __init__(self, d=10, sde_type=SDE_TYPES.ito):
         super(Ex1, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+        self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
         self._nfe = 0
 
         # Use non-exploding initialization.
@@ -41,11 +42,11 @@ class Ex1(BaseSDE):
         self.mu = nn.Parameter(mu, requires_grad=True)
         self.sigma = nn.Parameter(sigma, requires_grad=True)
 
-    def f(self, t, y):
+    def f_ito(self, t, y):
         self._nfe += 1
         return self.mu * y
 
-    def f_corr(self, t, y):
+    def f_stratonovich(self, t, y):
         self._nfe += 1
         return self.mu * y - .5 * (self.sigma ** 2) * y
 
@@ -74,14 +75,15 @@ class Ex1(BaseSDE):
 class Ex2(BaseSDE):
     def __init__(self, d=10, sde_type=SDE_TYPES.ito):
         super(Ex2, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+        self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
-    def f(self, t, y):
+    def f_ito(self, t, y):
         self._nfe += 1
         return -self.p ** 2. * torch.sin(y) * torch.cos(y) ** 3.
 
-    def f_corr(self, t, y):
+    def f_stratonovich(self, t, y):
         self._nfe += 1
         return torch.zeros_like(y)
 
@@ -124,6 +126,7 @@ class Ex2Scalar(Ex2):
         return super(Ex2Scalar, self).g(t, y).unsqueeze(2)
 
 
+# TODO: Make this a test problem for additive noise settings with decoupled m and d.
 class Ex3(BaseSDE):
     def __init__(self, d=10, sde_type=SDE_TYPES.ito):
         super(Ex3, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
