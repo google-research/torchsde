@@ -40,7 +40,7 @@ class BaseSDE(abc.ABC, nn.Module):
 
 class ForwardSDE(BaseSDE):
 
-    def __init__(self, sde):
+    def __init__(self, sde, fast_dg_ga_jvp_column_sum=False):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
         self.f = sde.f
@@ -56,7 +56,9 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._return_zero,
         }.get(sde.noise_type, self.gdg_prod_default)
         self.dg_ga_jvp_column_sum = {
-            NOISE_TYPES.general: self.dg_ga_jvp_column_sum_v2
+            NOISE_TYPES.general: (
+                self.dg_ga_jvp_column_sum_v2 if fast_dg_ga_jvp_column_sum else self.dg_ga_jvp_column_sum_v1
+            )
         }.get(sde.noise_type, self._return_zero)
 
     ########################################
