@@ -132,7 +132,7 @@ def sdeint_adjoint(sde: nn.Module,
         method (str, optional): Name of numerical integration method.
         adjoint_method (str, optional): Name of numerical integration method for
             backward adjoint solve. Defaults to a sensible choice depending on
-                the noise type of the supplied SDE.
+            the noise type of the supplied SDE.
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
@@ -168,7 +168,7 @@ def sdeint_adjoint(sde: nn.Module,
 
     sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
-    params = list(filter(lambda x: x.requires_grad, sde.parameters()))
+    params = filter(lambda x: x.requires_grad, sde.parameters())
 
     return _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
