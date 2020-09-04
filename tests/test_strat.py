@@ -23,6 +23,7 @@ import torch
 
 from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde._core.base_sde import ForwardSDE  # noqa
+from torchsde.settings import SDE_TYPES
 from .problems import Ex4
 
 torch.manual_seed(1147481649)
@@ -101,7 +102,7 @@ def check_efficiency():
 
 
 def test_adjoint():
-    sde = Ex4(d=d, m=m).to(device)
+    sde = Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
 
     def func(y0):

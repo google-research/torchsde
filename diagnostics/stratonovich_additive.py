@@ -27,7 +27,7 @@ def main():
     small_batch_size, large_batch_size, d, m = 16, 8192, 3, 5
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
-    dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
+    dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
     sde = AdditiveSDE(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Don't test Milstein methods, since there's no advantage to use extra resource to compute 0s.
     methods = ('heun', 'euler_heun', 'midpoint')
