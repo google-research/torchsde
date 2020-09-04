@@ -171,7 +171,6 @@ class Ex3Additive(Ex3):
 def _column_wise_func(y, t, i):
     # This function is designed so that there are mixed partials.
     return (torch.cos(y * i + t * 0.1) * 0.2 +
-            torch.tanh(y[..., :1] * y[..., -1:]) * 0.3 +
             torch.sum(y, dim=-1, keepdim=True).cos() * 0.1)
 
 
