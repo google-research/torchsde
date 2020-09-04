@@ -31,6 +31,7 @@ def main():
     sde = AdditiveSDE(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Don't test Milstein methods, since there's no advantage to use extra resource to compute 0s.
     methods = ('heun', 'euler_heun', 'midpoint')
+    labels = ('heun', 'euler-heun', 'midpoint')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'stratonovich_additive')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
@@ -38,14 +39,14 @@ def main():
         t0=t0, t1=t1, shape=(small_batch_size, m), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
+    inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods, labels=labels)
 
     y0 = torch.full((large_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
         t0=t0, t1=t1, shape=(large_batch_size, m), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods, labels=labels)
 
 
 if __name__ == '__main__':

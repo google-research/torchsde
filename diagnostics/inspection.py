@@ -125,7 +125,7 @@ def inspect_orders(y0: Tensor,
             {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
             for mses_for_method, label, slope in zip(zip(*mses), labels, strong_order_slopes)
         ],
-        options={'xscale': 'log', 'yscale': 'log'}
+        options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
     )
 
     utils.swiss_knife_plotter(
@@ -134,5 +134,5 @@ def inspect_orders(y0: Tensor,
             {'x': dts, 'y': mres_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
             for mres_for_method, label, slope in zip(zip(*maes), labels, weak_order_slopes)
         ],
-        options={'xscale': 'log', 'yscale': 'log'}
+        options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
     )

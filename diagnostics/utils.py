@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import os
 import random
 
@@ -67,7 +68,13 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, hists=None, options
         plots (list of dict, optional): A list of curves that needs `plt.plot`.
         scatters (list of dict, optional): A list of scatter plots that needs `plt.scatter`.
         hists (list of histograms, optional): A list of histograms that needs `plt.hist`.
-        options (dict, optional): A dictionary of optional arguments, such as title, xlabel, ylabel, etc.
+        options (dict, optional): A dictionary of optional arguments. Possible entries include
+            - xscale (str): Scale of xaxis.
+            - yscale (str): Scale of yaxis.
+            - xlabel (str): Label of xaxis.
+            - ylabel (str): Label of yaxis.
+            - title (str): Title of the plot.
+            - cycle_linestyle (bool): Cycle through matplotlib's possible line styles if True.
 
     Returns:
         Nothing.
@@ -88,9 +95,13 @@ def swiss_knife_plotter(img_path, plots=None, scatters=None, hists=None, options
     if 'ylabel' in options: plt.ylabel(options['ylabel'])
     if 'title' in options: plt.title(options['title'])
 
+    cycle_linestyle = options.get('cycle_linestyle', False)
+    cycler = itertools.cycle(["-", "--", "-.", ":"]) if cycle_linestyle else None
     for entry in plots:
         kwargs = {key: entry[key] for key in entry if key != 'x' and key != 'y'}
         entry['x'], entry['y'] = to_numpy(entry['x'], entry['y'])
+        if cycle_linestyle:
+            kwargs['linestyle'] = next(cycler)
         plt.plot(entry['x'], entry['y'], **kwargs)
 
     for entry in scatters:
