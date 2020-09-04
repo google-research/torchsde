@@ -14,8 +14,6 @@
 
 import abc
 
-import torch
-
 from .. import adjoint_sde
 from .. import base_solver
 from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS, METHOD_OPTIONS
@@ -60,10 +58,10 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
         g_prod_I_k = self.sde.g_prod(t0, y0, I_k)
 
         if self.options[METHOD_OPTIONS.grad_free]:
-            g = self.sde.g(t0, y0) 
+            g = self.sde.g(t0, y0)
             g = g.squeeze(2) if g.dim() == 3 else g
             g_prod_v = self.sde.g_prod(t0, y0, v)
-            sqrt_dt = torch.sqrt(dt)
+            sqrt_dt = dt.sqrt()
             y0_prime = y0 + self.y_prime_f_factor(dt, f) + g * sqrt_dt
             g_prod_v_prime = self.sde.g_prod(t0, y0_prime, v)
             gdg_prod = (g_prod_v_prime - g_prod_v) / sqrt_dt

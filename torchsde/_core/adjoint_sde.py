@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from typing import Sequence
-
 import torch
 
 from . import base_sde
 from . import misc
 from ..settings import SDE_TYPES, NOISE_TYPES
-from ..types import TensorOrTensors
+from ..types import TensorOrTensors, Sequence
 
 
 class AdjointSDE(base_sde.BaseSDE):

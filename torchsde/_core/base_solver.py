@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import abc
 import warnings
 
@@ -22,7 +21,10 @@ from . import adaptive_stepping
 from . import better_abc
 from . import interp
 from . import misc
+from .base_sde import BaseSDE
+from .._brownian import BaseBrownian
 from ..settings import NOISE_TYPES
+from ..types import Scalar, Tensor, Dict
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -34,7 +36,17 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     noise_types = better_abc.abstract_attribute()
     levy_area_approximations = better_abc.abstract_attribute()
 
-    def __init__(self, sde, bm, y0, dt, adaptive, rtol, atol, dt_min, options, **kwargs):
+    def __init__(self,
+                 sde: BaseSDE,
+                 bm: BaseBrownian,
+                 y0: Tensor,
+                 dt: Scalar,
+                 adaptive: bool,
+                 rtol: Scalar,
+                 atol: Scalar,
+                 dt_min: Scalar,
+                 options: Dict,
+                 **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
         assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
         assert sde.noise_type in self.noise_types, (
@@ -58,28 +70,31 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         self.options = options
 
     def __repr__(self):
-        return f'{self.__class__.__name__} of strong order: {self.strong_order}'
+        return f"{self.__class__.__name__} of strong order: {self.strong_order}, and weak order: {self.weak_order}"
 
     @abc.abstractmethod
-    def step(self, t0, t1, y0):
+    def step(self, t0: Scalar, t1: Scalar, y0: Tensor) -> Tensor:
         """Propose a step with step size from time t to time next_t, with
          current state y.
 
         Args:
-            t0: float or torch.Tensor of size (,).
-            t1: float or torch.Tensor of size (,).
-            y0: torch.Tensor of size (batch_size, d).
+            t0: float or Tensor of size (,).
+            t1: float or Tensor of size (,).
+            y0: Tensor of size (batch_size, d).
 
         Returns:
-            y1, where y1 is a torch.Tensor of size (batch_size, d).
+            y1, where y1 is a Tensor of size (batch_size, d).
         """
         raise NotImplementedError
 
-    def integrate(self, ts):
+    def integrate(self, ts: Tensor) -> Tensor:
         """Integrate along trajectory.
 
+        Args:
+            ts: Tensor of size (T,).
+
         Returns:
-            A single state tensor of size (T, batch_size, d) (or tuple).
+            ys, where ys is a Tensor of size (T, batch_size, d).
         """
         assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
         y0, dt, adaptive, rtol, atol, dt_min = self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min

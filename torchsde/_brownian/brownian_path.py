@@ -14,7 +14,6 @@
 
 import bisect
 import warnings
-from typing import Optional, Tuple, Union
 
 import blist
 import torch
@@ -23,7 +22,7 @@ from . import base_brownian
 from . import utils
 from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar, TensorOrTensors
+from ..types import Scalar, TensorOrTensors, Optional, Tuple, Union, Tensor, Sequence
 
 
 class BrownianPath(base_brownian.BaseBrownian):
@@ -42,8 +41,8 @@ class BrownianPath(base_brownian.BaseBrownian):
 
     def __init__(self,
                  t0: Scalar,
-                 w0: Optional[torch.Tensor] = None,
-                 shape: Optional[Tuple[int, ...]] = None,
+                 w0: Optional[Tensor] = None,
+                 shape: Optional[Sequence[int]] = None,
                  dtype: Optional[torch.dtype] = None,
                  device: Optional[Union[str, torch.device]] = None,
                  window_size: int = 8,

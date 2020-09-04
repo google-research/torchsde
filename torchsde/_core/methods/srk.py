@@ -19,8 +19,6 @@ of stochastic differential equations." SIAM Journal on Numerical Analysis 48,
 no. 3 (2010): 922-952.
 """
 
-import torch
-
 from .tableaus import sra1, srid2
 from .. import adjoint_sde
 from .. import base_solver
@@ -35,9 +33,9 @@ class SRK(base_solver.BaseSDESolver):
     weak_order = 1.5
     sde_type = SDE_TYPES.ito
     noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.scalar)
-    levy_area_approximations = [LEVY_AREA_APPROXIMATIONS.space_time,
+    levy_area_approximations = (LEVY_AREA_APPROXIMATIONS.space_time,
                                 LEVY_AREA_APPROXIMATIONS.davie,
-                                LEVY_AREA_APPROXIMATIONS.foster]
+                                LEVY_AREA_APPROXIMATIONS.foster)
 
     def __init__(self, sde, **kwargs):
         if sde.noise_type == NOISE_TYPES.additive:
@@ -46,7 +44,7 @@ class SRK(base_solver.BaseSDESolver):
             self.step = self.diagonal_or_scalar_step
 
         if isinstance(sde, adjoint_sde.AdjointSDE):
-            raise ValueError(f"Derivative-free Milstein cannot be used for adjoint SDEs, because it requires "
+            raise ValueError(f"Stochastic Runge–Kutta methods cannot be used for adjoint SDEs, because it requires "
                              f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
                              f"diffusion-vector product. Use a different method instead.")
 
@@ -59,7 +57,7 @@ class SRK(base_solver.BaseSDESolver):
     def diagonal_or_scalar_step(self, t0, t1, y0):
         dt = t1 - t0
         rdt = 1 / dt
-        sqrt_dt = torch.sqrt(dt)
+        sqrt_dt = dt.sqrt()
         I_k, I_k0 = self.bm(t0, t1, return_U=True)
         I_kk = (I_k ** 2 - dt) * _r2
         I_kkk = (I_k ** 3 - 3 * dt * I_k) * _r6

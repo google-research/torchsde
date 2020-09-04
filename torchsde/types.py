@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Sequence, Union
+# We import from `typing` more than what's enough, so that other modules can import from this file and not `typing`.
+from typing import Sequence, Union, Optional, Any, Dict, Tuple, Callable
 
 import torch
 
-TensorOrTensors = Union[torch.Tensor, Sequence[torch.Tensor]]
-Scalar = Union[float, torch.Tensor]
-Vector = Union[Sequence[float], torch.Tensor]
-Number = Union[int, float, bool]
+Tensor = torch.Tensor
+Tensors = Sequence[Tensor]
+TensorOrTensors = Union[Tensor, Tensors]
+
+Scalar = Union[float, Tensor]
+Vector = Union[Sequence[float], Tensor]

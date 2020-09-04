@@ -16,7 +16,6 @@ import bisect
 import copy
 import math
 import warnings
-from typing import Optional
 
 import blist
 import torch
@@ -26,7 +25,7 @@ from . import base_brownian
 from . import utils
 from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
-from ..types import Scalar
+from ..types import Scalar, Optional, Tensor
 
 
 class BrownianTree(base_brownian.BaseBrownian):
@@ -45,9 +44,9 @@ class BrownianTree(base_brownian.BaseBrownian):
 
     def __init__(self,
                  t0: Scalar,
-                 w0: torch.Tensor,
+                 w0: Tensor,
                  t1: Optional[Scalar] = None,
-                 w1: Optional[torch.Tensor] = None,
+                 w1: Optional[Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
                  pool_size: int = 24,

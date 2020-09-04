@@ -18,7 +18,7 @@ import os
 import torch
 
 
-def makedirs_if_not_found(*dirs):
+def makedirs(*dirs):
     for d in dirs:
         assert isinstance(d, str)
         if not os.path.exists(d):

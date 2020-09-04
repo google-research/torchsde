@@ -334,6 +334,6 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.INFO)
 
     ckpt_dir = os.path.join(args.train_dir, 'ckpts')
-    utils.makedirs_if_not_found(args.train_dir, ckpt_dir)
+    utils.makedirs(args.train_dir, ckpt_dir)
 
     main()

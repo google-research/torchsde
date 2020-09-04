@@ -40,7 +40,7 @@ class BaseSDE(abc.ABC, nn.Module):
 
 class ForwardSDE(BaseSDE):
 
-    def __init__(self, sde):
+    def __init__(self, sde, fast_dg_ga_jvp_column_sum=False):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
         self.f = sde.f
@@ -56,7 +56,9 @@ class ForwardSDE(BaseSDE):
             NOISE_TYPES.additive: self._return_zero,
         }.get(sde.noise_type, self.gdg_prod_default)
         self.dg_ga_jvp_column_sum = {
-            NOISE_TYPES.general: self.dg_ga_jvp_column_sum_v2
+            NOISE_TYPES.general: (
+                self.dg_ga_jvp_column_sum_v2 if fast_dg_ga_jvp_column_sum else self.dg_ga_jvp_column_sum_v1
+            )
         }.get(sde.noise_type, self._return_zero)
 
     ########################################
@@ -108,7 +110,6 @@ class ForwardSDE(BaseSDE):
 
     # Computes: sum_{j,k,l} d g_{i,l} / d x_j g_{j,k} A_{k,l}.
     def dg_ga_jvp_column_sum_v1(self, t, y, a):
-        # Assumes `a` is anti-symmetric and `_base_sde` is not of diagonal noise.
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)

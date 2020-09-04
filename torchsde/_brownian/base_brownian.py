@@ -19,7 +19,7 @@ from .._core import better_abc
 
 class BaseBrownian(metaclass=better_abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, ta, tb, return_U, return_A):
+    def __call__(self, ta, tb, return_U=False, return_A=False):
         raise NotImplementedError
 
     @abc.abstractmethod

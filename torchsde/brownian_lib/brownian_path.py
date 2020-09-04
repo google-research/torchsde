@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
 
 import torch
 from torchsde._brownian_lib import BrownianPath as _BrownianPath  # noqa
@@ -21,6 +20,7 @@ from .._brownian import base_brownian
 from .._brownian import utils
 from .._core.misc import handle_unused_kwargs
 from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar, Tensor
 
 
 class BrownianPath(base_brownian.BaseBrownian):
@@ -38,8 +38,8 @@ class BrownianPath(base_brownian.BaseBrownian):
     """
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
-                 w0: torch.Tensor,
+                 t0: Scalar,
+                 w0: Tensor,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  **unused_kwargs):
         handle_unused_kwargs(unused_kwargs, msg=self.__class__.__name__)

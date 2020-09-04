@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...settings import METHODS, SDE_TYPES
-
 from .euler import Euler
+from .euler_heun import EulerHeun
+from .heun import Heun
+from .log_ode import LogODEMidpoint
 from .midpoint import Midpoint
 from .milstein import MilsteinIto, MilsteinStratonovich
 from .srk import SRK
-from .heun import Heun
-from .euler_heun import EulerHeun
+from ...settings import METHODS, SDE_TYPES
 
 
 def select(method, sde_type):
@@ -35,6 +35,8 @@ def select(method, sde_type):
         return Heun
     elif method == METHODS.milstein and sde_type == SDE_TYPES.stratonovich:
         return MilsteinStratonovich
+    elif method == METHODS.log_ode_midpoint:
+        return LogODEMidpoint
     elif method == METHODS.euler_heun:
         return EulerHeun
     else:
