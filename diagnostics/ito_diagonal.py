@@ -29,7 +29,6 @@ def main():
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 8))  # For checking strong order.
     sde = Ex2(d=d).to(device)
-
     methods = ('euler', 'srk', 'milstein', 'milstein')
     options = (None, None, None, dict(grad_free=True))
     labels = ('euler', 'srk', 'milstein', 'grad-free milstein')
@@ -47,7 +46,7 @@ def main():
         t0=t0, t1=t1, shape=(large_batch_size, d), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods, options=options, labels=labels)
+    inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods, options=options, labels=labels)
 
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ import tqdm
 
 from torchsde import BaseBrownian, BaseSDE, sdeint
 from torchsde.settings import SDE_TYPES
-from torchsde.types import Tensor, Vector, Scalar, Tuple, Optional
+from torchsde.types import Tensor, Vector, Scalar, Tuple, Optional, Callable
 from . import utils
 
 
@@ -33,7 +33,7 @@ def inspect_samples(y0: Tensor,
                     methods: Tuple[str, ...],
                     options: Optional[Tuple] = None,
                     vis_dim=0,
-                    dt_true: Optional[float] = 2 ** -12,
+                    dt_true: Optional[float] = 2 ** -13,
                     labels: Optional[Tuple[str, ...]] = None):
     if options is None:
         options = (None,) * len(methods)
@@ -60,23 +60,24 @@ def inspect_samples(y0: Tensor,
         utils.swiss_knife_plotter(
             img_path=os.path.join(img_dir, f'{i}'),
             plots=[
-                {'x': ts, 'y': sample, 'label': label}
+                {'x': ts, 'y': sample, 'label': label, 'marker': 'x'}
                 for sample, label in zip(samples, labels)
             ]
         )
 
 
-def inspect_strong_order(y0: Tensor,
-                         t0: Scalar,
-                         t1: Scalar,
-                         dts: Vector,
-                         sde: BaseSDE,
-                         bm: BaseBrownian,
-                         img_dir: str,
-                         methods: Tuple[str, ...],
-                         options: Optional[Tuple] = None,
-                         dt_true: Optional[float] = 2 ** -12,
-                         labels: Optional[Tuple[str, ...]] = None):
+def inspect_orders(y0: Tensor,
+                   t0: Scalar,
+                   t1: Scalar,
+                   dts: Vector,
+                   sde: BaseSDE,
+                   bm: BaseBrownian,
+                   img_dir: str,
+                   methods: Tuple[str, ...],
+                   options: Optional[Tuple] = None,
+                   dt_true: Optional[float] = 2 ** -13,
+                   labels: Optional[Tuple[str, ...]] = None,
+                   test_func: Optional[Callable] = lambda x: (x ** 2).flatten(start_dim=1).sum(dim=1)):
     if options is None:
         options = (None,) * len(methods)
     if labels is None:
@@ -89,6 +90,7 @@ def inspect_strong_order(y0: Tensor,
     true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
 
     mses = []
+    maes = []
     for dt in tqdm.tqdm(dts):
         solns = [
             sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
@@ -97,16 +99,33 @@ def inspect_strong_order(y0: Tensor,
         mses_for_dt = [utils.mse(soln, true) for soln in solns]
         mses.append(mses_for_dt)
 
-    slopes = [
+        maes_for_dt = [utils.mae(soln, true, test_func) for soln in solns]
+        maes.append(maes_for_dt)
+
+    strong_order_slopes = [
         utils.linregress_slope(utils.log(dts), .5 * utils.log(mses_for_method))
         for mses_for_method in zip(*mses)
     ]
 
+    weak_order_slopes = [
+        utils.linregress_slope(utils.log(dts), utils.log(maes_for_method))
+        for maes_for_method in zip(*maes)
+    ]
+
     utils.swiss_knife_plotter(
-        img_path=os.path.join(img_dir, 'rate'),
+        img_path=os.path.join(img_dir, 'strong_order'),
         plots=[
-            {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})'}
-            for mses_for_method, label, slope in zip(zip(*mses), labels, slopes)
+            {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
+            for mses_for_method, label, slope in zip(zip(*mses), labels, strong_order_slopes)
+        ],
+        options={'xscale': 'log', 'yscale': 'log'}
+    )
+
+    utils.swiss_knife_plotter(
+        img_path=os.path.join(img_dir, 'weak_order'),
+        plots=[
+            {'x': dts, 'y': mres_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
+            for mres_for_method, label, slope in zip(zip(*maes), labels, weak_order_slopes)
         ],
         options={'xscale': 'log', 'yscale': 'log'}
     )

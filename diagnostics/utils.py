@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from scipy import stats
 
-from torchsde.types import Optional, Tensor, Sequence, Union
+from torchsde.types import Optional, Tensor, Sequence, Union, Callable
 
 
 def to_numpy(*args):
@@ -41,6 +41,12 @@ def _to_numpy_single(arg: torch.Tensor) -> np.ndarray:
 def mse(x: Tensor, y: Tensor, norm_dim: Optional[int] = 1, mean_dim: Optional[int] = 0) -> np.ndarray:
     """Compute mean squared error."""
     return _to_numpy_single((torch.norm(x - y, dim=norm_dim) ** 2).mean(dim=mean_dim))
+
+
+def mae(x: Tensor, y: Tensor, test_func: Callable, mean_dim: Optional[int] = 0) -> np.ndarray:
+    return _to_numpy_single(
+        abs(test_func(x).mean(mean_dim) - test_func(y).mean(mean_dim))
+    )
 
 
 def log(x: Union[Sequence[float], np.ndarray]) -> np.ndarray:

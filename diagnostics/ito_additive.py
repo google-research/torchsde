@@ -44,7 +44,7 @@ def main():
         t0=t0, t1=t1, shape=(large_batch_size, m), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods)
 
 
 if __name__ == '__main__':
