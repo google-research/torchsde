@@ -85,7 +85,7 @@ def inspect_orders(y0: Tensor,
 
     sde = copy.deepcopy(sde).requires_grad_(False)
     ts = torch.tensor([t0, t1], device=y0.device)
-    
+
     solns = [
         [sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
          for method, options_ in zip(methods, options)]
@@ -101,7 +101,7 @@ def inspect_orders(y0: Tensor,
         mses_for_dt = [utils.mse(soln, true) for soln in solns_]
         mses.append(mses_for_dt)
 
-        maes_for_dt = [utils.mae(soln, true, test_func) for soln in solns]
+        maes_for_dt = [utils.mae(soln, true, test_func) for soln in solns_]
         maes.append(maes_for_dt)
 
     strong_order_slopes = [
