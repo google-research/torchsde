@@ -23,10 +23,7 @@ class Euler(base_solver.BaseSDESolver):
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
     def __init__(self, sde, **kwargs):
-        if sde.noise_type == NOISE_TYPES.additive:
-            self.strong_order = 1.0
-        else:
-            self.strong_order = 0.5
+        self.strong_order = 1.0 if sde.noise_type == NOISE_TYPES.additive else 0.5
         super(Euler, self).__init__(sde=sde, **kwargs)
 
     def step(self, t0, t1, y0):
