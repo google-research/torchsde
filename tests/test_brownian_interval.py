@@ -205,10 +205,7 @@ def test_normality_conditional(device, levy_area_approximation):
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
-            t_ = npr.uniform(low=t0, high=t1)
-            ta = npr.uniform(low=t0, high=t1)
-            tb = npr.uniform(low=t0, high=t1)
-            ta, t_, tb = sorted([t_, ta, tb])
+            ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
 
             W = bm(ta, tb)
             W1 = bm(ta, t_)
@@ -267,15 +264,12 @@ def test_consistency(device, levy_area_approximation):
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE, 2),  # 2 to have nontrivial Levy area
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
                                        device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
-            t_ = npr.uniform(low=t0, high=t1)
-            ta = npr.uniform(low=t0, high=t1)
-            tb = npr.uniform(low=t0, high=t1)
-            ta, t_, tb = sorted([t_, ta, tb])
+            ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
 
             if levy_area_approximation == 'none':
                 W = bm(ta, tb)

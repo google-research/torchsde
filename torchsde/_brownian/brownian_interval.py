@@ -480,6 +480,12 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 for interval in intervals[1:]:
                     Wi, Hi, Ai = interval.increment_and_levy_area()
                     if self.have_H:
+                        # Aggregate H:
+                        # Given s < u < t, then
+                        # H_{s,t} = (term1 + term2) / (t - s)
+                        # where
+                        # term1 = (t - u) * (H_{u, t} + W_{s, u} / 2)
+                        # term2 = (u - s) * (H_{s, u} - W_{u, t} / 2)
                         term1 = (interval.end - interval.start) * (Hi + 0.5 * W)
                         term2 = (interval.start - ta) * (H - 0.5 * Wi)
                         H = (term1 + term2) / (interval.end - ta)
@@ -487,6 +493,14 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                         # If len(self.shape) in (0, 1) then we treat our scalar / single dimension as a batch
                         # dimension, so we have zero Levy area. (And these unsqueezes will result in a tensor of shape
                         # (batch, batch) which is wrong.)
+
+                        # Let B_{x, y} = \int_x^y W^1_{s,u} dW^2_u.
+                        # Then
+                        # B_{s, t} = \int_s^t W^1_{s,u} dW^2_u
+                        #          = \int_s^v W^1_{s,u} dW^2_u + \int_v^t W^1_{s,v} dW^2_u + \int_v^t W^1_{v,u} dW^2_u
+                        #          = B_{s, v} + W^1_{s, v} W^2_{v, t} + B_{v, t}
+                        #
+                        # A is now the antisymmetric part of B, which gives the formula below.
                         A = A + Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
                     W = W + Wi
 
