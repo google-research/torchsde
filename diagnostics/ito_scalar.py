@@ -29,7 +29,6 @@ def main():
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
     sde = Ex2Scalar(d=d).to(device)
-
     methods = ('euler', 'srk', 'milstein')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'ito_scalar')
 
@@ -45,7 +44,7 @@ def main():
         t0=t0, t1=t1, shape=(large_batch_size, 1), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
-    inspection.inspect_strong_order(y0, t0, t1, dts, sde, bm, img_dir, methods)
+    inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods)
 
 
 if __name__ == '__main__':
