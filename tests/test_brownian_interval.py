@@ -23,10 +23,11 @@ sys.path = sys.path[1:]  # A hack so that we always import the installed library
 import math
 import numpy.random as npr
 import torch
-from scipy.stats import norm, kstest
+from scipy.stats import kstest
 
 import pytest
 import torchsde
+from torchsde._brownian import utils
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -35,8 +36,9 @@ D = 3
 SMALL_BATCH_SIZE = 16
 LARGE_BATCH_SIZE = 131072
 REPS = 3
+MEDIUM_REPS = 25
 LARGE_REPS = 500
-ALPHA = 0.001
+ALPHA = 0.0001
 POOL_SIZE = 32
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
@@ -163,22 +165,32 @@ def test_normality_simple(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    t0_, t1_ = 0.0, 1.0
-    t0, t1 = torch.tensor([t0_, t1_], device=device)
+    t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        W = torch.tensor(npr.randn(), device=device).repeat(LARGE_BATCH_SIZE)
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, W=W, levy_area_approximation=levy_area_approximation)
+        base_W = torch.tensor(npr.randn(), device=device).repeat(LARGE_BATCH_SIZE)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, W=base_W, levy_area_approximation=levy_area_approximation)
 
-        t_ = npr.uniform(low=t0_, high=t1_)
-        samples = bm(t_)
-        samples_ = samples.cpu().detach().numpy()
+        t_ = npr.uniform(low=t0, high=t1)
 
-        mean_ = W.cpu() * (t_ - t0_) / (t1_ - t0_)
-        std_ = math.sqrt((t1_ - t_) * (t_ - t0_) / (t1_ - t0_))
-        ref_dist = norm(loc=mean_, scale=std_)
+        W = bm(t0, t_)
 
-        _, pval = kstest(samples_, ref_dist.cdf)
+        mean_W = base_W * (t_ - t0) / (t1 - t0)
+        std_W = math.sqrt((t1 - t_) * (t_ - t0) / (t1 - t0))
+        rescaled_W = (W - mean_W) / std_W
+
+        _, pval = kstest(rescaled_W.cpu().detach().numpy(), 'norm')
         assert pval >= ALPHA
+
+        if levy_area_approximation != 'none':
+            W, U = bm(t0, t_, return_U=True)
+            H = utils.U_to_H(W, U, t_ - t0)
+
+            mean_H = 0
+            std_H = math.sqrt((t_ - t0) / 12)
+            rescaled_H = (H - mean_H) / std_H
+
+            _, pval = kstest(rescaled_H.cpu().detach().numpy(), 'norm')
+            assert pval >= ALPHA
 
 
 @pytest.mark.parametrize("device", devices)
@@ -187,25 +199,89 @@ def test_normality_conditional(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    t0_, t1_ = 0.0, 1.0
-    t0, t1 = torch.tensor([t0_, t1_], device=device)
-    eps = 1e-2
+    t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
-        t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)
-        ta = npr.uniform(low=t0_ + eps, high=t1_ - eps)
-        tb = npr.uniform(low=t0_ + eps, high=t1_ - eps)
-        ta, t_, tb = sorted([t_, ta, tb])
+        for _ in range(MEDIUM_REPS):
+            ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
 
-        increment = bm(ta, tb).cpu().detach().numpy()
-        sample = bm(ta, t_).cpu().detach().numpy()
+            W = bm(ta, tb)
+            W1 = bm(ta, t_)
+            W2 = bm(t_, tb)
 
-        mean = increment * (t_ - ta) / (tb - ta)
-        std = math.sqrt((tb - t_) * (t_ - ta) / (tb - ta))
-        rescaled_sample = (sample - mean) / std
+            mean_W1 = W * (t_ - ta) / (tb - ta)
+            std_W1 = math.sqrt((tb - t_) * (t_ - ta) / (tb - ta))
+            rescaled_W1 = (W1 - mean_W1) / std_W1
+            _, pval = kstest(rescaled_W1.cpu().detach().numpy(), 'norm')
+            assert pval >= ALPHA
 
-        _, pval = kstest(rescaled_sample, 'norm')
+            mean_W2 = W * (tb - t_) / (tb - ta)
+            std_W2 = math.sqrt((tb - t_) * (t_ - ta) / (tb - ta))
+            rescaled_W2 = (W2 - mean_W2) / std_W2
+            _, pval = kstest(rescaled_W2.cpu().detach().numpy(), 'norm')
+            assert pval >= ALPHA
 
-        assert pval >= ALPHA
+            if levy_area_approximation != 'none':
+                W, U = bm(ta, tb, return_U=True)
+                W1, U1 = bm(ta, t_, return_U=True)
+                W2, U2 = bm(t_, tb, return_U=True)
+
+                h = tb - ta
+                h1 = t_ - ta
+                h2 = tb - t_
+
+                denom = math.sqrt(h1 ** 3 + h2 ** 3)
+                a = h1 ** 3.5 * h2 ** 0.5 / (2 * h * denom)
+                b = h1 ** 0.5 * h2 ** 3.5 / (2 * h * denom)
+                c = math.sqrt(3) * h1 ** 1.5 * h2 ** 1.5 / (6 * denom)
+
+                H = utils.U_to_H(W, U, h)
+                H1 = utils.U_to_H(W1, U1, h1)
+                H2 = utils.U_to_H(W2, U2, h2)
+
+                mean_H1 = H * (h1 / h) ** 2
+                std_H1 = math.sqrt(a**2 + c**2) / h1
+                rescaled_H1 = (H1 - mean_H1) / std_H1
+
+                _, pval = kstest(rescaled_H1.cpu().detach().numpy(), 'norm')
+                assert pval >= ALPHA
+
+                mean_H2 = H * (h2 / h) ** 2
+                std_H2 = math.sqrt(b**2 + c**2) / h2
+                rescaled_H2 = (H2 - mean_H2) / std_H2
+
+                _, pval = kstest(rescaled_H2.cpu().detach().numpy(), 'norm')
+                assert pval >= ALPHA
+
+
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
+def test_consistency(device, levy_area_approximation):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    t0, t1 = 0.0, 1.0
+    for _ in range(REPS):
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
+                                       device=device,
+                                       levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+
+        for _ in range(MEDIUM_REPS):
+            ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
+
+            if levy_area_approximation == 'none':
+                W = bm(ta, tb)
+                W1 = bm(ta, t_)
+                W2 = bm(t_, tb)
+            else:
+                W, U = bm(ta, tb, return_U=True)
+                W1, U1 = bm(ta, t_, return_U=True)
+                W2, U2 = bm(t_, tb, return_U=True)
+
+            torch.testing.assert_allclose(W1 + W2, W, rtol=1e-6, atol=1e-6)
+            if levy_area_approximation != 'none':
+                torch.testing.assert_allclose(U1 + U2 + (tb - t_) * W1, U, rtol=1e-6, atol=1e-6)
+
+            # We don't test the return_A case because we don't expect that to be consistent.

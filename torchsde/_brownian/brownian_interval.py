@@ -477,23 +477,32 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             if len(intervals) > 1:
                 # If we have multiple intervals then add up their increments and Levy areas.
 
-                # Clone to avoid modifying the W, H, A that may exist in the cache
-                W = W.clone()
-                if self.have_H:
-                    H = H.clone()
-                if self.have_A:
-                    A = A.clone()
-
                 for interval in intervals[1:]:
                     Wi, Hi, Ai = interval.increment_and_levy_area()
                     if self.have_H:
-                        H += Hi + (interval.end - interval.start) * W
+                        # Aggregate H:
+                        # Given s < u < t, then
+                        # H_{s,t} = (term1 + term2) / (t - s)
+                        # where
+                        # term1 = (t - u) * (H_{u, t} + W_{s, u} / 2)
+                        # term2 = (u - s) * (H_{s, u} - W_{u, t} / 2)
+                        term1 = (interval.end - interval.start) * (Hi + 0.5 * W)
+                        term2 = (interval.start - ta) * (H - 0.5 * Wi)
+                        H = (term1 + term2) / (interval.end - ta)
                     if self.have_A and len(self.shape) not in (0, 1):
                         # If len(self.shape) in (0, 1) then we treat our scalar / single dimension as a batch
                         # dimension, so we have zero Levy area. (And these unsqueezes will result in a tensor of shape
                         # (batch, batch) which is wrong.)
-                        A += Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
-                    W += Wi
+
+                        # Let B_{x, y} = \int_x^y W^1_{s,u} dW^2_u.
+                        # Then
+                        # B_{s, t} = \int_s^t W^1_{s,u} dW^2_u
+                        #          = \int_s^v W^1_{s,u} dW^2_u + \int_v^t W^1_{s,v} dW^2_u + \int_v^t W^1_{v,u} dW^2_u
+                        #          = B_{s, v} + W^1_{s, v} W^2_{v, t} + B_{v, t}
+                        #
+                        # A is now the antisymmetric part of B, which gives the formula below.
+                        A = A + Ai + 0.5 * (W.unsqueeze(-1) * Wi.unsqueeze(-2) - Wi.unsqueeze(-1) * W.unsqueeze(-2))
+                    W = W + Wi
 
         U = None
         if self.have_H:
@@ -545,11 +554,11 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 f"t1={self._end:.3f}, "
                 f"shape={self.shape}, "
                 f"dtype={self.dtype}, "
-                f"device={self.device}, "
+                f"device={repr(self.device)}, "
                 f"entropy={self._entropy}, "
                 f"dt={dt}, "
                 f"cache_size={self._cache_size}, "
-                f"levy_area_approximation={self.levy_area_approximation}"
+                f"levy_area_approximation={repr(self.levy_area_approximation)}"
                 f")")
 
     def to(self, *args, **kwargs):
