@@ -31,8 +31,8 @@ def sdeint(sde: base_sde.BaseSDE,
            method: Optional[str] = "srk",
            dt: Optional[Scalar] = 1e-3,
            adaptive: Optional[bool] = False,
-           rtol: Optional[float] = 1e-5,
-           atol: Optional[float] = 1e-4,
+           rtol: Optional[Scalar] = 1e-5,
+           atol: Optional[Scalar] = 1e-4,
            dt_min: Optional[Scalar] = 1e-5,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
@@ -75,6 +75,8 @@ def sdeint(sde: base_sde.BaseSDE,
     del unused_kwargs
 
     sde, y0, ts, bm = check_contract(sde, y0, ts, bm, method, names)
+    misc.assert_no_grad(['ts', 'dt', 'rtol', 'atol', 'dt_min'],
+                        [ts, dt, rtol, atol, dt_min])
     return integrate(
         sde=sde,
         y0=y0,

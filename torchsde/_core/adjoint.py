@@ -41,7 +41,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
         ys = sdeint.integrate(
             sde=sde,
-            y0=y0,
+            y0=y0.detach(),  # This .detach() is VERY IMPORTANT. See adjoint_sde.py::AdjointSDE._unpack_y_aug.
             ts=ts,
             bm=bm,
             method=method,
@@ -75,19 +75,10 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
         for i in range(ys.size(0) - 1, 0, -1):
             aug_state = misc.flatten(aug_state)
-            aug_state = sdeint.integrate(
-                sde=adjoint_sde,
-                y0=aug_state,
-                ts=torch.stack([-ts[i], -ts[i - 1]]),
-                bm=reverse_bm,
-                method=adjoint_method,
-                dt=dt,
-                adaptive=adjoint_adaptive,
-                rtol=adjoint_rtol,
-                atol=adjoint_atol,
-                dt_min=dt_min,
-                options=adjoint_options
-            )
+            aug_state = _SdeintAdjointMethod.apply(adjoint_sde, torch.stack([-ts[i], -ts[i - 1]]), dt, reverse_bm,
+                                                   adjoint_method, adjoint_method, adjoint_adaptive, adjoint_adaptive,
+                                                   adjoint_rtol, adjoint_rtol, adjoint_atol, adjoint_atol, dt_min,
+                                                   adjoint_options, adjoint_options, aug_state, *params)
             aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
             aug_state[0] = ys[i - 1]
             aug_state[1] = aug_state[1] + grad_ys[i - 1]
@@ -106,10 +97,10 @@ def sdeint_adjoint(sde: nn.Module,
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
                    adjoint_adaptive: Optional[bool] = False,
-                   rtol: Optional[float] = 1e-5,
-                   adjoint_rtol: Optional[float] = 1e-5,
-                   atol: Optional[float] = 1e-4,
-                   adjoint_atol: Optional[float] = 1e-4,
+                   rtol: Optional[Scalar] = 1e-5,
+                   adjoint_rtol: Optional[Scalar] = 1e-5,
+                   atol: Optional[Scalar] = 1e-4,
+                   adjoint_atol: Optional[Scalar] = 1e-4,
                    dt_min: Optional[Scalar] = 1e-5,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
@@ -167,6 +158,8 @@ def sdeint_adjoint(sde: nn.Module,
         raise ValueError("`sde` is required to be an instance of nn.Module.")
 
     sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
+    misc.assert_no_grad(['ts', 'dt', 'rtol', 'adjoint_rtol', 'atol', 'adjoint_atol', 'dt_min'],
+                        [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
     params = filter(lambda x: x.requires_grad, sde.parameters())
 

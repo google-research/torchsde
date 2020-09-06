@@ -17,6 +17,12 @@ import warnings
 import torch
 
 
+def assert_no_grad(names, maybe_tensors):
+    for name, maybe_tensor in zip(names, maybe_tensors):
+        if torch.is_tensor(maybe_tensor) and maybe_tensor.requires_grad:
+            raise ValueError(f"Argument {name} must not require gradient.")
+
+
 def handle_unused_kwargs(unused_kwargs, msg=None):
     if len(unused_kwargs) > 0:
         if msg is not None:
