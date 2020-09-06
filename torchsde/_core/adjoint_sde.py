@@ -181,6 +181,9 @@ class AdjointSDE(base_sde.BaseSDE):
                 retain_graph=True,
                 create_graph=requires_grad
             )
+            if not requires_grad:
+                # See corresponding note in f_uncorrected.
+                f = f.detach()
             # Convert the adjoint Stratonovich SDE to Itô form.
             a_dg_vjp, = misc.vjp(
                 outputs=g,
