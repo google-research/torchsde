@@ -72,27 +72,26 @@ class LatentSDE(SDEIto):
         return self.net(inp)
 
     def f_aug(self, t, y):
-        y = y[:, 0][:, None]
-        res = self.f(t, y)
-        z = res - self.h(t, y)
-        g = self.g(t, y)
+        y = y[:, 0:1]
+        f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
+        z = f - h
         g = torch.where(
             g.abs() > 1e-7,
             g,
             torch.ones_like(g).fill_(1e-7) * g.sign()
         )
         z = z / g
-        z = .5 * (torch.norm(z, dim=1) ** 2.)[:, None]
-        return torch.cat([res, z], dim=1)
+        z = .5 * (torch.norm(z, dim=1, keepdim=True) ** 2.)
+        return torch.cat([f, z], dim=1)
 
     def g(self, t, y):  # Shared diffusion.
         return self.sigma.repeat(y.size(0), 1)
 
     def g_aug(self, t, y):
-        y = y[:, 0][:, None]
-        res = self.g(t, y)
+        y = y[:, 0:1]
+        g = self.g(t, y)
         z = torch.zeros_like(y)
-        return torch.cat([res, z], dim=1)
+        return torch.cat([g, z], dim=1)
 
     def forward(self, ts, batch_size, eps=None):
         eps = torch.cat([torch.randn(batch_size, 1).to(self.qy0_std), torch.zeros(batch_size, 1)
@@ -109,7 +108,7 @@ class LatentSDE(SDEIto):
         else:
             zs = sdeint(self, y0, ts, method=args.method, dt=args.dt, adaptive=args.adaptive,
                                rtol=args.rtol, atol=args.atol, names={'drift': 'f_aug', 'diffusion': 'g_aug'})
-        logqp = zs[:, :, 1]
+        logqp = zs[-1, :, 1]
         zs = zs[:, :, 0][:, :, None]
 
         logqp = logqp.sum(0).mean(0)
