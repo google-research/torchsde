@@ -58,9 +58,9 @@ class AdjointSDE(base_sde.BaseSDE):
             NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
         }.get(sde.noise_type, self.gdg_prod_default)
 
-    def _unpack_y_aug(self, t, y_aug, v):
+    def _get_state(self, t, y_aug, v):
         # These leaf checks are very important.
-        # _unpack_y_aug is used where we want to compute:
+        # _get_state is used where we want to compute:
         # ```
         # with torch.enable_grad():
         #     s = some_function(y)
@@ -82,7 +82,7 @@ class AdjointSDE(base_sde.BaseSDE):
         assert v.is_leaf, "Internal error: please report a bug to torchsde"
 
         # This determines whether or not we will be able to backpropagate through the calling function (that is calling
-        # _unpack_y_aug). Simply, we should be able to if and only if (a) gradients are enabled and (b) the input
+        # _get_state). Simply, we should be able to if and only if (a) gradients are enabled and (b) the input
         # arguments require gradient.
         # Note that we don't fix this to True, because that implies building computational graphs, which will consume
         # additional memory that will be unnecessary if we don't need to backpropagate.
@@ -100,7 +100,7 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
-        y, adj_y, requires_grad = self._unpack_y_aug(t, y_aug, v=t)  # just use t as a dummy `v`
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)  # just use t as a dummy `v`
         with torch.enable_grad():
             f = self._base_sde.f(-t, y)
             vjp_y_and_params = misc.vjp(
@@ -122,7 +122,7 @@ class AdjointSDE(base_sde.BaseSDE):
         raise NotImplementedError
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
-        y, adj_y, requires_grad = self._unpack_y_aug(t, y_aug, v=t)  # just use t as a dummy `v`
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)  # just use t as a dummy `v`
         with torch.enable_grad():
             g = self._base_sde.g(-t, y)
             g_dg_vjp, = misc.vjp(
@@ -180,7 +180,7 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def g_prod(self, t, y_aug, v):
-        y, adj_y, requires_grad = self._unpack_y_aug(t, y_aug, v)
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v)
         with torch.enable_grad():
             g_prod = self._base_sde.g_prod(-t, y, v)
             vjp_y_and_params = misc.vjp(
@@ -203,7 +203,7 @@ class AdjointSDE(base_sde.BaseSDE):
         raise NotImplementedError
 
     def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        y, adj_y, requires_grad = self._unpack_y_aug(t, y_aug, v)
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v)
         with torch.enable_grad():
             g = self._base_sde.g(-t, y)
             vg_dg_vjp, = misc.vjp(
