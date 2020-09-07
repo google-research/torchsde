@@ -28,7 +28,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,  # noqa
-                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, y0, *params):
+                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params):
         ctx.sde = sde
         ctx.dt = dt
         ctx.bm = bm
@@ -52,12 +52,12 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             dt_min=dt_min,
             options=options,
         )
-        ctx.save_for_backward(ys, ts, *params)
+        ctx.save_for_backward(ys, ts, *adjoint_params)
         return ys
 
     @staticmethod
     def backward(ctx, grad_ys):  # noqa
-        ys, ts, *params = ctx.saved_tensors
+        ys, ts, *adjoint_params = ctx.saved_tensors
         sde = ctx.sde
         dt = ctx.dt
         bm = ctx.bm
@@ -68,9 +68,9 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         dt_min = ctx.dt_min
         adjoint_options = ctx.adjoint_options
 
-        aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in params]
+        aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in adjoint_params]
         shapes = [t.size() for t in aug_state]
-        adjoint_sde = AdjointSDE(sde, params, shapes)
+        adjoint_sde = AdjointSDE(sde, adjoint_params, shapes)
         reverse_bm = ReverseBrownian(bm)
 
         for i in range(ys.size(0) - 1, 0, -1):
@@ -113,6 +113,7 @@ def sdeint_adjoint(sde: nn.Module,
                    dt_min: Optional[Scalar] = 1e-5,
                    options: Optional[Dict[str, Any]] = None,
                    adjoint_options: Optional[Dict[str, Any]] = None,
+                   adjoint_params=None,
                    names: Optional[Dict[str, str]] = None,
                    **unused_kwargs) -> Tensor:
     """Numerically integrate an Itô SDE with stochastic adjoint support.
@@ -148,6 +149,9 @@ def sdeint_adjoint(sde: nn.Module,
         options (dict, optional): Dict of options for the integration method.
         adjoint_options (dict, optional): Dict of options for the integration
             method of the backward adjoint solve.
+        adjoint_params (Sequence of Tensors, optional): Tensors whose gradient
+            should be obtained with the adjoint. If not specified, defaults to
+            the parameters of `sde`.
         names (dict, optional): Dict of method names for drift and diffusion.
             Expected keys are "drift" and "diffusion". Serves so that users can
             use methods with names not in `("f", "g")`, e.g. to use the
@@ -163,16 +167,19 @@ def sdeint_adjoint(sde: nn.Module,
     misc.handle_unused_kwargs(unused_kwargs, msg="`sdeint_adjoint`")
     del unused_kwargs
 
-    if not isinstance(sde, nn.Module):
-        raise ValueError("`sde` is required to be an instance of nn.Module.")
+    if adjoint_params is None and not isinstance(sde, nn.Module):
+        raise ValueError('`sde` must be an instance of nn.Module to specify the adjoint parameters; alternatively they '
+                         'can be specified explicitly via the `adjoint_params` argument. If there are no parameters '
+                         'then it is allowable to set `adjoint_params=()`.')
 
     sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
+    adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
+    adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
-    params = filter(lambda x: x.requires_grad, sde.parameters())
 
     return _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
-        adjoint_atol, dt_min, options, adjoint_options, y0, *params
+        adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params
     )
 
 
