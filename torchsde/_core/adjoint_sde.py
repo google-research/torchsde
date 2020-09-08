@@ -59,6 +59,8 @@ class AdjointSDE(base_sde.BaseSDE):
         }.get(sde.noise_type, self.gdg_prod_default)
 
     def _get_state(self, t, y_aug, v):
+        """Unpacks y_aug, whilst enforcing the necessary checks so that we can calculate derivatives wrt state."""
+
         # These leaf checks are very important.
         # _get_state is used where we want to compute:
         # ```
@@ -68,15 +70,12 @@ class AdjointSDE(base_sde.BaseSDE):
         # ```
         # where `some_function` implicitly depends on `params`.
         # However if y has history of its own then in principle it could _also_ depend upon `params`, and this call to
-        # `grad` will go all the way back to that.
-        # To avoid this, we require that y (and the other tensors) be leaf tensors.
+        # `grad` will go all the way back to that. To avoid this, we require that every input tensor be a leaf tensor.
         #
-        # Note that this is also the reason for the `y0.detach()` in adjoint.py::_SdeintAdjointMethod.forward. Unless
-        # we detach then y0 may have a history and these checks will fail. Note that this isn't then producing the wrong
-        # gradients when backprop'ing as usual because `torch.autograd.Function.forward` has an implicit
-        # `torch.no_grad()` guard, i.e. any history doesn't affect the usual gradient computations anyway. But it does
-        # still get detected if we call `torch.autograd.grad` ourselves, which is explicitly what we don't want as per
-        # the previous paragraph.
+        # This is also the reason for the `y0.detach()` in adjoint.py::_SdeintAdjointMethod.forward. If we don't detach,
+        # then y0 may have a history and these checks will fail. This is a spurious failure as
+        # `torch.autograd.Function.forward` has an implicit `torch.no_grad()` guard, i.e. we definitely don't want to
+        # use its history there.
         assert t.is_leaf, "Internal error: please report a bug to torchsde"
         assert y_aug.is_leaf, "Internal error: please report a bug to torchsde"
         assert v.is_leaf, "Internal error: please report a bug to torchsde"
@@ -142,9 +141,6 @@ class AdjointSDE(base_sde.BaseSDE):
                 retain_graph=True,
                 create_graph=requires_grad
             )
-            if not requires_grad:
-                # See corresponding note in f_uncorrected.
-                f = f.detach()
             # Convert the adjoint Stratonovich SDE to Itô form.
             a_dg_vjp, = misc.vjp(
                 outputs=g,
@@ -162,6 +158,9 @@ class AdjointSDE(base_sde.BaseSDE):
                 create_graph=requires_grad
             )
             vjp_y_and_params = misc.seq_add(vjp_y_and_params, extra_vjp_y_and_params)
+            if not requires_grad:
+                # See corresponding note in f_uncorrected.
+                f = f.detach()
         return misc.flatten((-f, *vjp_y_and_params))
 
     ########################################
