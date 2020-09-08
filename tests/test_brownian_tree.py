@@ -42,7 +42,11 @@ LARGE_BATCH_SIZE = 16384
 REPS = 3
 ALPHA = 0.001
 
-brownian_classes = [torchsde.brownian_lib.BrownianTree, torchsde.BrownianTree]
+# In case the C++ implementations don't compile.
+if hasattr(torchsde.brownian_lib, "BrownianTree"):
+    brownian_classes = [torchsde.brownian_lib.BrownianTree, torchsde.BrownianTree]
+else:
+    brownian_classes = [torchsde.BrownianTree]
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
 
