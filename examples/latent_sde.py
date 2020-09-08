@@ -94,9 +94,9 @@ class LatentSDE(SDEIto):
         return torch.cat([g, z], dim=1)
 
     def forward(self, ts, batch_size, eps=None):
-        eps = torch.cat([torch.randn(batch_size, 1).to(self.qy0_std), torch.zeros(batch_size, 1)
-                        .to(self.qy0_std)], dim=1) if eps is None else eps
+        eps = torch.randn(batch_size, 1).to(self.qy0_std) if eps is None else eps
         y0 = self.qy0_mean + eps * self.qy0_std
+        y0 = torch.cat([y0, torch.zeros(batch_size, 1).to(self.qy0_std)], dim=1)
 
         qy0 = Normal(loc=self.qy0_mean, scale=self.qy0_std)
         py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
@@ -109,9 +109,9 @@ class LatentSDE(SDEIto):
             zs = sdeint(self, y0, ts, method=args.method, dt=args.dt, adaptive=args.adaptive,
                                rtol=args.rtol, atol=args.atol, names={'drift': 'f_aug', 'diffusion': 'g_aug'})
         logqp = zs[-1, :, 1]
-        zs = zs[:, :, 0][:, :, None]
+        zs = zs[:, :, 0:1]
 
-        logqp = logqp.sum(0).mean(0)
+        logqp = logqp.mean(0)
         log_ratio = logqp0 + logqp  # KL(time=0) + KL(path).
 
         return zs, log_ratio
