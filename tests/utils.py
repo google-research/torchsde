@@ -12,21 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 
-import numpy as np
 import torch
 
 
-class TorchTestCase(unittest.TestCase):
-
-    def tensorAssertAllClose(self, actual, expected, rtol=1e-2, atol=1e-3):
-        if actual is None:
-            self.assertEqual(expected, None)
-        else:
-            torch.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)
-
-    def arrayAssertAllClose(self, actual, expected, rtol=1e-2, atol=1e-3):
-        if actual is None:
-            self.assertEqual(expected, None)
-        np.testing.assert_allclose(actual, expected, rtol, atol)
+def assert_allclose(actual, expected, rtol=1e-2, atol=1e-3):
+    if actual is None:
+        assert expected is None
+    else:
+        torch.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)

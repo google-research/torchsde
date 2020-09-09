@@ -21,7 +21,6 @@ import unittest
 import torch
 
 from tests import basic_sde
-from tests.torch_test import TorchTestCase
 from torchsde import BrownianInterval, sdeint
 
 torch.manual_seed(1147481649)
@@ -58,7 +57,7 @@ bm_scalar = BrownianInterval(
 )
 
 
-class TestSdeint(TorchTestCase):
+class TestSdeint(unittest.TestCase):
 
     def test_rename_methods(self):
         # Test renaming works with a subset of names.
@@ -175,6 +174,12 @@ class TestSdeint(TorchTestCase):
             )
         self.assertEqual(ans.shape, (T, batch_size, d))
         self.assertEqual(logqp.shape, (T - 1, batch_size))
+
+    def tensorAssertAllClose(self, actual, expected, rtol=1e-2, atol=1e-3):
+        if actual is None:
+            self.assertEqual(expected, None)
+        else:
+            torch.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)
 
 
 if __name__ == '__main__':
