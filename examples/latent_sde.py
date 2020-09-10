@@ -28,6 +28,7 @@ from torch.distributions import Normal, Laplace, kl_divergence
 
 from examples import utils
 from torchsde import sdeint, sdeint_adjoint, SDEIto, BrownianInterval
+from torchsde._core.misc import _stable_division
 
 Data = namedtuple('Data', ['ts_', 'ts_ext_', 'ts_vis_', 'ts', 'ts_ext', 'ts_vis', 'ys', 'ys_'])
 
@@ -74,15 +75,9 @@ class LatentSDE(SDEIto):
     def f_aug(self, t, y):
         y = y[:, 0:1]
         f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
-        z = f - h
-        g = torch.where(
-            g.abs() > 1e-7,
-            g,
-            torch.ones_like(g).fill_(1e-7) * g.sign()
-        )
-        z = z / g
-        z = .5 * (torch.norm(z, dim=1, keepdim=True) ** 2.)
-        return torch.cat([f, z], dim=1)
+        u = _stable_division(f - h, g)
+        u = .5 * torch.norm(u, dim=1, keepdim=True) ** 2.
+        return torch.cat([f, u], dim=1)
 
     def g(self, t, y):  # Shared diffusion.
         return self.sigma.repeat(y.size(0), 1)
@@ -96,7 +91,7 @@ class LatentSDE(SDEIto):
     def forward(self, ts, batch_size, eps=None):
         eps = torch.randn(batch_size, 1).to(self.qy0_std) if eps is None else eps
         y0 = self.qy0_mean + eps * self.qy0_std
-        y0 = torch.cat([y0, torch.zeros(batch_size, 1).to(self.qy0_std)], dim=1)
+        y0 = torch.cat([y0, torch.zeros(batch_size, 1).to(y0)], dim=1)
 
         qy0 = Normal(loc=self.qy0_mean, scale=self.qy0_std)
         py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
