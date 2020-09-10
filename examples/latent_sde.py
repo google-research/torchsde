@@ -71,24 +71,50 @@ class LatentSDE(SDEIto):
         inp = torch.cat((torch.sin(t), torch.cos(t), y), dim=-1)
         return self.net(inp)
 
+    def f_aug(self, t, y):
+        y = y[:, 0:1]
+        f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
+        u = self._stable_division(f - h, g)
+        u = .5 * torch.norm(u, dim=1, keepdim=True) ** 2.
+        return torch.cat([f, u], dim=1)
+
     def g(self, t, y):  # Shared diffusion.
         return self.sigma.repeat(y.size(0), 1)
+
+    def g_aug(self, t, y):
+        y = y[:, 0:1]
+        g = self.g(t, y)
+        z = torch.zeros_like(y)
+        return torch.cat([g, z], dim=1)
+
+    @staticmethod
+    def _stable_division(x, y, epsilon=1e-7):
+        y = torch.where(
+            y.abs() > epsilon,
+            y,
+            torch.full_like(y, epsilon) * y.sign()
+        )
+        return x / y
 
     def forward(self, ts, batch_size, eps=None):
         eps = torch.randn(batch_size, 1).to(self.qy0_std) if eps is None else eps
         y0 = self.qy0_mean + eps * self.qy0_std
+        y0 = torch.cat([y0, torch.zeros(batch_size, 1).to(y0)], dim=1)
 
         qy0 = Normal(loc=self.qy0_mean, scale=self.qy0_std)
         py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
         logqp0 = kl_divergence(qy0, py0).sum(1).mean(0)  # KL(time=0).
 
         if args.adjoint:
-            zs, logqp = sdeint_adjoint(self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive,
-                                       rtol=args.rtol, atol=args.atol)
+            zs = sdeint_adjoint(self, y0, ts, method=args.method, dt=args.dt, adaptive=args.adaptive,
+                                       rtol=args.rtol, atol=args.atol, names={'drift': 'f_aug', 'diffusion': 'g_aug'})
         else:
-            zs, logqp = sdeint(self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive,
-                               rtol=args.rtol, atol=args.atol)
-        logqp = logqp.sum(0).mean(0)
+            zs = sdeint(self, y0, ts, method=args.method, dt=args.dt, adaptive=args.adaptive,
+                               rtol=args.rtol, atol=args.atol, names={'drift': 'f_aug', 'diffusion': 'g_aug'})
+        logqp = zs[-1, :, 1]
+        zs = zs[:, :, 0:1]
+
+        logqp = logqp.mean(0)
         log_ratio = logqp0 + logqp  # KL(time=0) + KL(path).
 
         return zs, log_ratio
