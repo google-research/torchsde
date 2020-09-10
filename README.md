@@ -25,17 +25,10 @@ Note, the example contains many simplifications and is meant to demonstrate basi
 
 To run the latent SDE example, execute the following command from the root folder of this repo:
 ```shell script
-python3 -m examples.latent_sde \
-  --adjoint \
-  --adaptive \
-  --rtol 1e-2 \
-  --atol 1e-3 \
-  --train-dir ${TRAIN_DIR}
+python3 -m examples.latent_sde --train-dir ${TRAIN_DIR}
 ```
-Once in a while, the program writes a figure to `TRAIN_DIR`, an environment variable that specifies a location on disk.
+Once in a while, the program writes a figure to the path specified by `TRAIN_DIR`.
 Training should stabilize after 500 iterations with the default hyperparameters.
-
-Even though the example can be run with just CPUs, we recommend running it on a machine with GPUs.
 
 ## Usage
 The central functions of interest are `sdeint` and `sdeint_adjoint`. They can be imported as follows:
