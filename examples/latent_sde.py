@@ -28,7 +28,6 @@ from torch.distributions import Normal, Laplace, kl_divergence
 
 from examples import utils
 from torchsde import sdeint, sdeint_adjoint, SDEIto, BrownianInterval
-from torchsde._core.misc import _stable_division
 
 Data = namedtuple('Data', ['ts_', 'ts_ext_', 'ts_vis_', 'ts', 'ts_ext', 'ts_vis', 'ys', 'ys_'])
 
@@ -75,7 +74,7 @@ class LatentSDE(SDEIto):
     def f_aug(self, t, y):
         y = y[:, 0:1]
         f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
-        u = _stable_division(f - h, g)
+        u = self._stable_division(f - h, g)
         u = .5 * torch.norm(u, dim=1, keepdim=True) ** 2.
         return torch.cat([f, u], dim=1)
 
@@ -87,6 +86,15 @@ class LatentSDE(SDEIto):
         g = self.g(t, y)
         z = torch.zeros_like(y)
         return torch.cat([g, z], dim=1)
+
+    @staticmethod
+    def _stable_division(x, y, epsilon=1e-7):
+        y = torch.where(
+            y.abs() > epsilon,
+            y,
+            torch.full_like(y, epsilon) * y.sign()
+        )
+        return x / y
 
     def forward(self, ts, batch_size, eps=None):
         eps = torch.randn(batch_size, 1).to(self.qy0_std) if eps is None else eps

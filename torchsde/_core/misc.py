@@ -98,12 +98,3 @@ def flat_to_shape(tensor, shapes, length=()):
         tensor_list.append(tensor[..., total:next_total].view((*length, *shape)))
         total = next_total
     return tensor_list
-
-
-def _stable_division(x, y, epsilon=1e-7):
-    y = torch.where(
-        y.abs() > epsilon,
-        y,
-        torch.ones_like(y).fill_(epsilon) * y.sign()
-    )
-    return x / y
