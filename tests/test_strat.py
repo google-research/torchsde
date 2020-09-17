@@ -198,10 +198,14 @@ def swiss_knife_gradcheck(func: Callable,
 
     # Grad of grad wrt params.
     if gradgrad_params:
+        # Define this outside `func_high_order` so that random tensors are generated only once.
+        grad_outputs = [torch.rand_like(p) for m in modules for p in m.parameters() if p.requires_grad]
+
         def func_high_order(inputs, modules):
             params = [p for m in modules for p in m.parameters() if p.requires_grad]
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
-            return sum([(grad * torch.rand_like(grad)).sum() for grad in grads if grad is not None])
+            grads = tuple(grad for grad in grads if grad is not None)
+            return sum([(grad * grad_output).sum() for grad, grad_output in zip(grads, grad_outputs)])
 
         swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
 
