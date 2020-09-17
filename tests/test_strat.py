@@ -127,7 +127,7 @@ def test_double_adjoint():
         return ys[-1]
 
     y0_ = y0.clone().requires_grad_(True)
-    torch.autograd.gradgradcheck(func, y0_, rtol=1e-3, atol=1e-3)
+    torch.autograd.gradgradcheck(func, y0_, rtol=1e-3, atol=1e-4)
 
 
 def test_double_adjoint_params():
@@ -142,7 +142,7 @@ def test_double_adjoint_params():
         flat_grad = torch.cat([g.reshape(-1) for g in grad])
         return (flat_grad ** 2).sum()
 
-    _gradcheck_for_params(func, sde, y0)
+    _gradcheck_for_params(func, sde, y0, rtol=1e-3, atol=1e-4)
 
 
 # TODO: "Merge" this with torch.gradcheck and torch.gradgradcheck for state.
