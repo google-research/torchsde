@@ -24,7 +24,6 @@ import torch
 from torch import nn
 
 from torchsde import sdeint_adjoint, BrownianInterval
-from torchsde._core import misc  # noqa
 from torchsde._core.base_sde import ForwardSDE  # noqa
 from torchsde.settings import SDE_TYPES
 from torchsde.types import Callable, TensorOrTensors, ModuleOrModules, Optional
