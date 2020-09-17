@@ -32,8 +32,7 @@ def handle_unused_kwargs(unused_kwargs, msg=None):
 
 
 def flatten(sequence):
-    flat = [p.reshape(-1) for p in sequence]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
+    return torch.cat([p.reshape(-1) for p in sequence]) if len(sequence) > 0 else torch.tensor([])
 
 
 def convert_none_to_zeros(sequence, like_sequence):

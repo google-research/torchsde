@@ -27,7 +27,7 @@ from torchsde import sdeint_adjoint, BrownianInterval
 from torchsde._core import misc  # noqa
 from torchsde._core.base_sde import ForwardSDE  # noqa
 from torchsde.settings import SDE_TYPES
-from torchsde.types import Callable
+from torchsde.types import Callable, TensorOrTensors, ModuleOrModules, Optional
 from . import problems
 
 torch.set_printoptions(precision=10)
@@ -37,7 +37,7 @@ cpu, gpu = torch.device('cpu'), torch.device('cuda')
 device = gpu if torch.cuda.is_available() else cpu
 dtype = torch.get_default_dtype()
 batch_size, d, m = 5, 2, 3
-ts = torch.tensor([0.0, 0.2, 1.0, 1.5], device=device)
+ts = torch.tensor([0.0, 0.2, 0.4], device=device)
 t0, t1 = ts[0], ts[-1]
 y0 = torch.full((batch_size, d), 0.1, device=device)
 
@@ -106,80 +106,109 @@ def check_efficiency():
     print(f'Time elapse for duplicate: {time_elapse:.4f}')
 
 
-def test_adjoint():
+def test_adjoint_inputs():
     sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
 
-    def func(y0):
+    def func(inputs, modules):
+        y0, sde = inputs[0], modules[0]
         ys = sdeint_adjoint(sde, y0, ts, bm, method='midpoint')
-        return ys[-1].sum()
+        return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
-    y0_ = y0.clone().requires_grad_(True)
-    torch.autograd.gradcheck(func, y0_, rtol=1e-4, atol=1e-3, eps=1e-8)
-
-
-def test_double_adjoint():
-    sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
-    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
-
-    def func(y0):
-        ys = sdeint_adjoint(sde, y0, ts, bm, method="midpoint")
-        return ys[-1]
-
-    y0_ = y0.clone().requires_grad_(True)
-    torch.autograd.gradgradcheck(func, y0_, rtol=1e-3, atol=1e-4)
+    swiss_knife_gradcheck(func, y0, sde, eps=1e-7, rtol=1e-3, atol=1e-3, grad_inputs=True, gradgrad_inputs=True)
 
 
-def test_double_adjoint_params():
+def test_adjoint_params():
     sde = problems.Ex5(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
 
-    def func(module, y0):
+    def func(inputs, modules):
         """Outputs gradient norm squared."""
-        ys = sdeint_adjoint(module, y0, ts, bm, method="midpoint")
-        loss = (ys[-1] ** 2 + ys[-2] ** 2).sum(dim=1).mean(dim=0)
-        grad = torch.autograd.grad(loss, list(module.parameters()), create_graph=True)
-        flat_grad = torch.cat([g.reshape(-1) for g in grad])
-        return (flat_grad ** 2).sum()
+        y0, sde = inputs[0], modules[0]
+        ys = sdeint_adjoint(sde, y0, ts, bm, method="midpoint")
+        return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
-    _gradcheck_for_params(func, sde, y0, rtol=1e-3, atol=1e-4)
+    swiss_knife_gradcheck(func, y0, sde, eps=1e-7, rtol=1e-3, atol=1e-3, grad_params=True, gradgrad_params=True)
 
 
-# TODO: "Merge" this with torch.gradcheck and torch.gradgradcheck for state.
-def _gradcheck_for_params(func: Callable,
-                          module: nn.Module,
-                          y0: torch.Tensor,
+def swiss_knife_gradcheck(func: Callable,
+                          inputs: TensorOrTensors,
+                          modules: Optional[ModuleOrModules] = (),
                           eps: float = 1e-6,
                           atol: float = 1e-5,
-                          rtol: float = 1e-3):
-    module = copy.deepcopy(module).requires_grad_(True)
-    y0 = y0.clone()
-    loss = func(module, y0)
-    params = list(module.parameters())
+                          rtol: float = 1e-3,
+                          grad_inputs=False,
+                          gradgrad_inputs=False,
+                          grad_params=False,
+                          gradgrad_params=False):
+    """Check grad and grad of grad wrt inputs and parameters of Modules.
 
-    grad = misc.flatten(misc.vjp(loss, params)).detach()
+    Assumes func outputs a single scalar. Aimed to be as self-contained as
+    possible so that could be copied/pasted across projects.
 
-    # Need torch.is_grad_enabled() == True for testing higher-order grads.
-    numerical_grad = []
-    for param in params:
-        flat_param = param.view(-1)
-        for i in range(len(flat_param)):
-            flat_param[i] += eps
-            plus_eps = func(module, y0)
-            flat_param[i] -= eps
+    Defaults for atol, rtol, and eps based on `torch.autograd.gradcheck`.
+    """
 
-            flat_param[i] -= eps
-            minus_eps = func(module, y0)
-            flat_param[i] += eps
+    def convert_none_to_zeros(sequence, like_sequence):
+        return [torch.zeros_like(q) if p is None else p for p, q in zip(sequence, like_sequence)]
 
-            numerical_grad.append((plus_eps - minus_eps).cpu().item() / (2 * eps))
-            del plus_eps, minus_eps
-    numerical_grad = torch.tensor(numerical_grad).to(device)
-    torch.testing.assert_allclose(grad, numerical_grad, atol=atol, rtol=rtol)
+    def flatten(sequence):
+        return torch.cat([p.reshape(-1) for p in sequence]) if len(sequence) > 0 else torch.tensor([])
+
+    if isinstance(inputs, torch.Tensor):
+        inputs = (inputs,)
+
+    if isinstance(modules, nn.Module):
+        modules = (modules,)
+
+    # Don't modify original objects.
+    modules = tuple(copy.deepcopy(m) for m in modules)
+    inputs = tuple(i.clone().requires_grad_() for i in inputs)
+    func_only_inputs = lambda *args: func(args, modules)  # noqa
+
+    # Grad wrt inputs.
+    if grad_inputs:
+        torch.autograd.gradcheck(func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol)
+
+    # Grad of grad wrt inputs.
+    if gradgrad_inputs:
+        torch.autograd.gradgradcheck(func_only_inputs, inputs, eps=eps, atol=atol, rtol=rtol)
+
+    # Grad wrt params.
+    if grad_params:
+        params = [p for m in modules for p in m.parameters() if p.requires_grad]
+        loss = func(inputs, modules)
+        framework_grad = flatten(convert_none_to_zeros(torch.autograd.grad(loss, params, create_graph=True), params))
+
+        numerical_grad = []
+        for param in params:
+            flat_param = param.reshape(-1)
+            for i in range(len(flat_param)):
+                flat_param[i] += eps  # In-place.
+                plus_eps = func(inputs, modules)
+                flat_param[i] -= eps
+
+                flat_param[i] -= eps
+                minus_eps = func(inputs, modules)
+                flat_param[i] += eps
+
+                numerical_grad.append((plus_eps - minus_eps).detach() / (2 * eps))
+                del plus_eps, minus_eps
+        numerical_grad = torch.stack(numerical_grad)
+        torch.testing.assert_allclose(numerical_grad, framework_grad, rtol=rtol, atol=atol)
+
+    # Grad of grad wrt params.
+    if gradgrad_params:
+        def func_high_order(inputs, modules):
+            params = [p for m in modules for p in m.parameters() if p.requires_grad]
+            grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
+            return sum([(grad * torch.rand_like(grad)).sum() for grad in grads if grad is not None])
+
+        swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
 
 
 test_dg_ga_jvp()
 check_efficiency()
-test_adjoint()
-test_double_adjoint()
-test_double_adjoint_params()
+
+test_adjoint_inputs()
+test_adjoint_params()

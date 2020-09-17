@@ -194,14 +194,14 @@ class Ex5(BaseSDE):
         self.m = m
 
         self.f_net = nn.Sequential(
-            nn.Linear(d + 1, 4),
+            nn.Linear(d + 1, 3),
             nn.Softplus(),
-            nn.Linear(4, d)
+            nn.Linear(3, d)
         )
         self.g_net = nn.Sequential(
-            nn.Linear(d + 1, 4),
+            nn.Linear(d + 1, 3),
             nn.Softplus(),
-            nn.Linear(4, d * m),
+            nn.Linear(3, d * m),
             nn.Sigmoid()
         )
 
