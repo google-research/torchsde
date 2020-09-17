@@ -17,22 +17,27 @@
 This should be eventually refactored and the file should be removed.
 """
 
+import copy
 import time
 
 import torch
+from torch import nn
 
 from torchsde import sdeint_adjoint, BrownianInterval
+from torchsde._core import misc  # noqa
 from torchsde._core.base_sde import ForwardSDE  # noqa
 from torchsde.settings import SDE_TYPES
-from .problems import Ex4
+from torchsde.types import Callable
+from . import problems
 
+torch.set_printoptions(precision=10)
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 cpu, gpu = torch.device('cpu'), torch.device('cuda')
 device = gpu if torch.cuda.is_available() else cpu
 dtype = torch.get_default_dtype()
-batch_size, d, m = 1, 2, 3
-ts = torch.tensor([0.0, 0.2, 0.4], device=device)
+batch_size, d, m = 5, 2, 3
+ts = torch.tensor([0.0, 0.2, 1.0, 1.5], device=device)
 t0, t1 = ts[0], ts[-1]
 y0 = torch.full((batch_size, d), 0.1, device=device)
 
@@ -69,7 +74,7 @@ def _make_inputs():
     y = torch.randn(batch_size, d, device=device)
     a = torch.randn(batch_size, m, m, device=device)
     a = a - a.transpose(1, 2)  # Anti-symmetric.
-    sde = ForwardSDE(Ex4(d=d, m=m)).to(device)
+    sde = ForwardSDE(problems.Ex4(d=d, m=m)).to(device)
     return sde, t, y, a
 
 
@@ -102,7 +107,7 @@ def check_efficiency():
 
 
 def test_adjoint():
-    sde = Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+    sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
 
     def func(y0):
@@ -113,6 +118,68 @@ def test_adjoint():
     torch.autograd.gradcheck(func, y0_, rtol=1e-4, atol=1e-3, eps=1e-8)
 
 
+def test_double_adjoint():
+    sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
+
+    def func(y0):
+        ys = sdeint_adjoint(sde, y0, ts, bm, method="midpoint")
+        return ys[-1]
+
+    y0_ = y0.clone().requires_grad_(True)
+    torch.autograd.gradgradcheck(func, y0_, rtol=1e-3, atol=1e-3)
+
+
+def test_double_adjoint_params():
+    sde = problems.Ex5(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
+
+    def func(module, y0):
+        """Outputs gradient norm squared."""
+        ys = sdeint_adjoint(module, y0, ts, bm, method="midpoint")
+        loss = (ys[-1] ** 2 + ys[-2] ** 2).sum(dim=1).mean(dim=0)
+        grad = torch.autograd.grad(loss, list(module.parameters()), create_graph=True)
+        flat_grad = torch.cat([g.reshape(-1) for g in grad])
+        return (flat_grad ** 2).sum()
+
+    _gradcheck_for_params(func, sde, y0)
+
+
+# TODO: "Merge" this with torch.gradcheck and torch.gradgradcheck for state.
+def _gradcheck_for_params(func: Callable,
+                          module: nn.Module,
+                          y0: torch.Tensor,
+                          eps: float = 1e-6,
+                          atol: float = 1e-5,
+                          rtol: float = 1e-3):
+    module = copy.deepcopy(module).requires_grad_(True)
+    y0 = y0.clone()
+    loss = func(module, y0)
+    params = list(module.parameters())
+
+    grad = misc.flatten(misc.vjp(loss, params)).detach()
+
+    # Need torch.is_grad_enabled() == True for testing higher-order grads.
+    numerical_grad = []
+    for param in params:
+        flat_param = param.view(-1)
+        for i in range(len(flat_param)):
+            flat_param[i] += eps
+            plus_eps = func(module, y0)
+            flat_param[i] -= eps
+
+            flat_param[i] -= eps
+            minus_eps = func(module, y0)
+            flat_param[i] += eps
+
+            numerical_grad.append((plus_eps - minus_eps).cpu().item() / (2 * eps))
+            del plus_eps, minus_eps
+    numerical_grad = torch.tensor(numerical_grad).to(device)
+    torch.testing.assert_allclose(grad, numerical_grad, atol=atol, rtol=rtol)
+
+
 test_dg_ga_jvp()
 check_efficiency()
 test_adjoint()
+test_double_adjoint()
+test_double_adjoint_params()
