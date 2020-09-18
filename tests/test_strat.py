@@ -241,10 +241,10 @@ def _make_scalar_valued_func(func, inputs, modules):
     if output_size > 1:
         grad_outputs = tuple(torch.randn_like(o) for o in outputs)
 
-        def scalar_valued_func(inputs, modules):
+        def func_scalar_valued(inputs, modules):
             outputs = func(inputs, modules)
             return sum((output * grad_output).sum() for output, grad_output, in zip(outputs, grad_outputs))
 
-        return scalar_valued_func
+        return func_scalar_valued
 
     return func
