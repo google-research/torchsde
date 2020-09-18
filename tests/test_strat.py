@@ -142,10 +142,33 @@ def swiss_knife_gradcheck(func: Callable,
                           gradgrad_params=False):
     """Check grad and grad of grad wrt inputs and parameters of Modules.
 
-    Assumes func outputs a single scalar. Aimed to be as self-contained as
-    possible so that could be copied/pasted across projects.
+    When `func` is vector-valued, the checks compare autodiff vjp against
+    finite-difference vjp, where v is a sampled standard normal vector.
 
-    Defaults for atol, rtol, and eps based on `torch.autograd.gradcheck`.
+    This function is aimed to be as self-contained as possible so that could
+    be copied/pasted across different projects.
+
+    Args:
+        func (callable): A Python function that takes in a sequence of tensors
+            (inputs) and a sequence of nn.Module (modules), and outputs a tensor
+            or a sequence of tensors.
+        inputs (sequence of Tensors): The input tensors.
+        modules (sequence of nn.Module): The modules whose parameter gradient
+            needs to be tested.
+        eps (float, optional): Magnitude of two-sided finite difference
+            perturbation.
+        atol (float, optional): Absolute tolerance.
+        rtol (float, optional): Relative tolerance.
+        grad_inputs (bool, optional): Check gradients wrt inputs if True.
+        gradgrad_inputs (bool, optional): Check gradients of gradients wrt
+            inputs if True.
+        grad_params (bool, optional): Check gradients wrt differentiable
+            parameters of modules if True.
+        gradgrad_params (bool, optional): Check gradients of gradients wrt
+            differentiable parameters of modules if True.
+
+    Returns:
+        None.
     """
 
     def convert_none_to_zeros(sequence, like_sequence):
@@ -163,6 +186,8 @@ def swiss_knife_gradcheck(func: Callable,
     # Don't modify original objects.
     modules = tuple(copy.deepcopy(m) for m in modules)
     inputs = tuple(i.clone().requires_grad_() for i in inputs)
+
+    func = _make_scalar_valued_func(func, inputs, modules)
     func_only_inputs = lambda *args: func(args, modules)  # noqa
 
     # Grad wrt inputs.
@@ -184,14 +209,14 @@ def swiss_knife_gradcheck(func: Callable,
             flat_param = param.reshape(-1)
             for i in range(len(flat_param)):
                 flat_param[i] += eps  # In-place.
-                plus_eps = func(inputs, modules)
+                plus_eps = func(inputs, modules).detach()
                 flat_param[i] -= eps
 
                 flat_param[i] -= eps
-                minus_eps = func(inputs, modules)
+                minus_eps = func(inputs, modules).detach()
                 flat_param[i] += eps
 
-                numerical_grad.append((plus_eps - minus_eps).detach() / (2 * eps))
+                numerical_grad.append((plus_eps - minus_eps) / (2 * eps))
                 del plus_eps, minus_eps
         numerical_grad = torch.stack(numerical_grad)
         torch.testing.assert_allclose(numerical_grad, framework_grad, rtol=rtol, atol=atol)
@@ -199,19 +224,27 @@ def swiss_knife_gradcheck(func: Callable,
     # Grad of grad wrt params.
     if gradgrad_params:
         # Define this outside `func_high_order` so that random tensors are generated only once.
-        grad_outputs = [torch.rand_like(p) for m in modules for p in m.parameters() if p.requires_grad]
 
         def func_high_order(inputs, modules):
             params = [p for m in modules for p in m.parameters() if p.requires_grad]
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
             grads = tuple(grad for grad in grads if grad is not None)
-            return sum([(grad * grad_output).sum() for grad, grad_output in zip(grads, grad_outputs)])
+            return grads
 
         swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
 
 
-test_dg_ga_jvp()
-check_efficiency()
+def _make_scalar_valued_func(func, inputs, modules):
+    outputs = func(inputs, modules)
+    output_size = outputs.numel() if torch.is_tensor(outputs) else sum(o.numel() for o in outputs)
 
-test_adjoint_inputs()
-test_adjoint_params()
+    if output_size > 1:
+        grad_outputs = tuple(torch.randn_like(o) for o in outputs)
+
+        def scalar_valued_func(inputs, modules):
+            outputs = func(inputs, modules)
+            return sum((output * grad_output).sum() for output, grad_output, in zip(outputs, grad_outputs))
+
+        return scalar_valued_func
+
+    return func
