@@ -223,8 +223,6 @@ def swiss_knife_gradcheck(func: Callable,
 
     # Grad of grad wrt params.
     if gradgrad_params:
-        # Define this outside `func_high_order` so that random tensors are generated only once.
-
         def func_high_order(inputs, modules):
             params = [p for m in modules for p in m.parameters() if p.requires_grad]
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
@@ -239,6 +237,7 @@ def _make_scalar_valued_func(func, inputs, modules):
     output_size = outputs.numel() if torch.is_tensor(outputs) else sum(o.numel() for o in outputs)
 
     if output_size > 1:
+        # Define this outside `func_scalar_valued` so that random tensors are generated only once.
         grad_outputs = tuple(torch.randn_like(o) for o in outputs)
 
         def func_scalar_valued(inputs, modules):
