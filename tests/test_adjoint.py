@@ -54,9 +54,6 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
         return
     if sde_type == 'ito' and noise_type == 'general':
         return
-    # TODO: fix this.
-    if noise_type == 'scalar':
-        pytest.xfail("Ito SDE w/ scalar noise for adjoint doesn't work yet.")
 
     d = 1 if noise_type == 'scalar' else 10
     batch_size = 128

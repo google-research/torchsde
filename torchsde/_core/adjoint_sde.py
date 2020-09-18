@@ -118,7 +118,51 @@ class AdjointSDE(base_sde.BaseSDE):
         return misc.flatten((-f, *vjp_y_and_params))
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
-        raise NotImplementedError
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)
+        with torch.enable_grad():
+            g_columns = [g_column.squeeze(dim=-1) for g_column in self._base_sde.g(-t, y).split(1, dim=-1)]
+            dg_g_jvp = sum([
+                misc.jvp(
+                    outputs=g_column,
+                    inputs=y,
+                    grad_inputs=g_column,
+                    allow_unused=True,
+                    create_graph=True
+                )[0] for g_column in g_columns
+            ])
+            # Double Stratonovich correction.
+            f = self._base_sde.f(-t, y) - dg_g_jvp
+            vjp_y_and_params = misc.vjp(
+                outputs=f,
+                inputs=[y] + self._params,
+                grad_outputs=adj_y,
+                allow_unused=True,
+                retain_graph=True,
+                create_graph=requires_grad
+            )
+            # Convert the adjoint Stratonovich SDE to Itô form.
+            extra_vjp_y_and_params = []
+            for g_column in g_columns:
+                a_dg_vjp, = misc.vjp(
+                    outputs=g_column,
+                    inputs=y,
+                    grad_outputs=adj_y,
+                    allow_unused=True,
+                    retain_graph=True,
+                    create_graph=requires_grad
+                )
+                extra_vjp_y_and_params_column = misc.vjp(
+                    outputs=g_column,
+                    inputs=[y] + self._params,
+                    grad_outputs=a_dg_vjp,
+                    allow_unused=True,
+                    create_graph=requires_grad
+                )
+                extra_vjp_y_and_params.append(extra_vjp_y_and_params_column)
+            vjp_y_and_params = misc.seq_add(vjp_y_and_params, *extra_vjp_y_and_params)
+            if not requires_grad:
+                f = f.detach()
+        return misc.flatten((-f, *vjp_y_and_params))
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
         y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)  # just use t as a dummy `v`
