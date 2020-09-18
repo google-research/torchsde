@@ -145,7 +145,7 @@ def swiss_knife_gradcheck(func: Callable,
     When `func` is vector-valued, the checks compare autodiff vjp against
     finite-difference vjp, where v is a sampled standard normal vector.
 
-    This function is aimed to be as self-contained as possible so that could
+    This function is aimed to be as self-contained as possible so that it could
     be copied/pasted across different projects.
 
     Args:
@@ -226,8 +226,7 @@ def swiss_knife_gradcheck(func: Callable,
         def func_high_order(inputs, modules):
             params = [p for m in modules for p in m.parameters() if p.requires_grad]
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
-            grads = tuple(grad for grad in grads if grad is not None)
-            return grads
+            return tuple(grad for grad in grads if grad is not None)
 
         swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
 
