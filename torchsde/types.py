@@ -23,3 +23,7 @@ TensorOrTensors = Union[Tensor, Tensors]
 
 Scalar = Union[float, Tensor]
 Vector = Union[Sequence[float], Tensor]
+
+Module = torch.nn.Module
+Modules = Sequence[Module]
+ModuleOrModules = Union[Module, Modules]

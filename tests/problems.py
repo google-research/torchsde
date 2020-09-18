@@ -33,12 +33,14 @@ from torchsde.settings import NOISE_TYPES, SDE_TYPES
 def _scalar(g):
     def scalar_g(t, y):
         return g(t, y).unsqueeze(-1)
+
     return scalar_g
 
 
 def _general(g):
     def general_g(t, y):
         return torch.diag_embed(g(t, y))
+
     return general_g
 
 
@@ -183,3 +185,30 @@ class Ex4(BaseSDE):
 
     def g(self, t, y):
         return torch.stack([_column_wise_func(y, t, i) for i in range(self.m)], dim=-1)
+
+
+class Ex5(BaseSDE):
+    def __init__(self, d, m, sde_type=SDE_TYPES.ito):
+        super(Ex5, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.general)
+        self.d = d
+        self.m = m
+
+        self.f_net = nn.Sequential(
+            nn.Linear(d + 1, 3),
+            nn.Softplus(),
+            nn.Linear(3, d)
+        )
+        self.g_net = nn.Sequential(
+            nn.Linear(d + 1, 3),
+            nn.Softplus(),
+            nn.Linear(3, d * m),
+            nn.Sigmoid()
+        )
+
+    def f(self, t, y):
+        ty = torch.cat((t.expand_as(y[:, :1]), y), dim=1)
+        return self.f_net(ty)
+
+    def g(self, t, y):
+        ty = torch.cat((t.expand_as(y[:, :1]), y), dim=1)
+        return self.g_net(ty).reshape(-1, self.d, self.m)
