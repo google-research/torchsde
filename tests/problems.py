@@ -71,17 +71,16 @@ class Ex1(BaseSDE):
         self._nfe += 1
         return self.sigma * y
 
+    @torch.no_grad()
     def analytical_grad(self, y0, t, grad_output, bm):
-        with torch.no_grad():
-            ans = y0 * torch.exp((self.mu - self.sigma ** 2. / 2.) * t + self.sigma * bm(t))
-            dmu = (grad_output * ans * t).mean(0)
-            dsigma = (grad_output * ans * (-self.sigma * t + bm(t))).mean(0)
-        return torch.cat((dmu, dsigma), dim=0)
+        ans = y0 * torch.exp((self.mu - self.sigma ** 2. / 2.) * t + self.sigma * bm(t))
+        dmu = (grad_output * ans * t).sum(0)
+        dsigma = (grad_output * ans * (-self.sigma * t + bm(t))).sum(0)
+        return torch.cat((dmu, dsigma))
 
+    @torch.no_grad()
     def analytical_sample(self, y0, ts, bm):
-        assert ts[0] == 0
-        with torch.no_grad():
-            ans = [y0 * torch.exp((self.mu - self.sigma ** 2. / 2.) * t + self.sigma * bm(t)) for t in ts]
+        ans = [y0 * torch.exp((self.mu - self.sigma ** 2. / 2.) * t + self.sigma * bm(t)) for t in ts]
         return torch.stack(ans, dim=0)
 
     @property
@@ -111,16 +110,15 @@ class Ex2(BaseSDE):
         self._nfe += 1
         return self.p * torch.cos(y) ** 2
 
+    @torch.no_grad()
     def analytical_grad(self, y0, t, grad_output, bm):
-        with torch.no_grad():
-            wt = bm(t)
-            dp = (grad_output * wt / (1. + (self.p * wt + torch.tan(y0)) ** 2.)).mean(0)
+        wt = bm(t)
+        dp = (grad_output * wt / (1. + (self.p * wt + torch.tan(y0)) ** 2.)).sum(0)
         return dp
 
+    @torch.no_grad()
     def analytical_sample(self, y0, ts, bm):
-        assert ts[0] == 0
-        with torch.no_grad():
-            ans = [torch.atan(self.p * bm(t) + torch.tan(y0)) for t in ts]
+        ans = [torch.atan(self.p * bm(t) + torch.tan(y0)) for t in ts]
         return torch.stack(ans, dim=0)
 
     @property
@@ -148,19 +146,18 @@ class Ex3(BaseSDE):
         self._nfe += 1
         return self.a * self.b / torch.sqrt(1. + t) + torch.zeros_like(y)  # Add dummy zero to make dimensions match.
 
+    @torch.no_grad()
     def analytical_grad(self, y0, t, grad_output, bm):
-        with torch.no_grad():
-            wt = bm(t)
-            da = grad_output * self.b * wt / torch.sqrt(1. + t)
-            db = grad_output * (t + self.a * wt) / torch.sqrt(1. + t)
-            da = da.mean(0)
-            db = db.mean(0)
-        return torch.cat((da, db), dim=0)
+        wt = bm(t)
+        da = grad_output * self.b * wt / torch.sqrt(1. + t)
+        db = grad_output * (t + self.a * wt) / torch.sqrt(1. + t)
+        da = da.sum(0)
+        db = db.sum(0)
+        return torch.cat((da, db))
 
+    @torch.no_grad()
     def analytical_sample(self, y0, ts, bm):
-        assert ts[0] == 0
-        with torch.no_grad():
-            ans = [y0 / torch.sqrt(1 + t) + self.b * (t + self.a * bm(t)) / torch.sqrt(1 + t) for t in ts]
+        ans = [y0 / torch.sqrt(1 + t) + self.b * (t + self.a * bm(t)) / torch.sqrt(1 + t) for t in ts]
         return torch.stack(ans, dim=0)
 
     @property

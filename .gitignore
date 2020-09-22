@@ -13,3 +13,5 @@ CMakeLists.txt
 restats
 *-darwin.so
 **.pyc
+# Words to exclude in spelling checks.
+DICTIONARY

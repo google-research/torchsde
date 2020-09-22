@@ -49,20 +49,19 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
         return
     if problem is not Ex3 and noise_type == 'additive':
         return
-    # TODO: remove this once we have adjoint implemented for other noise/sde combinations
-    if sde_type == 'stratonovich' and noise_type != 'general':
-        return
     if sde_type == 'ito' and noise_type == 'general':
         return
+    if noise_type == "diagonal" and method == "log_ode":
+        return
 
-    d = 1 if noise_type == 'scalar' else 10
+    d = 10
+    m = {"scalar": 1}.get(noise_type, d)  # TODO: Decouple d from m.
     batch_size = 128
     t0, t1 = ts = torch.tensor([0.0, 0.5], device=device)
-    dt = 1e-3
     y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
-
+    v = torch.randn_like(y0)
+    v /= v.norm(keepdim=True)  # Control the scale, so don't explode as batch size increases.
     problem = problem(d, sde_type=sde_type, noise_type=noise_type).to(device)
-
     levy_area_approximation = {
         'euler': 'none',
         'milstein': 'none',
@@ -71,19 +70,25 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
         'log_ode': 'foster'
     }[method]
     bm = torchsde.BrownianInterval(
-        t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device,
+        t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device,
         levy_area_approximation=levy_area_approximation
     )
-    with torch.no_grad():
-        grad_outputs = torch.ones(batch_size, d).to(device)
-        alt_grad = problem.analytical_grad(y0, t1, grad_outputs, bm)
+
+    if hasattr(problem, "analytical_grad"):
+        grad_true = problem.analytical_grad(y0=y0, t=t1, grad_output=v, bm=bm)
+    else:
+        problem.zero_grad()
+        _, y1 = torchsde.sdeint(problem, y0, ts, bm=bm, method=method, adaptive=adaptive)
+        y1.backward(v)
+        grad_true = torch.cat([p.grad for p in problem.parameters() if p.grad is not None])
+        del y1
 
     problem.zero_grad()
-    _, yt = torchsde.sdeint_adjoint(problem, y0, ts, bm=bm, method=method, dt=dt, adaptive=adaptive)
-    loss = yt.sum(dim=1).mean(dim=0)
-    loss.backward()
-    adj_grad = torch.cat(tuple(p.grad for p in problem.parameters()))
-    assert_allclose(alt_grad, adj_grad)
+    _, y1 = torchsde.sdeint_adjoint(problem, y0, ts, bm=bm, method=method, adaptive=adaptive)
+    y1.backward(v)
+    grad_adjoint = torch.cat([p.grad for p in problem.parameters() if p.grad is not None])
+
+    assert_allclose(grad_true, grad_adjoint)
 
 
 @pytest.mark.parametrize("problem", [BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4])
