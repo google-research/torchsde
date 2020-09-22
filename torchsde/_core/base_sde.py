@@ -77,7 +77,7 @@ class ForwardSDE(BaseSDE):
 
     # Computes: sum_{j, l} g_{j, l} d g_{j, l} d x_i v_l.
     def gdg_prod_default(self, t, y, v):
-        requires_grad = torch.is_grad_enabled() and (t.requires_grad or y.requires_grad or v.requires_grad)
+        requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self.g(t, y)
@@ -91,7 +91,7 @@ class ForwardSDE(BaseSDE):
         return vg_dg_vjp
 
     def gdg_prod_diagonal(self, t, y, v):
-        requires_grad = torch.is_grad_enabled() and (t.requires_grad or y.requires_grad or v.requires_grad)
+        requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self.g(t, y)
@@ -110,7 +110,7 @@ class ForwardSDE(BaseSDE):
 
     # Computes: sum_{j,k,l} d g_{i,l} / d x_j g_{j,k} A_{k,l}.
     def dg_ga_jvp_column_sum_v1(self, t, y, a):
-        requires_grad = torch.is_grad_enabled() and (t.requires_grad or y.requires_grad or a.requires_grad)
+        requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self.g(t, y)
@@ -131,7 +131,7 @@ class ForwardSDE(BaseSDE):
 
     def dg_ga_jvp_column_sum_v2(self, t, y, a):
         # Faster, but more memory intensive.
-        requires_grad = torch.is_grad_enabled() and (t.requires_grad or y.requires_grad or a.requires_grad)
+        requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
             g = self.g(t, y)
