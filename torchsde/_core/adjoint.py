@@ -206,13 +206,9 @@ def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str
                 NOISE_TYPES.diagonal: METHODS.milstein,
                 NOISE_TYPES.additive: METHODS.euler,
                 NOISE_TYPES.scalar: METHODS.euler,
-            }.get(noise_type, "unsupported"),
-            SDE_TYPES.stratonovich: {
-                NOISE_TYPES.general: METHODS.midpoint,
-            }.get(noise_type, "unsupported")
+                NOISE_TYPES.general: METHODS.euler,
+            }[noise_type],
+            SDE_TYPES.stratonovich: METHODS.midpoint,
         }[sde_type]
-
-        if adjoint_method == "unsupported":
-            raise ValueError(f"Adjoint not supported for {sde_type} SDEs with noise type {noise_type}.")
 
     return adjoint_method
