@@ -17,6 +17,12 @@ import warnings
 import torch
 
 
+def assert_no_grad(names, maybe_tensors):
+    for name, maybe_tensor in zip(names, maybe_tensors):
+        if torch.is_tensor(maybe_tensor) and maybe_tensor.requires_grad:
+            raise ValueError(f"Argument {name} must not require gradient.")
+
+
 def handle_unused_kwargs(unused_kwargs, msg=None):
     if len(unused_kwargs) > 0:
         if msg is not None:
@@ -26,8 +32,7 @@ def handle_unused_kwargs(unused_kwargs, msg=None):
 
 
 def flatten(sequence):
-    flat = [p.reshape(-1) for p in sequence]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
+    return torch.cat([p.reshape(-1) for p in sequence]) if len(sequence) > 0 else torch.tensor([])
 
 
 def convert_none_to_zeros(sequence, like_sequence):

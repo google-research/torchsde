@@ -30,10 +30,27 @@ from torchsde import BaseSDE
 from torchsde.settings import NOISE_TYPES, SDE_TYPES
 
 
+def _scalar(g):
+    def scalar_g(t, y):
+        return g(t, y).unsqueeze(-1)
+
+    return scalar_g
+
+
+def _general(g):
+    def general_g(t, y):
+        return torch.diag_embed(g(t, y))
+
+    return general_g
+
+
 class Ex1(BaseSDE):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex1, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+    def __init__(self, d=10, sde_type=SDE_TYPES.ito, noise_type=NOISE_TYPES.diagonal):
+        super(Ex1, self).__init__(sde_type=sde_type, noise_type=noise_type)
         self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
+        self.g = {NOISE_TYPES.diagonal: self.g,
+                  NOISE_TYPES.scalar: _scalar(self.g),
+                  NOISE_TYPES.general: _general(self.g)}[noise_type]
         self._nfe = 0
 
         # Use non-exploding initialization.
@@ -73,9 +90,12 @@ class Ex1(BaseSDE):
 
 
 class Ex2(BaseSDE):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex2, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+    def __init__(self, d=10, sde_type=SDE_TYPES.ito, noise_type=NOISE_TYPES.diagonal):
+        super(Ex2, self).__init__(sde_type=sde_type, noise_type=noise_type)
         self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
+        self.g = {NOISE_TYPES.diagonal: self.g,
+                  NOISE_TYPES.scalar: _scalar(self.g),
+                  NOISE_TYPES.general: _general(self.g)}[noise_type]
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
@@ -108,28 +128,14 @@ class Ex2(BaseSDE):
         return self._nfe
 
 
-class Ex1Scalar(Ex1):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex1Scalar, self).__init__(d=d, sde_type=sde_type)
-        self.noise_type = NOISE_TYPES.scalar
-
-    def g(self, t, y):
-        return super(Ex1Scalar, self).g(t, y).unsqueeze(2)
-
-
-class Ex2Scalar(Ex2):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex2Scalar, self).__init__(d=d, sde_type=sde_type)
-        self.noise_type = NOISE_TYPES.scalar
-
-    def g(self, t, y):
-        return super(Ex2Scalar, self).g(t, y).unsqueeze(2)
-
-
 # TODO: Make this a test problem for additive noise settings with decoupled m and d.
 class Ex3(BaseSDE):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex3, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+    def __init__(self, d=10, sde_type=SDE_TYPES.ito, noise_type=NOISE_TYPES.diagonal):
+        super(Ex3, self).__init__(sde_type=sde_type, noise_type=noise_type)
+        self.g = {NOISE_TYPES.diagonal: self.g,
+                  NOISE_TYPES.scalar: _scalar(self.g),
+                  NOISE_TYPES.additive: _general(self.g),
+                  NOISE_TYPES.general: _general(self.g)}[noise_type]
         self._nfe = 0
         self.a = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
         self.b = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
@@ -162,15 +168,6 @@ class Ex3(BaseSDE):
         return self._nfe
 
 
-class Ex3Additive(Ex3):
-    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
-        super(Ex3Additive, self).__init__(d=d, sde_type=sde_type)
-        self.noise_type = NOISE_TYPES.additive
-
-    def g(self, t, y):
-        return torch.diag_embed(super(Ex3Additive, self).g(t=t, y=y))
-
-
 def _column_wise_func(y, t, i):
     # This function is designed so that there are mixed partials.
     return (torch.cos(y * i + t * 0.1) * 0.2 +
@@ -188,3 +185,30 @@ class Ex4(BaseSDE):
 
     def g(self, t, y):
         return torch.stack([_column_wise_func(y, t, i) for i in range(self.m)], dim=-1)
+
+
+class Ex5(BaseSDE):
+    def __init__(self, d, m, sde_type=SDE_TYPES.ito):
+        super(Ex5, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.general)
+        self.d = d
+        self.m = m
+
+        self.f_net = nn.Sequential(
+            nn.Linear(d + 1, 3),
+            nn.Softplus(),
+            nn.Linear(3, d)
+        )
+        self.g_net = nn.Sequential(
+            nn.Linear(d + 1, 3),
+            nn.Softplus(),
+            nn.Linear(3, d * m),
+            nn.Sigmoid()
+        )
+
+    def f(self, t, y):
+        ty = torch.cat((t.expand_as(y[:, :1]), y), dim=1)
+        return self.f_net(ty)
+
+    def g(self, t, y):
+        ty = torch.cat((t.expand_as(y[:, :1]), y), dim=1)
+        return self.g_net(ty).reshape(-1, self.d, self.m)

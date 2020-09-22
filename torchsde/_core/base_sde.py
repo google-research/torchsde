@@ -66,10 +66,10 @@ class ForwardSDE(BaseSDE):
     ########################################
 
     def g_prod_diagonal(self, t, y, v):
-        return self._base_sde.g(t, y) * v
+        return self.g(t, y) * v
 
     def g_prod_default(self, t, y, v):
-        return misc.batch_mvp(self._base_sde.g(t, y), v)
+        return misc.batch_mvp(self.g(t, y), v)
 
     ########################################
     #               gdg_prod               #
@@ -80,7 +80,7 @@ class ForwardSDE(BaseSDE):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
-            g = self._base_sde.g(t, y)
+            g = self.g(t, y)
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
@@ -94,7 +94,7 @@ class ForwardSDE(BaseSDE):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
-            g = self._base_sde.g(t, y)
+            g = self.g(t, y)
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
@@ -113,7 +113,7 @@ class ForwardSDE(BaseSDE):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
-            g = self._base_sde.g(t, y)
+            g = self.g(t, y)
             ga = torch.bmm(g, a)
             dg_ga_jvp = [
                 misc.jvp(
@@ -134,12 +134,12 @@ class ForwardSDE(BaseSDE):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
-            g = self._base_sde.g(t, y)
+            g = self.g(t, y)
             ga = torch.bmm(g, a)
 
             batch_size, d, m = g.size()
             y_dup = torch.repeat_interleave(y, repeats=m, dim=0)
-            g_dup = self._base_sde.g(t, y_dup)
+            g_dup = self.g(t, y_dup)
             ga_flat = ga.transpose(1, 2).flatten(0, 1)
             dg_ga_jvp, = misc.jvp(
                 outputs=g_dup,
