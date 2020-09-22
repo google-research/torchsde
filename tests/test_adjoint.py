@@ -80,13 +80,13 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
         problem.zero_grad()
         _, y1 = torchsde.sdeint(problem, y0, ts, bm=bm, method=method, adaptive=adaptive)
         y1.backward(v)
-        grad_true = torch.cat([p.grad for p in problem.parameters() if p.grad is not None])
+        grad_true = torch.cat([p.grad.reshape(-1) for p in problem.parameters() if p.grad is not None])
         del y1
 
     problem.zero_grad()
     _, y1 = torchsde.sdeint_adjoint(problem, y0, ts, bm=bm, method=method, adaptive=adaptive)
     y1.backward(v)
-    grad_adjoint = torch.cat([p.grad for p in problem.parameters() if p.grad is not None])
+    grad_adjoint = torch.cat([p.grad.reshape(-1) for p in problem.parameters() if p.grad is not None])
 
     assert_allclose(grad_true, grad_adjoint)
 
