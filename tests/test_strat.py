@@ -105,8 +105,8 @@ def check_efficiency():
     print(f'Time elapse for duplicate: {time_elapse:.4f}')
 
 
-def test_adjoint_inputs():
-    sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+def test_adjoint():
+    sde = problems.Ex5(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
 
     def func(inputs, modules):
@@ -114,20 +114,19 @@ def test_adjoint_inputs():
         ys = sdeint_adjoint(sde, y0, ts, bm, method='midpoint')
         return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
-    swiss_knife_gradcheck(func, y0, sde, eps=1e-7, rtol=1e-3, atol=1e-3, grad_inputs=True, gradgrad_inputs=True)
-
-
-def test_adjoint_params():
-    sde = problems.Ex5(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
-    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
-
-    def func(inputs, modules):
-        """Outputs gradient norm squared."""
-        y0, sde = inputs[0], modules[0]
-        ys = sdeint_adjoint(sde, y0, ts, bm, method="midpoint")
-        return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
-
-    swiss_knife_gradcheck(func, y0, sde, eps=1e-7, rtol=1e-3, atol=1e-3, grad_params=True, gradgrad_params=True)
+    swiss_knife_gradcheck(
+        func,
+        y0,
+        sde,
+        eps=1e-7,
+        rtol=1e-3,
+        atol=1e-3,
+        grad_inputs=True,
+        gradgrad_inputs=True,
+        grad_params=True,
+        gradgrad_params=True,
+        gradgrad_mixed=True
+    )
 
 
 def swiss_knife_gradcheck(func: Callable,
@@ -139,7 +138,8 @@ def swiss_knife_gradcheck(func: Callable,
                           grad_inputs=False,
                           gradgrad_inputs=False,
                           grad_params=False,
-                          gradgrad_params=False):
+                          gradgrad_params=False,
+                          gradgrad_mixed=False):
     """Check grad and grad of grad wrt inputs and parameters of Modules.
 
     When `func` is vector-valued, the checks compare autodiff vjp against
@@ -165,6 +165,8 @@ def swiss_knife_gradcheck(func: Callable,
         grad_params (bool, optional): Check gradients wrt differentiable
             parameters of modules if True.
         gradgrad_params (bool, optional): Check gradients of gradients wrt
+            differentiable parameters of modules if True.
+        gradgrad_mixed (bool, optional): Check mixed partials wrt inputs and
             differentiable parameters of modules if True.
 
     Returns:
@@ -218,6 +220,7 @@ def swiss_knife_gradcheck(func: Callable,
 
                 numerical_grad.append((plus_eps - minus_eps) / (2 * eps))
                 del plus_eps, minus_eps
+
         numerical_grad = torch.stack(numerical_grad)
         torch.testing.assert_allclose(numerical_grad, framework_grad, rtol=rtol, atol=atol)
 
@@ -226,6 +229,20 @@ def swiss_knife_gradcheck(func: Callable,
         def func_high_order(inputs, modules):
             params = [p for m in modules for p in m.parameters() if p.requires_grad]
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
+            return tuple(grad for grad in grads if grad is not None)
+
+        swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
+
+    if gradgrad_mixed:
+        def func_high_order(inputs, modules):
+            params = [p for m in modules for p in m.parameters() if p.requires_grad]
+            grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
+            return tuple(grad for grad in grads if grad is not None)
+
+        swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_inputs=True)
+
+        def func_high_order(inputs, modules):
+            grads = torch.autograd.grad(func(inputs, modules), inputs, create_graph=True, allow_unused=True)
             return tuple(grad for grad in grads if grad is not None)
 
         swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
