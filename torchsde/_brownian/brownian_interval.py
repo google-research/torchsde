@@ -14,6 +14,7 @@
 
 import functools
 import math
+import trampoline
 import warnings
 
 import boltons.cacheutils
@@ -101,26 +102,18 @@ class _Interval:
     # left or right of our parent and does most of the computation using the parent's attributes.
 
     def increment_and_levy_area(self):
-        W, H = self._increment_and_space_time_levy_area()
+        W, H = trampoline.trampoline(self._increment_and_space_time_levy_area())
         A = utils.davie_foster_approximation(W, H, self._end - self._start, self._top._levy_area_approximation,
                                              self._randn_levy)
         return W, H, A
 
     def _increment_and_space_time_levy_area(self):
-        # TODO: switch this over to a trampoline?
-
-        # It's quite important that this whole block of code be inline, without any additional function calls between
-        # it and calling parent._increment_and_space_time_levy_area().
-        # The recursion can in normal usage grow quite large - and if there's any additional stack frames in the way,
-        # large enough to violate the default recursion limit.
-        # This is also the reason we have an inlined LRU cache rather than wrapping with functools.lru_cache.
-
         try:
             return self._top._increment_and_space_time_levy_area_cache[self]
         except KeyError:
             parent = self._parent
 
-            W, H = parent._increment_and_space_time_levy_area()
+            W, H = yield parent._increment_and_space_time_levy_area()
             h_reciprocal = 1 / (parent._end - parent._start)
             left_diff = parent._midway - parent._start
             right_diff = parent._end - parent._midway
@@ -201,7 +194,7 @@ class _Interval:
         out = []
         ta = self._top._round(ta)
         tb = self._top._round(tb)
-        self._loc(ta, tb, out)
+        trampoline.trampoline(self._loc(ta, tb, out))
         return out
 
     def _loc(self, ta, tb, out):
@@ -212,8 +205,7 @@ class _Interval:
         # First, we (this interval) only have jurisdiction over [self._start, self._end]. So if we're asked for
         # something outside of that then we pass the buck up to our parent, who is strictly larger.
         if ta < self._start or tb > self._end:
-            self._parent._loc(ta, tb, out)
-            return
+            raise trampoline.TailCall(self._parent._loc(ta, tb, out))
 
         # If it's us that's being asked for, then we add ourselves on to out and return.
         if ta == self._start and tb == self._end:
@@ -232,23 +224,20 @@ class _Interval:
             self._split(ta)
             # Query our (newly created) right_child: if tb == self._end then our right child will be the result, and it
             # will tell us so. But if tb < self._end then our right_child will need to make another split of its own.
-            self._right_child._loc(ta, tb, out)
-            return
+            raise trampoline.TailCall(self._right_child._loc(ta, tb, out))
 
         # If we're here then we have children: self._midway is not None
         if tb <= self._midway:
             # Strictly our left_child's problem
-            self._left_child._loc(ta, tb, out)
-            return
+            raise trampoline.TailCall(self._left_child._loc(ta, tb, out))
         if ta >= self._midway:
             # Strictly our right_child's problem
-            self._right_child._loc(ta, tb, out)
-            return
+            raise trampoline.TailCall(self._right_child._loc(ta, tb, out))
         # It's a problem for both of our children: the requested interval overlaps our midpoint. Call the left_child
         # first (to append to out in the correct order), then call our right child.
         # (Implies ta < self._midway < tb)
-        self._left_child._loc(ta, self._midway, out)
-        self._right_child._loc(self._midway, tb, out)
+        yield self._left_child._loc(ta, self._midway, out)
+        raise trampoline.TailCall(self._right_child._loc(self._midway, tb, out))
 
     def _set_spawn_key_and_depth(self):
         self._spawn_key = 2 * self._parent._spawn_key + (0 if self._is_left else 1)
@@ -509,6 +498,7 @@ class BrownianInterval(_Interval):
     # Effectively permanently store our increment and space-time Levy area in the cache.
     def _increment_and_space_time_levy_area(self):
         return self._w_h
+        yield  # make it a generator
 
     def _a_seed(self):
         return self._top_a_seed
