@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import math
 import warnings
 
@@ -253,7 +254,18 @@ class _Interval:
         self._spawn_key = 2 * self._parent._spawn_key + (0 if self._is_left else 1)
         self._depth = self._parent._depth + 1
 
-    def _split(self, midway):  # Create two children
+    def _split(self, midway):
+        if self._top._halfway_tree:
+            self._split_exact(0.5 * (self._end + self._start))
+            # self._midway is now the rounded halfway point.
+            if midway > self._midway:
+                self._right_child._split(midway)
+            elif midway < self._midway:
+                self._left_child._split(midway)
+        else:
+            self._split_exact(midway)
+
+    def _split_exact(self, midway):  # Create two children
         self._midway = self._top._round(midway)
         # Use splittable PRNGs to generate noise.
         self._set_spawn_key_and_depth()
@@ -280,7 +292,7 @@ class BrownianInterval(_Interval):
     Computes increments (and optionally Levy area).
 
     To use:
-    >>> bm = BrownianInterval(t0=0.0, t1=1.0, shape=(4, 1), dtype=torch.float32, device='cuda')
+    >>> bm = BrownianInterval(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
     >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
@@ -294,11 +306,12 @@ class BrownianInterval(_Interval):
                  '_dtype',
                  '_device',
                  '_entropy',
+                 '_levy_area_approximation',
                  '_dt',
                  '_tol',
                  '_pool_size',
                  '_cache_size',
-                 '_levy_area_approximation',
+                 '_halfway_tree',
                  # Quantisation
                  '_round',
                  # Caching, searching and computing values
@@ -325,6 +338,7 @@ class BrownianInterval(_Interval):
                  tol: Scalar = 0.,
                  pool_size: int = 8,
                  cache_size: Optional[int] = 45,
+                 halfway_tree: bool = False,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[Tensor] = None,
                  H: Optional[Tensor] = None):
@@ -344,13 +358,19 @@ class BrownianInterval(_Interval):
             device (str or torch.device): The device of each Brownian sample.
                 Defaults to the CPU.
             entropy (int): Global seed, defaults to `None` for random entropy.
+            levy_area_approximation (str): Whether to also approximate Levy
+                area. Defaults to 'none'. Valid options are 'none',
+                'space-time', 'davie' or 'foster', corresponding to different
+                approximation types.
+                This is needed for some higher-order SDE solvers.
             dt (float or Tensor): The expected average step size of the SDE
                 solver. Set it if you know it (e.g. when using a fixed-step
                 solver); else it will default to equal the first step this is
                 evaluated with. This allows us to set up a structure that should
                 be efficient to query at these intervals.
             tol (float or Tensor): What tolerance to resolve the Brownian motion
-                to. Defaults to zero, i.e. floating point resolution.
+                to. Must be non-negative. Defaults to zero, i.e. floating point
+                resolution.
             pool_size (int): Size of the pooled entropy. If you care about
                 statistical randomness then increasing this will help (but will
                 slow things down).
@@ -360,11 +380,12 @@ class BrownianInterval(_Interval):
                 The default is set to be pretty close to the optimum: smaller
                 values imply more recalculation, whilst larger values imply
                 more time spent keeping track of the cache.
-            levy_area_approximation (str): Whether to also approximate Levy
-                area. Defaults to 'none'. Valid options are 'none',
-                'space-time', 'davie' or 'foster', corresponding to different
-                approximation types.
-                This is needed for some higher-order SDE solvers.
+            halfway_tree (bool): Whether the dependency tree should align with
+                the halfway points of intervals. Defaults to False. Normally,
+                the sample path is deterministic with respect to both `entropy`,
+                 _and_ the locations and order of the query points. Setting this
+                 to True will make it deterministic with respect to just
+                 `entropy`. However this is much slower.
             W (Tensor): The increment of the Brownian motion over the interval
                 [t0, t1]. Will be generated randomly if not provided.
             H (Tensor): The space-time Levy area of the Brownian motion over the
@@ -389,8 +410,14 @@ class BrownianInterval(_Interval):
         if dt is not None:
             dt = float(dt)
 
-        if tol < 0.:
-            raise ValueError("tol should be non-negative.")
+        if halfway_tree:
+            if tol <= 0.:
+                raise ValueError("`tol` should be positive.")
+            if dt is not None:
+                raise ValueError("`dt` is not used and should be set to `None` if `halfway_tree` is True.")
+        else:
+            if tol < 0.:
+                raise ValueError("`tol` should be non-negative.")
 
         shape, dtype, device = utils.check_tensor_info(W, H, shape=shape, dtype=dtype, device=device,
                                                        name='`W` or `H`')
@@ -411,11 +438,12 @@ class BrownianInterval(_Interval):
         self._dtype = dtype
         self._device = device
         self._entropy = entropy
+        self._levy_area_approximation = levy_area_approximation
         self._dt = dt
         self._tol = tol
         self._pool_size = pool_size
         self._cache_size = cache_size
-        self._levy_area_approximation = levy_area_approximation
+        self._halfway_tree = halfway_tree
 
         #####################################
         #   A miscellany of other things    #
@@ -465,20 +493,18 @@ class BrownianInterval(_Interval):
         self._w_h = (W, H)
         self._top_a_seed = top_a_seed
 
-        # We create a binary tree dependency between the points. If we don't do this then the forward pass is still
-        # efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1], making the
-        # backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and `cache_size` we can
-        # instead make both directions O(N log N).
-        self._average_dt = 0
-        self._tree_dt = t1 - t0
-        if dt is None:
-            # Create the dependency tree based on observed statistics of query points. (In __call__)
+        if not self._halfway_tree:
+            # We create a binary tree dependency between the points. If we don't do this then the forward pass is still
+            # efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1], making
+            # the backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and `cache_size` we
+            # can instead make both directions O(N log N).
+            self._average_dt = 0
+            self._tree_dt = t1 - t0
             self._num_evaluations = -100  # start off with a warmup period to get a decent estimate of the average
-        else:
-            # Create the dependency tree based on observed statistics of query points, _and_ create one based on the
-            # supplied hint `dt`.
-            self._num_evaluations = 0
-            self._create_dependency_tree(dt)
+            if dt is not None:
+                # Create the dependency tree based on the supplied hint `dt`.
+                self._create_dependency_tree(dt)
+            # If dt is None, then create the dependency tree based on observed statistics of query points. (In __call__)
 
     # Effectively permanently store our increment and space-time Levy area in the cache.
     def _increment_and_space_time_levy_area(self):
@@ -525,7 +551,7 @@ class BrownianInterval(_Interval):
                 shape = (*self._shape, *self._shape[-1:])  # not self._shape[-1] as that may not exist
                 A = torch.zeros(shape, dtype=self._dtype, device=self._device)
         else:
-            if self._dt is None:
+            if self._dt is None and not self._halfway_tree:
                 self._num_evaluations += 1
                 # We start off with "negative" num evaluations, to give us a small warm-up period at the start.
                 if self._num_evaluations > 0:
@@ -634,3 +660,39 @@ class BrownianInterval(_Interval):
                 f"cache_size={self._cache_size}, "
                 f"levy_area_approximation={repr(self._levy_area_approximation)}"
                 f")")
+
+
+BrownianPath = functools.partial(BrownianInterval, cache_size=None)
+BrownianPath.__doc__ = \
+"""Brownian path, storing every computed value.
+
+Useful for speed, when memory isn't a concern.
+
+See BrownianInterval for its arguments.
+
+To use:
+>>> bm = BrownianPath(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
+>>> bm(0., 0.5)
+tensor([[ 0.0733],
+        [-0.5692],
+        [ 0.1872],
+        [-0.3889]], device='cuda:0')
+"""
+
+
+# Set dt to None so that it can't also be set by the user.
+BrownianTree = functools.partial(BrownianInterval, halfway_tree=True, dt=None, tol=1e-6)
+BrownianTree.__doc__ = \
+"""Brownian tree with fixed entropy.
+
+Useful when there the map from entropy -> Brownian motion shouldn't depend on the locations and order of the query 
+points.
+
+To use:
+>>> bm = BrownianTree(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
+>>> bm(0., 0.5)
+tensor([[ 0.0733],
+        [-0.5692],
+        [ 0.1872],
+        [-0.3889]], device='cuda:0')
+"""
