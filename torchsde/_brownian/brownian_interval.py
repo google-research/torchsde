@@ -103,6 +103,14 @@ def _H_to_U(W: torch.Tensor, H: torch.Tensor, h: float) -> torch.Tensor:
     return h * (.5 * W + H)
 
 
+class _EmptyDict:
+    def __setitem__(self, key, value):
+        pass
+
+    def __getitem__(self, item):
+        raise KeyError
+
+
 class _Interval:
     # Intervals correspond to some subinterval of the overall interval [t0, t1].
     # They are arranged as a binary tree: each node corresponds to an interval. If a node has children, they are left
@@ -255,8 +263,6 @@ class _Interval:
     def _loc_inner(self, ta, tb, out):
         # Expect to have ta < tb
 
-        # TODO: switch this over to a trampoline w/ tail recursion?
-
         # First, we (this interval) only have jurisdiction over [self._start, self._end]. So if we're asked for
         # something outside of that then we pass the buck up to our parent, who is strictly larger.
         if ta < self._start or tb > self._end:
@@ -273,8 +279,7 @@ class _Interval:
             # It's up to us. Create subintervals (_split) if appropriate.
             if ta == self._start:
                 self._split(tb)
-                out.append(self._left_child)
-                return
+                raise trampoline.TailCall(self._left_child._loc_inner(ta, tb, out))
             # implies ta > self._start
             self._split(ta)
             # Query our (newly created) right_child: if tb == self._end then our right child will be the result, and it
@@ -494,7 +499,12 @@ class BrownianInterval(_Interval):
 
         # We keep a cache of recent queries, and their results. This is very important for speed, so that we don't
         # recurse all the way up to the top every time we have a query.
-        self._increment_and_space_time_levy_area_cache = boltons.cacheutils.LRU(max_size=cache_size)
+        if cache_size is None:
+            self._increment_and_space_time_levy_area_cache = {}
+        elif cache_size == 0:
+            self._increment_and_space_time_levy_area_cache = _EmptyDict()
+        else:
+            self._increment_and_space_time_levy_area_cache = boltons.cacheutils.LRU(max_size=cache_size)
 
         # We keep track of the most recently queried interval, and start searching for the next interval from that
         # element of the binary tree. This is because subsequent queries are likely to be near the most recent query.

@@ -18,7 +18,7 @@ import os
 import torch
 import tqdm
 
-from torchsde import BaseBrownian, BaseSDE, sdeint
+from torchsde import BrownianInterval, BaseSDE, sdeint
 from torchsde.settings import SDE_TYPES
 from torchsde.types import Tensor, Vector, Scalar, Tuple, Optional, Callable
 from . import utils
@@ -28,7 +28,7 @@ def inspect_samples(y0: Tensor,
                     ts: Vector,
                     dt: Scalar,
                     sde: BaseSDE,
-                    bm: BaseBrownian,
+                    bm: BrownianInterval,
                     img_dir: str,
                     methods: Tuple[str, ...],
                     options: Optional[Tuple] = None,
@@ -71,7 +71,7 @@ def inspect_orders(y0: Tensor,
                    t1: Scalar,
                    dts: Vector,
                    sde: BaseSDE,
-                   bm: BaseBrownian,
+                   bm: BrownianInterval,
                    img_dir: str,
                    methods: Tuple[str, ...],
                    options: Optional[Tuple] = None,
