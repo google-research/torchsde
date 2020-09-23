@@ -27,7 +27,6 @@ from scipy.stats import kstest
 
 import pytest
 import torchsde
-from torchsde._brownian import utils
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -42,6 +41,10 @@ ALPHA = 0.0001
 POOL_SIZE = 32
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
+
+
+def _U_to_H(W: torch.Tensor, U: torch.Tensor, h: float) -> torch.Tensor:
+    return U / h - .5 * W
 
 
 def _setup(device, levy_area_approximation, shape):
@@ -183,7 +186,7 @@ def test_normality_simple(device, levy_area_approximation):
 
         if levy_area_approximation != 'none':
             W, U = bm(t0, t_, return_U=True)
-            H = utils.U_to_H(W, U, t_ - t0)
+            H = _U_to_H(W, U, t_ - t0)
 
             mean_H = 0
             std_H = math.sqrt((t_ - t0) / 12)
@@ -237,9 +240,9 @@ def test_normality_conditional(device, levy_area_approximation):
                 b = h1 ** 0.5 * h2 ** 3.5 / (2 * h * denom)
                 c = math.sqrt(3) * h1 ** 1.5 * h2 ** 1.5 / (6 * denom)
 
-                H = utils.U_to_H(W, U, h)
-                H1 = utils.U_to_H(W1, U1, h1)
-                H2 = utils.U_to_H(W2, U2, h2)
+                H = _U_to_H(W, U, h)
+                H1 = _U_to_H(W1, U1, h1)
+                H2 = _U_to_H(W2, U2, h2)
 
                 mean_H1 = H * (h1 / h) ** 2
                 std_H1 = math.sqrt(a**2 + c**2) / h1

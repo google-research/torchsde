@@ -19,7 +19,7 @@ import torch
 from . import base_sde
 from . import methods
 from . import misc
-from .._brownian import BaseBrownian, BrownianInterval
+from .._brownian import BrownianInterval
 from ..settings import SDE_TYPES, NOISE_TYPES, METHODS, LEVY_AREA_APPROXIMATIONS
 from ..types import Scalar, Vector, Optional, Dict, Any, Tensor
 
@@ -27,7 +27,7 @@ from ..types import Scalar, Vector, Optional, Dict, Any, Tensor
 def sdeint(sde: base_sde.BaseSDE,
            y0: Tensor,
            ts: Vector,
-           bm: Optional[BaseBrownian] = None,
+           bm: Optional[BrownianInterval] = None,
            method: Optional[str] = "srk",
            dt: Optional[Scalar] = 1e-3,
            adaptive: Optional[bool] = False,

@@ -22,7 +22,7 @@ from . import better_abc
 from . import interp
 from . import misc
 from .base_sde import BaseSDE
-from .._brownian import BaseBrownian
+from .._brownian import BrownianInterval
 from ..settings import NOISE_TYPES
 from ..types import Scalar, Tensor, Dict
 
@@ -38,7 +38,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
     def __init__(self,
                  sde: BaseSDE,
-                 bm: BaseBrownian,
+                 bm: BrownianInterval,
                  y0: Tensor,
                  dt: Scalar,
                  adaptive: bool,

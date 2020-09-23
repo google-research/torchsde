@@ -19,7 +19,7 @@ from . import base_sde
 from . import misc
 from . import sdeint
 from .adjoint_sde import AdjointSDE
-from .._brownian import BaseBrownian, ReverseBrownian
+from .._brownian import BrownianInterval, ReverseBrownian
 from ..settings import METHODS, SDE_TYPES, NOISE_TYPES
 from ..types import Scalar, Vector, Optional, Dict, Any, Tensor
 
@@ -104,7 +104,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 def sdeint_adjoint(sde: nn.Module,
                    y0: Tensor,
                    ts: Vector,
-                   bm: Optional[BaseBrownian] = None,
+                   bm: Optional[BrownianInterval] = None,
                    method: Optional[str] = "srk",
                    adjoint_method: Optional[str] = None,
                    dt: Optional[Scalar] = 1e-3,
