@@ -19,7 +19,6 @@ import boltons.cacheutils
 import numpy as np
 import torch
 
-from . import base_brownian
 from . import utils
 from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import Scalar, Optional, Tuple, Union, Tensor
@@ -44,23 +43,31 @@ class _Interval:
     # They are arranged as a binary tree: each node corresponds to an interval. If a node has children, they are left
     # and right subintervals, which partition the parent interval.
 
-    __slots__ = ('_start', '_end', '_parent', '_is_left', '_top', '_generator', '_W_seed', '_H_seed', '_a_seed',
-                 '_midway', '_left_child', '_right_child')
+    __slots__ = (
+                 # These are the things that every interval has
+                 '_start',
+                 '_end',
+                 '_parent',
+                 '_is_left',
+                 '_top',
+                 # These are the things that intervals which are parents also have
+                 '_midway',
+                 '_spawn_key',
+                 '_depth',
+                 '_W_seed',
+                 '_H_seed',
+                 '_left_a_seed',
+                 '_right_a_seed',
+                 '_left_child',
+                 '_right_child')
 
-    def __init__(self, start, end, parent, is_left, top, generator):
-        # These are the things that every interval has
-        self._start = start  # the left hand edge of the interval
-        self._end = end  # the right hand edge of the interval
+    def __init__(self, start, end, parent, is_left, top):
+        self._start = top._round(start)  # the left hand edge of the interval
+        self._end = top._round(end)  # the right hand edge of the interval
         self._parent = parent  # our parent interval
         self._is_left = is_left  # are we the left or right child of our parent
         self._top = top  # the top-level BrownianInterval, where we cache certain state
-        self._generator = generator
-        self._W_seed, self._H_seed, self._a_seed = generator.generate_state(3)
-
-        # These are the things that intervals which are parents also have
         self._midway = None  # The point at which we split between left and right subintervals
-        self._left_child = None  # The left subinterval
-        self._right_child = None  # The right subinterval
 
     @property
     def start(self):
@@ -94,7 +101,7 @@ class _Interval:
 
     def increment_and_levy_area(self):
         W, H = self._increment_and_space_time_levy_area()
-        A = utils.davie_foster_approximation(W, H, self._end - self._start, self._top.levy_area_approximation,
+        A = utils.davie_foster_approximation(W, H, self._end - self._start, self._top._levy_area_approximation,
                                              self._randn_levy)
         return W, H, A
 
@@ -117,7 +124,7 @@ class _Interval:
             left_diff = parent._midway - parent._start
             right_diff = parent._end - parent._midway
 
-            if self._top.have_H:
+            if self._top._have_H:
                 left_diff_squared = left_diff ** 2
                 right_diff_squared = right_diff ** 2
                 left_diff_cubed = left_diff * left_diff_squared
@@ -165,12 +172,15 @@ class _Interval:
         # We generate random noise deterministically wrt some seed; this seed is determined by the generator.
         # This means that if we drop out of the cache, then we'll create the same random noise next time, as we still
         # have the generator.
-        shape = self._top.shape
-        return _randn(shape, self._top.dtype, self._top.device, seed)
+        shape = self._top._shape
+        return _randn(shape, self._top._dtype, self._top._device, seed)
+
+    def _a_seed(self):
+        return self._parent._left_a_seed if self._is_left else self._parent._right_a_seed
 
     def _randn_levy(self):
-        shape = (*self._top.shape, *self._top.shape[-1:])
-        return _randn(shape, self._top.dtype, self._top.device, self._a_seed)
+        shape = (*self._top._shape, *self._top._shape[-1:])
+        return _randn(shape, self._top._dtype, self._top._device, self._a_seed())
 
     ########################################
     # Locate an interval in the hierarchy  #
@@ -188,6 +198,8 @@ class _Interval:
 
     def loc(self, ta, tb):
         out = []
+        ta = self._top._round(ta)
+        tb = self._top._round(tb)
         self._loc(ta, tb, out)
         return out
 
@@ -237,30 +249,32 @@ class _Interval:
         self._left_child._loc(ta, self._midway, out)
         self._right_child._loc(self._midway, tb, out)
 
+    def _set_spawn_key_and_depth(self):
+        self._spawn_key = 2 * self._parent._spawn_key + (0 if self._is_left else 1)
+        self._depth = self._parent._depth + 1
+
     def _split(self, midway):  # Create two children
-        self._midway = midway
-
-        # TODO: put generator creation for 'self' here, not for the children
-
+        self._midway = self._top._round(midway)
         # Use splittable PRNGs to generate noise.
-        # TODO: spawning is slow (about half the runtime), because of the tuple addition to create the child's
-        #  spawn_key: our spawn_key + (index,). Find a clever solution?
-        left_generator, right_generator = self._generator.spawn(2)
+        self._set_spawn_key_and_depth()
+        generator = np.random.SeedSequence(entropy=self._top._entropy,
+                                           spawn_key=(self._spawn_key, self._depth),
+                                           pool_size=self._top._pool_size)
+        self._W_seed, self._H_seed, self._left_a_seed, self._right_a_seed = generator.generate_state(4)
+
         self._left_child = _Interval(start=self._start,
                                      end=midway,
                                      parent=self,
                                      is_left=True,
-                                     top=self._top,
-                                     generator=left_generator)
+                                     top=self._top)
         self._right_child = _Interval(start=midway,
                                       end=self._end,
                                       parent=self,
                                       is_left=False,
-                                      top=self._top,
-                                      generator=right_generator)
+                                      top=self._top)
 
 
-class BrownianInterval(_Interval, base_brownian.BaseBrownian):
+class BrownianInterval(_Interval):
     """Brownian interval with fixed entropy.
 
     Computes increments (and optionally Levy area).
@@ -274,8 +288,31 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             [-0.3889]], device='cuda:0')
     """
 
-    __slots__ = ('shape', 'dtype', 'device', '_w_h', '_entropy', '_dt', '_cache_size', 'levy_area_approximation',
-                 '_last_interval', '_increment_and_space_time_levy_area_cache')
+    __slots__ = (
+                 # Inputs
+                 '_shape',
+                 '_dtype',
+                 '_device',
+                 '_entropy',
+                 '_dt',
+                 '_tol',
+                 '_pool_size',
+                 '_cache_size',
+                 '_levy_area_approximation',
+                 # Quantisation
+                 '_round',
+                 # Caching, searching and computing values
+                 '_increment_and_space_time_levy_area_cache',
+                 '_last_interval',
+                 '_have_H',
+                 '_have_A',
+                 '_w_h',
+                 '_top_a_seed',
+                 # Dependency tree creation
+                 '_average_dt',
+                 '_tree_dt',
+                 '_num_evaluations'
+                 )
 
     def __init__(self,
                  t0: Scalar,
@@ -285,12 +322,12 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                  device: Optional[Union[str, torch.device]] = None,
                  entropy: Optional[int] = None,
                  dt: Optional[Scalar] = None,
+                 tol: Scalar = 0.,
                  pool_size: int = 8,
                  cache_size: Optional[int] = 45,
                  levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
                  W: Optional[Tensor] = None,
-                 H: Optional[Tensor] = None,
-                 **kwargs):
+                 H: Optional[Tensor] = None):
         """Initialize the Brownian interval.
 
         Args:
@@ -312,6 +349,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 solver); else it will default to equal the first step this is
                 evaluated with. This allows us to set up a structure that should
                 be efficient to query at these intervals.
+            tol (float or Tensor): What tolerance to resolve the Brownian motion
+                to. Defaults to zero, i.e. floating point resolution.
             pool_size (int): Size of the pooled entropy. If you care about
                 statistical randomness then increasing this will help (but will
                 slow things down).
@@ -332,6 +371,10 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 interval [t0, t1]. Will be generated randomly if not provided.
         """
 
+        #####################################
+        #    Check and normalise inputs     #
+        #####################################
+
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
         if not utils.is_scalar(t1):
@@ -346,6 +389,9 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         if dt is not None:
             dt = float(dt)
 
+        if tol < 0.:
+            raise ValueError("tol should be non-negative.")
+
         shape, dtype, device = utils.check_tensor_info(W, H, shape=shape, dtype=dtype, device=device,
                                                        name='`W` or `H`')
 
@@ -353,25 +399,61 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         if entropy is None:
             entropy = np.random.randint(0, 2 ** 31 - 1)
 
-        self.shape = shape
-        self.dtype = dtype
-        self.device = device
-        self._entropy = entropy
+        if levy_area_approximation not in LEVY_AREA_APPROXIMATIONS:
+            raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}, but got "
+                             f"'{levy_area_approximation}'.")
 
+        #####################################
+        #          Record inputs            #
+        #####################################
+
+        self._shape = shape
+        self._dtype = dtype
+        self._device = device
+        self._entropy = entropy
+        self._dt = dt
+        self._tol = tol
+        self._pool_size = pool_size
+        self._cache_size = cache_size
+        self._levy_area_approximation = levy_area_approximation
+
+        #####################################
+        #   A miscellany of other things    #
+        #####################################
+
+        # We keep a cache of recent queries, and their results. This is very important for speed, so that we don't
+        # recurse all the way up to the top every time we have a query.
         self._increment_and_space_time_levy_area_cache = boltons.cacheutils.LRU(max_size=cache_size)
 
-        generator = np.random.SeedSequence(entropy=entropy, pool_size=pool_size)
-        # First three states are reserved as in _Initial
-        _, _, _, initial_W_seed, initial_H_seed = generator.generate_state(5)
+        # We keep track of the most recently queried interval, and start searching for the next interval from that
+        # element of the binary tree. This is because subsequent queries are likely to be near the most recent query.
+        self._last_interval = self
 
+        # Precompute these as we don't want to spend lots of time checking strings in hot loops.
+        self._have_H = self._levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.space_time,
+                                                         LEVY_AREA_APPROXIMATIONS.davie,
+                                                         LEVY_AREA_APPROXIMATIONS.foster)
+        self._have_A = self._levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
+                                                         LEVY_AREA_APPROXIMATIONS.foster)
+
+        # If we like we can quantise what level we want to compute the Brownian motion to.
+        if tol == 0.:
+            self._round = lambda x: x
+        else:
+            ndigits = -int(math.log10(tol))
+            self._round = lambda x: round(x, ndigits)
+
+        # Initalise as _Interval.
+        # (Must come after _round but before _w_h)
         super(BrownianInterval, self).__init__(start=t0,
                                                end=t1,
                                                parent=None,
                                                is_left=None,
-                                               top=self,
-                                               generator=generator,
-                                               **kwargs)
+                                               top=self)
 
+        # Set the global increment and space-time Levy area
+        generator = np.random.SeedSequence(entropy=entropy, pool_size=pool_size)
+        initial_W_seed, initial_H_seed, top_a_seed = generator.generate_state(3)
         if W is None:
             W = self._randn(initial_W_seed) * math.sqrt(t1 - t0)
         else:
@@ -381,46 +463,37 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         else:
             _assert_floating_tensor('H', H)
         self._w_h = (W, H)
+        self._top_a_seed = top_a_seed
 
-        if levy_area_approximation not in LEVY_AREA_APPROXIMATIONS:
-            raise ValueError(f"`levy_area_approximation` must be one of {LEVY_AREA_APPROXIMATIONS}, but got "
-                             f"'{levy_area_approximation}'.")
-
-        self._dt = dt
-        self._cache_size = cache_size
-        self.levy_area_approximation = levy_area_approximation
-
-        # Precompute these as we don't want to spend lots of time checking strings in hot loops.
-        self.have_H = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.space_time,
-                                                       LEVY_AREA_APPROXIMATIONS.davie,
-                                                       LEVY_AREA_APPROXIMATIONS.foster)
-        self.have_A = self.levy_area_approximation in (LEVY_AREA_APPROXIMATIONS.davie,
-                                                       LEVY_AREA_APPROXIMATIONS.foster)
-
-        # This is another nice trick.
-        # We keep track of the most recently queried interval, and start searching for the next interval from that
-        # element of the binary tree.
-        self._last_interval = self
-
+        # We create a binary tree dependency between the points. If we don't do this then the forward pass is still
+        # efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1], making the
+        # backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and `cache_size` we can
+        # instead make both directions O(N log N).
         self._average_dt = 0
         self._tree_dt = t1 - t0
-        self._num_evaluations = -100  # start off with a warmup period to get a decent estimate of the average
-        if dt is not None:
-            # We pre-create a binary tree dependency between the points. If we don't do this then the forward pass is
-            # still efficient at O(N), but we end up with a dependency chain stretching along the interval [t0, t1],
-            # making the backward pass O(N^2). By setting up a dependency tree of depth relative to `dt` and
-            # `cache_size` we can instead make both directions O(N log N).
+        if dt is None:
+            # Create the dependency tree based on observed statistics of query points. (In __call__)
+            self._num_evaluations = -100  # start off with a warmup period to get a decent estimate of the average
+        else:
+            # Create the dependency tree based on observed statistics of query points, _and_ create one based on the
+            # supplied hint `dt`.
+            self._num_evaluations = 0
             self._create_dependency_tree(dt)
 
     # Effectively permanently store our increment and space-time Levy area in the cache.
     def _increment_and_space_time_levy_area(self):
         return self._w_h
 
-    # TODO: pick better names for return_U, return_A. A should be called 'levy_area', but what about U?
+    def _a_seed(self):
+        return self._top_a_seed
+
+    def _set_spawn_key_and_depth(self):
+        self._spawn_key = 0
+        self._depth = 0
+
     def __call__(self, ta, tb=None, return_U=False, return_A=False):
         if tb is None:
-            warnings.warn(f"{self.__class__.__name__} is optimised for interval-based queries, not point evaluation. "
-                          f"Consider using BrownianPath or BrownianTree instead.")
+            warnings.warn(f"{self.__class__.__name__} is optimised for interval-based queries, not point evaluation.")
             ta, tb = self.start, ta
             tb_name = 'ta'
         else:
@@ -443,14 +516,14 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
 
         if ta == tb:
-            W = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
+            W = torch.zeros(self._shape, dtype=self._dtype, device=self._device)
             H = None
             A = None
-            if self.have_H:
-                H = torch.zeros(self.shape, dtype=self.dtype, device=self.device)
-            if self.have_A:
-                shape = (*self.shape, *self.shape[-1:])  # not self.shape[-1] as that may not exist
-                A = torch.zeros(shape, dtype=self.dtype, device=self.device)
+            if self._have_H:
+                H = torch.zeros(self._shape, dtype=self._dtype, device=self._device)
+            if self._have_A:
+                shape = (*self._shape, *self._shape[-1:])  # not self._shape[-1] as that may not exist
+                A = torch.zeros(shape, dtype=self._dtype, device=self._device)
         else:
             if self._dt is None:
                 self._num_evaluations += 1
@@ -478,7 +551,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
 
                 for interval in intervals[1:]:
                     Wi, Hi, Ai = interval.increment_and_levy_area()
-                    if self.have_H:
+                    if self._have_H:
                         # Aggregate H:
                         # Given s < u < t, then
                         # H_{s,t} = (term1 + term2) / (t - s)
@@ -488,8 +561,8 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                         term1 = (interval.end - interval.start) * (Hi + 0.5 * W)
                         term2 = (interval.start - ta) * (H - 0.5 * Wi)
                         H = (term1 + term2) / (interval.end - ta)
-                    if self.have_A and len(self.shape) not in (0, 1):
-                        # If len(self.shape) in (0, 1) then we treat our scalar / single dimension as a batch
+                    if self._have_A and len(self._shape) not in (0, 1):
+                        # If len(self._shape) in (0, 1) then we treat our scalar / single dimension as a batch
                         # dimension, so we have zero Levy area. (And these unsqueezes will result in a tensor of shape
                         # (batch, batch) which is wrong.)
 
@@ -504,7 +577,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                     W = W + Wi
 
         U = None
-        if self.have_H:
+        if self._have_H:
             U = utils.H_to_U(W, H, tb - ta)
 
         if return_U:
@@ -519,7 +592,7 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
                 return W
 
     def _create_dependency_tree(self, dt):
-        # For safety we take a max with 100: if people take very large cache sizes then this would then break the
+        # For safety we take a min with 100: if people take very large cache sizes then this would then break the
         # logarithmic into linear, which causes RecursionErrors.
         if self._cache_size is None:  # cache_size=None corresponds to infinite cache.
             cache_size = 100
@@ -551,14 +624,13 @@ class BrownianInterval(_Interval, base_brownian.BaseBrownian):
         return (f"{self.__class__.__name__}("
                 f"t0={self._start:.3f}, "
                 f"t1={self._end:.3f}, "
-                f"shape={self.shape}, "
-                f"dtype={self.dtype}, "
-                f"device={repr(self.device)}, "
+                f"shape={self._shape}, "
+                f"dtype={self._dtype}, "
+                f"device={repr(self._device)}, "
                 f"entropy={self._entropy}, "
                 f"dt={dt}, "
+                f"tol={self._tol}, "
+                f"pool_size={self._pool_size}, "
                 f"cache_size={self._cache_size}, "
-                f"levy_area_approximation={repr(self.levy_area_approximation)}"
+                f"levy_area_approximation={repr(self._levy_area_approximation)}"
                 f")")
-
-    def to(self, *args, **kwargs):
-        raise AttributeError(f"BrownianInterval does not support the method `to`.")

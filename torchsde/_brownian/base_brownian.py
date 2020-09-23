@@ -26,10 +26,6 @@ class BaseBrownian(metaclass=better_abc.ABCMeta):
     def __repr__(self):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def to(self, *args, **kwargs):
-        raise NotImplementedError
-
     dtype = better_abc.abstract_attribute()
     device = better_abc.abstract_attribute()
     shape = better_abc.abstract_attribute()
