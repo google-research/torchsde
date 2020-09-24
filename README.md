@@ -107,12 +107,6 @@ In practice, we found `diagonal` and `additive` to produce a good trade-off betw
 
 Note that stochastic Runge-Kutta methods is a class of numerical methods, and the precise formulation for one noise type may be much different than that for another. Internally, `sdeint` selects the algorithm based on the attribute `noise_type` of the SDE object.
 
-## Known issues
-- Existing solvers prioritize having high *strong order*. High *weak order* solvers will be included in the future.
-- Existing solvers are based on Itô SDEs. Solvers for Stratonovich SDEs will be included in the future.
-- Adjoint mode is currently not supported for SDEs with noise type `scalar` and `general`. We expect the first case to be fixed soon. The second case requires more work and will be fixed after efficient Stratonovich solvers are in place.
-- Unlike the adjoint sensitivity method, our proposed stochastic adjoint sensitivity method is, to the best of our knowledge, a new numerical method. Theoretical properties in terms of its interaction with adaptive time-stepping is still largely unknown, even though we have found the combination to typically work in practice.
-
 ### References
 \[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations." *International Conference on Artificial Intelligence and Statistics.* 2020. [[arxiv]](https://arxiv.org/pdf/2001.01328.pdf)
 
