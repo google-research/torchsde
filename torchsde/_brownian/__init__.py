@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .brownian_base import BaseBrownian
 from .brownian_interval import BrownianInterval
 from .derived import ReverseBrownian, BrownianPath, BrownianTree
 

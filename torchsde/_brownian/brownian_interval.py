@@ -20,6 +20,7 @@ import boltons.cacheutils
 import numpy as np
 import torch
 
+from . import brownian_base
 from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import Scalar, Optional, Tuple, Union, Tensor
 
@@ -335,7 +336,7 @@ class _Interval:
                                       top=self._top)
 
 
-class BrownianInterval(_Interval):
+class BrownianInterval(brownian_base.BaseBrownian, _Interval):
     """Brownian interval with fixed entropy.
 
     Computes increments (and optionally Levy area).

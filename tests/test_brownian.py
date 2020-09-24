@@ -134,7 +134,7 @@ def test_determinism_simple(brownian_class, device, levy_area_approximation, ret
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_determinism_large(brownian_class, device, levy_area_approximation, return_U, return_A):
     """
-    Tests that BrownianInterval deterministically produces the same results when queried at the same points.
+    Tests that a single Brownian motion deterministically produces the same results when queried at the same points.
 
     We first of all query it at lots of points (larger than its internal cache), and then re-query at the same set of
     points, and compare.
