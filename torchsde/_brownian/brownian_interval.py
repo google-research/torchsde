@@ -725,3 +725,46 @@ class BrownianInterval(_Interval):
                 stack.append((elem._right_child, depth + 1))
                 stack.append((elem._left_child, depth + 1))
         print("\n".join(out))
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def device(self):
+        return self._device
+
+    @property
+    def entropy(self):
+        return self._entropy
+
+    @property
+    def levy_area_approximation(self):
+        return self._levy_area_approximation
+
+    @property
+    def dt(self):
+        return self._dt
+
+    @property
+    def tol(self):
+        return self._tol
+
+    @property
+    def pool_size(self):
+        return self._pool_size
+
+    @property
+    def cache_size(self):
+        return self._cache_size
+
+    @property
+    def halfway_tree(self):
+        return self._halfway_tree
+
+    def size(self):
+        return self._shape

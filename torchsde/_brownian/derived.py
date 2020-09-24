@@ -27,6 +27,14 @@ class ReverseBrownian:
         # returns negated drift and diffusion, so we don't negate here.
         return self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
 
+    @property
+    def shape(self):
+        return self.base_brownian.shape
+
+    @property
+    def levy_area_approximation(self):
+        return self.base_brownian.levy_area_approximation
+
 
 BrownianPath = functools.partial(brownian_interval.BrownianInterval, cache_size=None)
 BrownianPath.__doc__ = \
