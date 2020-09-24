@@ -8,12 +8,12 @@ Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in
 </p>
 
 ## Requirements
-```
-torch>=1.6.0
-numpy>=1.19.1
-boltons>=20.2.1
-trampoline>=0.1.2
-```
+- torch>=1.6.0
+- blist
+- numpy>=1.19.1
+- boltons>=20.2.1
+
+These requirements are specified in `setup.py` using `install_requires`.
 
 ## Installation
 ```shell script

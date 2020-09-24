@@ -1,5 +1,0 @@
-torch>=1.6.0  
-numpy>=1.19.1  
-boltons>=20.2.1  
-trampoline>=0.1.2
-
