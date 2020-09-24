@@ -54,8 +54,7 @@ tensor([[ 0.0733],
 """
 
 
-# Set dt to None so that it can't also be set by the user.
-BrownianTree = functools.partial(brownian_interval.BrownianInterval, halfway_tree=True, dt=None, tol=1e-6)
+BrownianTree = functools.partial(brownian_interval.BrownianInterval, halfway_tree=True, tol=1e-6)
 BrownianTree.__doc__ = \
 """Brownian tree with fixed entropy.
 

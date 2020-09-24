@@ -42,15 +42,16 @@ def _time_query(bm, ts):
 
 
 def _compare(w0, ts, msg=''):
-    bm = torchsde.BrownianPath(t0=t0, w0=w0)
+    kwargs = dict(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianPath(**kwargs)
     bp_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
 
-    bm = torchsde.BrownianTree(t0=t0, w0=w0, t1=t1, tol=1e-5)
+    bm = torchsde.BrownianTree(**kwargs, tol=1e-5)
     bt_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
 
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianInterval(**kwargs)
     bi_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianInterval): {bi_py_time:.4f}')
 
@@ -93,7 +94,7 @@ def sequential_access():
 
 
 def random_access():
-    generator = torch.Generator(device).manual_seed(456789)
+    generator = torch.Generator().manual_seed(456789)
     ts = torch.empty(steps).uniform_(t0, t1, generator=generator)
 
     w0 = torch.zeros(small_batch_size, small_d).to(device)
@@ -165,15 +166,16 @@ def _time_sdeint_adjoint(sde, y0, ts, bm):
 
 
 def _compare_sdeint(w0, sde, y0, ts, func, msg=''):
-    bm = torchsde.BrownianPath(t0, w0)
+    kwargs = dict(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianPath(**kwargs)
     bp_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
 
-    bm = torchsde.BrownianTree(t0, w0)
+    bm = torchsde.BrownianTree(**kwargs, tol=1e-5)
     bt_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
 
-    bm = torchsde.BrownianInterval(t0, t0 + 1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianInterval(**kwargs)
     bi_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianInterval): {bi_py_time:.4f}')
 
