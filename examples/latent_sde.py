@@ -16,7 +16,9 @@ import argparse
 import logging
 import math
 import os
+import random
 from collections import namedtuple
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,10 +27,53 @@ import tqdm
 from torch import nn, optim, distributions
 
 import torchsde
-from examples import utils
 
 # w/ underscore -> numpy; w/o underscore -> torch.
 Data = namedtuple('Data', ['ts_', 'ts_ext_', 'ts_vis_', 'ts', 'ts_ext', 'ts_vis', 'ys', 'ys_'])
+
+
+class LinearScheduler(object):
+    def __init__(self, iters, maxval=1.0):
+        self._iters = max(1, iters)
+        self._val = maxval / self._iters
+        self._maxval = maxval
+
+    def step(self):
+        self._val = min(self._maxval, self._val + self._maxval / self._iters)
+
+    @property
+    def val(self):
+        return self._val
+
+
+class EMAMetric(object):
+    def __init__(self, gamma: Optional[float] = .99):
+        super(EMAMetric, self).__init__()
+        self._val = 0.
+        self._gamma = gamma
+
+    def step(self, x: Union[torch.Tensor, np.ndarray]):
+        x = x.detach().cpu().numpy() if torch.is_tensor(x) else x
+        self._val = self._gamma * self._val + (1 - self._gamma) * x
+        return self._val
+
+    @property
+    def val(self):
+        return self._val
+
+
+def str2bool(v):
+    """Used for boolean arguments in argparse; avoiding `store_true` and `store_false`."""
+    if isinstance(v, bool): return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'): return False
+    else: raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def manual_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def _stable_division(a, b, epsilon=1e-7):
@@ -203,11 +248,11 @@ def main():
     model = LatentSDE().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=.999)
-    kl_scheduler = utils.LinearScheduler(iters=args.kl_anneal_iters)
+    kl_scheduler = LinearScheduler(iters=args.kl_anneal_iters)
 
-    logpy_metric = utils.EMAMetric()
-    kl_metric = utils.EMAMetric()
-    loss_metric = utils.EMAMetric()
+    logpy_metric = EMAMetric()
+    kl_metric = EMAMetric()
+    loss_metric = EMAMetric()
 
     if args.show_prior:
         with torch.no_grad():
@@ -285,7 +330,10 @@ def main():
 
                 if args.save_ckpt:
                     torch.save(
-                        {'model': model.state_dict()},
+                        {'model': model.state_dict(),
+                         'optimizer': optimizer.state_dict(),
+                         'scheduler': scheduler.state_dict(),
+                         'kl_scheduler': kl_scheduler},
                         os.path.join(ckpt_dir, f'global_step_{global_step}.ckpt')
                     )
 
@@ -299,7 +347,7 @@ def main():
         likelihood = likelihood_constructor(loc=zs, scale=args.scale)
         logpy = likelihood.log_prob(ys).sum(dim=0).mean(dim=0)
 
-        loss = -logpy + kl * kl_scheduler()
+        loss = -logpy + kl * kl_scheduler.val
         loss.backward()
 
         optimizer.step()
@@ -312,9 +360,9 @@ def main():
 
         logging.info(
             f'global_step: {global_step}, '
-            f'logpy: {logpy_metric.val():.3f}, '
-            f'kl: {kl_metric.val():.3f}, '
-            f'loss: {loss_metric.val():.3f}'
+            f'logpy: {logpy_metric.val:.3f}, '
+            f'kl: {kl_metric.val:.3f}, '
+            f'loss: {loss_metric.val:.3f}'
         )
 
 
@@ -324,7 +372,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--train-dir', type=str, required=True)
-    parser.add_argument('--save-ckpt', action='store_true')
+    parser.add_argument('--save-ckpt', type=str2bool, default=False)
 
     parser.add_argument('--data', type=str, default='segmented_cosine', choices=['segmented_cosine', 'irregular_sine'])
     parser.add_argument('--kl-anneal-iters', type=int, default=100, help='Number of iterations for linear KL schedule.')
@@ -342,26 +390,24 @@ if __name__ == '__main__':
     parser.add_argument('--rtol', type=float, default=1e-3)
     parser.add_argument('--atol', type=float, default=1e-3)
 
-    parser.add_argument('--show-prior', type=utils.str2bool, default=True)
-    parser.add_argument('--show-samples', type=utils.str2bool, default=True)
-    parser.add_argument('--show-percentiles', type=utils.str2bool, default=True)
-    parser.add_argument('--show-arrows', type=utils.str2bool, default=True)
-    parser.add_argument('--show-mean', type=utils.str2bool, default=False)
-    parser.add_argument('--hide-ticks', type=utils.str2bool, default=False)
+    parser.add_argument('--show-prior', type=str2bool, default=True)
+    parser.add_argument('--show-samples', type=str2bool, default=True)
+    parser.add_argument('--show-percentiles', type=str2bool, default=True)
+    parser.add_argument('--show-arrows', type=str2bool, default=True)
+    parser.add_argument('--show-mean', type=str2bool, default=False)
+    parser.add_argument('--hide-ticks', type=str2bool, default=False)
     parser.add_argument('--dpi', type=int, default=300)
     parser.add_argument('--color', type=str, default='blue', choices=('blue', 'red'))
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
-
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    manual_seed(args.seed)
 
     if args.debug:
         logging.getLogger().setLevel(logging.INFO)
 
     ckpt_dir = os.path.join(args.train_dir, 'ckpts')
-    utils.makedirs(args.train_dir, ckpt_dir)
+    os.makedirs(ckpt_dir, exist_ok=True)
 
     sdeint_fn = torchsde.sdeint_adjoint if args.adjoint else torchsde.sdeint
 

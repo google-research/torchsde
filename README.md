@@ -7,6 +7,14 @@ Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in
   <img width="600" height="450" src="./assets/latent_sde.gif">
 </p>
 
+## Requirements
+```
+torch>=1.6.0
+numpy>=1.19.1
+boltons>=20.2.1
+trampoline>=0.1.2
+```
+
 ## Installation
 ```shell script
 pip install git+https://github.com/google-research/torchsde.git
@@ -81,44 +89,6 @@ See [`demo.ipynb`](examples/demo.ipynb) for more on this.
 - `general`: The diffusion `g` has output size (d, m). The Brownian motion is m-dimensional.
 
 In practice, we found `diagonal` and `additive` to produce a good trade-off between model flexibility and computational efficiency, and we recommend sticking to these two noise types if possible.
-
-### Integrating SDEs with KL penalty
-During modeling, fitting SDEs directly to data will likely give degenerate solutions that are close to being deterministic.
-One benefit of using SDEs is when they are treated as latent variables in a Bayesian formulation.
-With an appropriate prior SDE, a [Kullback–Leibler (KL) divergence](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) on the space of sample paths can be estimated efficiently.
-To achieve this, we can give the `SDE` class an additional method `h(t, y)`, defining the drift of the prior.
-The KL penalty can be estimated when we specify the argument `logqp=True` to `sdeint`:
-```python
-import torch
-
-from torchsde import sdeint
-
-class SDE(torch.nn.Module):
-
-    def __init__(self, mu, sigma):
-        super().__init__()
-        self.noise_type="diagonal"
-        self.sde_type = "ito"
-
-        self.mu = mu
-        self.sigma = sigma
-
-    def f(self, t, y):
-        return self.mu * y
-
-    def g(self, t, y):
-        return self.sigma * y
-
-    def h(self, t, y):
-        return self.mu * y * 0.5
-
-batch_size, d, m = 4, 1, 1  # State dimension d, Brownian motion dimension m.
-geometric_bm = SDE(mu=0.5, sigma=1)
-y0 = torch.zeros(batch_size, d).fill_(0.1)  # Initial state.
-ts = torch.linspace(0, 1, 20)
-ys, logqp = sdeint(geometric_bm, y0, ts, logqp=True)  # Also returns estimated KL.
-```
-To switch to using the adjoint formulation for memory efficient gradient computation, all we need is to replace `sdeint` with `sdeint_adjoint` in the above code snippets.
 
 ### Keyword arguments of `sdeint`
 - `bm`: A `BrownianPath` or `BrownianTree` object. Optionally include to seed the solver's computation.
