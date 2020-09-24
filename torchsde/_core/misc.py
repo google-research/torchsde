@@ -94,12 +94,10 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     return convert_none_to_zeros(_jvp, dummy_outputs)
 
 
-def flat_to_shape(tensor, shapes, length=()):
-    tensor_list = []
-    total = 0
-    for shape in shapes:
-        next_total = total + shape.numel()
-        # It's important that this be view((...)), not view(...). Else when length=(), shape=() it fails.
-        tensor_list.append(tensor[..., total:next_total].view((*length, *shape)))
-        total = next_total
-    return tensor_list
+def flat_to_shape(flat_tensor, shapes):
+    """Convert a flat tensor to a list of tensors with specified shapes.
+
+    `flat_tensor` must have exactly the number of elements as stated in `shapes`.
+    """
+    numels = [shape.numel() for shape in shapes]
+    return [flat.reshape(shape) for flat, shape in zip(flat_tensor.split(split_size=numels), shapes)]

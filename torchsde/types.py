@@ -27,3 +27,6 @@ Vector = Union[Sequence[float], Tensor]
 Module = torch.nn.Module
 Modules = Sequence[Module]
 ModuleOrModules = Union[Module, Modules]
+
+Size = torch.Size
+Sizes = Sequence[Size]
