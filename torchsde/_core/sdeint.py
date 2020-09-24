@@ -37,7 +37,7 @@ def sdeint(sde: base_sde.BaseSDE,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
            **unused_kwargs) -> Tensor:
-    """Numerically integrate an Itô SDE.
+    """Numerically integrate an SDE.
 
     Args:
         sde: Object with methods `f` and `g` representing the
