@@ -77,6 +77,7 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
     if hasattr(problem, "analytical_grad"):
         grad_true = problem.analytical_grad(y0=y0, t=t1, grad_output=v, bm=bm)
     else:
+        # These gradients typically aren't accurate when adaptive==True.
         problem.zero_grad()
         _, y1 = torchsde.sdeint(problem, y0, ts, bm=bm, method=method, adaptive=adaptive)
         y1.backward(v)
