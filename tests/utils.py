@@ -20,6 +20,8 @@ from torch import nn
 from torchsde.types import Callable, TensorOrTensors, ModuleOrModules, Optional
 
 
+# These tolerances don't need to be this large. For gradients to match up in the Ito case, we typically need large
+# values; not so much as in the Stratonovich case.
 def assert_allclose(actual, expected, rtol=1e-3, atol=1e-2):
     if actual is None:
         assert expected is None
@@ -125,7 +127,7 @@ def gradcheck(func: Callable,
             grads = torch.autograd.grad(func(inputs, modules), params, create_graph=True, allow_unused=True)
             return tuple(grad for grad in grads if grad is not None)
 
-        swiss_knife_gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
+        gradcheck(func_high_order, inputs, modules, rtol=rtol, atol=atol, eps=eps, grad_params=True)
 
 
 def _make_scalar_valued_func(func, inputs, modules):
