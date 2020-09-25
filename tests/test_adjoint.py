@@ -33,11 +33,8 @@ torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype = torch.get_default_dtype()
 
-ito_methods = {'euler': 'ito',
-               'milstein': 'ito',
-               'srk': 'ito'}
-stratonovich_methods = {'midpoint': 'stratonovich',
-                        'log_ode': 'stratonovich'}
+ito_methods = {'milstein': 'ito', 'srk': 'ito'}
+stratonovich_methods = {'midpoint': 'stratonovich', 'log_ode': 'stratonovich'}
 
 
 @pytest.mark.parametrize("problem", [Ex1, Ex2, Ex3])
@@ -45,8 +42,6 @@ stratonovich_methods = {'midpoint': 'stratonovich',
 @pytest.mark.parametrize("noise_type", ['diagonal', 'scalar', 'additive', 'general'])
 @pytest.mark.parametrize('adaptive', (False, True))
 def test_adjoint(problem, method, sde_type, noise_type, adaptive):
-    if method == 'euler' and adaptive:
-        return
     if problem is not Ex3 and noise_type == 'additive':
         return
     if sde_type == 'ito' and noise_type == 'general':
