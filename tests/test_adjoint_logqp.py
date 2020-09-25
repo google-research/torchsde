@@ -21,7 +21,6 @@ import unittest
 import torch
 
 from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from tests.torch_test import TorchTestCase
 from torchsde import BrownianInterval, sdeint_adjoint
 
 torch.manual_seed(1147481649)
@@ -40,7 +39,7 @@ y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
 methods = ('milstein', 'srk')
 
 
-class TestAdjointLogqp(TorchTestCase):
+class TestAdjointLogqp(unittest.TestCase):
 
     def test_basic_sde1(self):
         self.skipTest("Temporarily deprecating logqp.")

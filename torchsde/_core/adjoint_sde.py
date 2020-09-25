@@ -58,7 +58,7 @@ class AdjointSDE(base_sde.BaseSDE):
             NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
         }.get(sde.noise_type, self.gdg_prod_default)
 
-    def _get_state(self, t, y_aug, v):
+    def _get_state(self, t, y_aug, v=None):
         """Unpacks y_aug, whilst enforcing the necessary checks so that we can calculate derivatives wrt state."""
 
         # These leaf checks are very important.
@@ -78,14 +78,10 @@ class AdjointSDE(base_sde.BaseSDE):
         # use its history there.
         assert t.is_leaf, "Internal error: please report a bug to torchsde"
         assert y_aug.is_leaf, "Internal error: please report a bug to torchsde"
-        assert v.is_leaf, "Internal error: please report a bug to torchsde"
+        if v is not None:
+            assert v.is_leaf, "Internal error: please report a bug to torchsde"
 
-        # This determines whether or not we will be able to backpropagate through the calling function (that is calling
-        # _get_state). Simply, we should be able to if and only if (a) gradients are enabled and (b) the input
-        # arguments require gradient.
-        # Note that we don't fix this to True, because that implies building computational graphs, which will consume
-        # additional memory that will be unnecessary if we don't need to backpropagate.
-        requires_grad = torch.is_grad_enabled() and (t.requires_grad or y_aug.requires_grad or v.requires_grad)
+        requires_grad = torch.is_grad_enabled()
 
         y, adj_y = misc.flat_to_shape(y_aug, self._shapes[:2])
 
@@ -99,7 +95,7 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)  # just use t as a dummy `v`
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
             f = self._base_sde.f(-t, y)
             vjp_y_and_params = misc.vjp(
@@ -118,7 +114,7 @@ class AdjointSDE(base_sde.BaseSDE):
         return misc.flatten((-f, *vjp_y_and_params))
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
             g_columns = [g_column.squeeze(dim=-1) for g_column in self._base_sde.g(-t, y).split(1, dim=-1)]
             dg_g_jvp = sum([
@@ -165,7 +161,7 @@ class AdjointSDE(base_sde.BaseSDE):
         return misc.flatten((-f, *vjp_y_and_params))
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v=t)  # just use t as a dummy `v`
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
             g = self._base_sde.g(-t, y)
             g_dg_vjp, = misc.vjp(
