@@ -367,12 +367,14 @@ def main():
 
 
 if __name__ == '__main__':
+    # The argparse format supports both `--boolean-argument` and `--boolean-argument True`.
+    # Trick from https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse.
     parser = argparse.ArgumentParser()
-    parser.add_argument('--no-gpu', action='store_true')
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--no-gpu', type=str2bool, default=False, const=True)
+    parser.add_argument('--debug', type=str2bool, default=False, const=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--train-dir', type=str, required=True)
-    parser.add_argument('--save-ckpt', type=str2bool, default=False)
+    parser.add_argument('--save-ckpt', type=str2bool, default=False, const=True)
 
     parser.add_argument('--data', type=str, default='segmented_cosine', choices=['segmented_cosine', 'irregular_sine'])
     parser.add_argument('--kl-anneal-iters', type=int, default=100, help='Number of iterations for linear KL schedule.')
@@ -382,20 +384,20 @@ if __name__ == '__main__':
     parser.add_argument('--likelihood', type=str, choices=['normal', 'laplace'], default='laplace')
     parser.add_argument('--scale', type=float, default=0.05, help='Scale parameter of Normal and Laplace.')
 
-    parser.add_argument('--adjoint', action='store_true')
-    parser.add_argument('--adaptive', action='store_true')
+    parser.add_argument('--adjoint', type=str2bool, default=False, const=True)
+    parser.add_argument('--adaptive', type=str2bool, default=False, const=True)
     parser.add_argument('--method', type=str, default='euler', choices=('euler', 'milstein', 'srk'),
                         help='Name of numerical solver.')
     parser.add_argument('--dt', type=float, default=1e-2)
     parser.add_argument('--rtol', type=float, default=1e-3)
     parser.add_argument('--atol', type=float, default=1e-3)
 
-    parser.add_argument('--show-prior', type=str2bool, default=True)
-    parser.add_argument('--show-samples', type=str2bool, default=True)
-    parser.add_argument('--show-percentiles', type=str2bool, default=True)
-    parser.add_argument('--show-arrows', type=str2bool, default=True)
-    parser.add_argument('--show-mean', type=str2bool, default=False)
-    parser.add_argument('--hide-ticks', type=str2bool, default=False)
+    parser.add_argument('--show-prior', type=str2bool, default=True, const=True)
+    parser.add_argument('--show-samples', type=str2bool, default=True, const=True)
+    parser.add_argument('--show-percentiles', type=str2bool, default=True, const=True)
+    parser.add_argument('--show-arrows', type=str2bool, default=True, const=True)
+    parser.add_argument('--show-mean', type=str2bool, default=False, const=True)
+    parser.add_argument('--hide-ticks', type=str2bool, default=False, const=True)
     parser.add_argument('--dpi', type=int, default=300)
     parser.add_argument('--color', type=str, default='blue', choices=('blue', 'red'))
     args = parser.parse_args()
