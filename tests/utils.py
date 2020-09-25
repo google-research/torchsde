@@ -20,7 +20,7 @@ from torch import nn
 from torchsde.types import Callable, TensorOrTensors, ModuleOrModules, Optional
 
 
-def assert_allclose(actual, expected, rtol=1e-2, atol=1e-3):
+def assert_allclose(actual, expected, rtol=1e-3, atol=1e-2):
     if actual is None:
         assert expected is None
     else:
