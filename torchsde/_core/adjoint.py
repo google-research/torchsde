@@ -198,17 +198,15 @@ def sdeint_adjoint(sde: nn.Module,
 
 
 def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str) -> str:
-    sde_type, noise_type = sde.sde_type, sde.noise_type
-
-    if adjoint_method is None:  # Select the default based on noise type of forward.
+    """Select the default method for adjoint computation based on the noise type of the forward SDE."""
+    if adjoint_method is None:
         adjoint_method = {
             SDE_TYPES.ito: {
                 NOISE_TYPES.diagonal: METHODS.milstein,
                 NOISE_TYPES.additive: METHODS.euler,
                 NOISE_TYPES.scalar: METHODS.euler,
                 NOISE_TYPES.general: METHODS.euler,
-            }[noise_type],
+            }[sde.noise_type],
             SDE_TYPES.stratonovich: METHODS.midpoint,
-        }[sde_type]
-
+        }[sde.sde_type]
     return adjoint_method
