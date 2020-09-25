@@ -32,7 +32,7 @@ torch.set_default_dtype(torch.float64)
 cpu, gpu = torch.device('cpu'), torch.device('cuda')
 device = gpu if torch.cuda.is_available() else cpu
 dtype = torch.get_default_dtype()
-batch_size, d, m = 5, 2, 3
+batch_size, d, m = 2, 2, 3
 ts = torch.tensor([0.0, 0.2, 0.4], device=device)
 t0, t1 = ts[0], ts[-1]
 y0 = torch.full((batch_size, d), 0.1, device=device)
