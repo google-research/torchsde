@@ -47,13 +47,13 @@ def _U_to_H(W: torch.Tensor, U: torch.Tensor, h: float) -> torch.Tensor:
     return U / h - .5 * W
 
 
-def _setup(brownian_class, device, levy_area_approximation, shape):
+def _setup(device, levy_area_approximation, shape):
     t0, t1 = torch.tensor([0., 1.], device=device)
     ta = torch.rand([], device=device)
     tb = torch.rand([], device=device)
     ta, tb = min(ta, tb), max(ta, tb)
-    bm = brownian_class(t0=t0, t1=t1, shape=shape, device=device, levy_area_approximation=levy_area_approximation,
-                        pool_size=POOL_SIZE)
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=shape, device=device,
+                                   levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
     return ta, tb, bm
 
 
@@ -67,17 +67,16 @@ def _levy_returns():
                 yield levy_area_approximation, return_U, return_A
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
-def test_shape(brownian_class, device, levy_area_approximation, return_U, return_A):
+def test_shape(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     for shape, A_shape in (((SMALL_BATCH_SIZE, D), (SMALL_BATCH_SIZE, D, D)),
                            ((SMALL_BATCH_SIZE,), (SMALL_BATCH_SIZE,)),
                            ((), ())):
-        ta, tb, bm = _setup(brownian_class, device, levy_area_approximation, shape)
+        ta, tb, bm = _setup(device, levy_area_approximation, shape)
         sample1 = bm(ta, return_U=return_U, return_A=return_A)
         sample2 = bm(tb, return_U=return_U, return_A=return_A)
         sample3 = bm(ta, tb, return_U=return_U, return_A=return_A)
@@ -109,14 +108,13 @@ def test_shape(brownian_class, device, levy_area_approximation, return_U, return
             assert shape_ == A_shape
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
-def test_determinism_simple(brownian_class, device, levy_area_approximation, return_U, return_A):
+def test_determinism_simple(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(brownian_class, device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
+    ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     vals = [bm(ta, tb, return_U=return_U, return_A=return_A) for _ in range(REPS)]
     for val in vals[1:]:
         if torch.is_tensor(val):
@@ -129,10 +127,9 @@ def test_determinism_simple(brownian_class, device, levy_area_approximation, ret
             assert (v == v0).all()
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
-def test_determinism_large(brownian_class, device, levy_area_approximation, return_U, return_A):
+def test_determinism_large(device, levy_area_approximation, return_U, return_A):
     """
     Tests that a single Brownian motion deterministically produces the same results when queried at the same points.
 
@@ -142,7 +139,7 @@ def test_determinism_large(brownian_class, device, levy_area_approximation, retu
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    ta, tb, bm = _setup(brownian_class, device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
+    ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     cache = {}
     for _ in range(LARGE_REPS):
         ta_ = torch.rand_like(ta)
@@ -165,17 +162,16 @@ def test_determinism_large(brownian_class, device, levy_area_approximation, retu
             assert (v1 == v2).all()
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
-def test_normality_simple(brownian_class, device, levy_area_approximation):
+def test_normality_simple(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
         base_W = torch.tensor(npr.randn(), device=device).repeat(LARGE_BATCH_SIZE)
-        bm = brownian_class(t0=t0, t1=t1, W=base_W, levy_area_approximation=levy_area_approximation)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, W=base_W, levy_area_approximation=levy_area_approximation)
 
         t_ = npr.uniform(low=t0, high=t1)
 
@@ -200,17 +196,16 @@ def test_normality_simple(brownian_class, device, levy_area_approximation):
             assert pval >= ALPHA
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
-def test_normality_conditional(brownian_class, device, levy_area_approximation):
+def test_normality_conditional(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = brownian_class(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
-                            levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
+                                       levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
             ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
@@ -264,18 +259,16 @@ def test_normality_conditional(brownian_class, device, levy_area_approximation):
                 assert pval >= ALPHA
 
 
-@pytest.mark.parametrize("brownian_class", [torchsde.BrownianInterval, torchsde.BrownianPath, torchsde.BrownianPath])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
-def test_consistency(brownian_class, device, levy_area_approximation):
+def test_consistency(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = brownian_class(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
-                            device=device,
-                            levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
+                                       levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
             ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
@@ -296,17 +289,10 @@ def test_consistency(brownian_class, device, levy_area_approximation):
             # We don't test the return_A case because we don't expect that to be consistent.
 
 
-def _brownian_class_random_order():
-    yield torchsde.BrownianInterval, False
-    yield torchsde.BrownianPath, False
-    yield torchsde.BrownianTree, False
-    yield torchsde.BrownianTree, True
-
-
-@pytest.mark.parametrize("brownian_class,random_order", _brownian_class_random_order())
+@pytest.mark.parametrize("random_order", [False, True])
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
-def test_entropy_determinism(brownian_class, random_order, device, levy_area_approximation, return_U, return_A):
+def test_entropy_determinism(random_order, device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
@@ -316,14 +302,18 @@ def test_entropy_determinism(brownian_class, random_order, device, levy_area_app
     points2 = torch.rand(1000)
     outs = []
 
-    bm = brownian_class(t0=t0, t1=t1, shape=(), device=device, levy_area_approximation=levy_area_approximation,
-                        entropy=entropy)
+    tol = 1e-6 if random_order else 0.
+
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(), device=device,
+                                   levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
+                                   halfway_tree=random_order)
     for point1, point2 in zip(points1, points2):
         point1, point2 = sorted([point1, point2])
         outs.append(bm(point1, point2, return_U=return_U, return_A=return_A))
 
-    bm = brownian_class(t0=t0, t1=t1, shape=(), device=device, levy_area_approximation=levy_area_approximation,
-                        entropy=entropy)
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(), device=device,
+                                   levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
+                                   halfway_tree=random_order)
     if random_order:
         perm = torch.randperm(1000)
         points1 = points1[perm]

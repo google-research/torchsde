@@ -19,7 +19,7 @@ class BaseBrownian(metaclass=abc.ABCMeta):
     __slots__ = ()
 
     @abc.abstractmethod
-    def __call__(self, ta, tb, return_U=False, return_A=False):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         raise NotImplementedError
 
     @abc.abstractmethod

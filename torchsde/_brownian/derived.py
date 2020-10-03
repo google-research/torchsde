@@ -14,6 +14,7 @@
 
 from . import brownian_base
 from . import brownian_interval
+from ..types import Optional, Scalar, Tensor
 
 
 class ReverseBrownian(brownian_base.BaseBrownian):
@@ -21,7 +22,7 @@ class ReverseBrownian(brownian_base.BaseBrownian):
         super(ReverseBrownian, self).__init__()
         self.base_brownian = base_brownian
 
-    def __call__(self, ta, tb, return_U=False, return_A=False):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         # Whether or not to negate the statistics depends on the return value of the adjoint SDE. Currently, the adjoint
         # returns negated drift and diffusion, so we don't negate here.
         return self.base_brownian(-tb, -ta, return_U=return_U, return_A=return_A)
@@ -52,17 +53,35 @@ class BrownianPath(brownian_interval.BrownianInterval):
     Useful for speed, when memory isn't a concern.
 
     To use:
-    >>> bm = BrownianPath(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
+    >>> bm = BrownianPath(t0=0.0, w0=torch.zeros(4, 1))
     >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
             [ 0.1872],
-            [-0.3889]], device='cuda:0')
+            [-0.3889]])
     """
 
-    def __init__(self, *args, **kwargs):
-        """Arguments as BrownianInterval."""
-        super(BrownianPath, self).__init__(*args, **kwargs, cache_size=None)
+    def __init__(self, t0: Scalar, w0: Tensor, window_size: int = 8):
+        """Initialize Brownian path.
+        Arguments:
+            t0: Initial time.
+            w0: Initial state.
+            window_size: Unused; deprecated.
+        """
+        t1 = t0 + 1
+        super(BrownianPath, self).__init__(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device,
+                                           cache_size=None)
+        self._w0 = w0
+
+    def __call__(self, t, tb=None, return_U=False, return_A=False):
+        # Deliberately called t rather than ta, for backward compatibility
+        # The extra tb, return_U, return_A arguments are all needed for compatibility with the current solvers.
+        assert not return_U
+        assert not return_A
+        out = super(BrownianPath, self).__call__(t, tb)
+        if tb is None:
+            out = out + self._w0
+        return out
 
 
 class BrownianTree(brownian_interval.BrownianInterval):
@@ -73,7 +92,7 @@ class BrownianTree(brownian_interval.BrownianInterval):
     does - note that BrownianTree is slower as a result though.)
 
     To use:
-    >>> bm = BrownianTree(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
+    >>> bm = BrownianTree(t0=0.0, w0=torch.zeros(4, 1))
     >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
@@ -81,8 +100,57 @@ class BrownianTree(brownian_interval.BrownianInterval):
             [-0.3889]], device='cuda:0')
     """
 
-    def __init__(self, *args, **kwargs):
-        """Arguments as BrownianInterval."""
-        if 'tol' not in kwargs:
-            kwargs['tol'] = 1e-6
-        super(BrownianTree, self).__init__(*args, **kwargs, halfway_tree=True)
+    def __init__(self, t0: Scalar,
+                 w0: Tensor,
+                 t1: Optional[Scalar] = None,
+                 w1: Optional[Tensor] = None,
+                 entropy: Optional[int] = None,
+                 tol: float = 1e-6,
+                 pool_size: int = 24,
+                 cache_depth: int = 9,
+                 safety: Optional[float] = None):
+        """Initialize the Brownian tree.
+
+        The random value generation process exploits the parallel random number paradigm and uses
+        `numpy.random.SeedSequence`. The default generator is PCG64 (used by `default_rng`).
+
+        Arguments:
+            t0: Initial time.
+            w0: Initial state.
+            t1: Terminal time.
+            w1: Terminal state.
+            entropy: Global seed, defaults to `None` for random entropy.
+            tol: Error tolerance before the binary search is terminated; the search depth ~ log2(tol).
+            pool_size: Size of the pooled entropy. This parameter affects the query speed significantly.
+            cache_depth: Unused; deprecated.
+            safety: Unused; deprecated.
+        """
+
+        if t1 is None:
+            t1 = t0 + 1
+        if w1 is None:
+            W = None
+        else:
+            W = w1 - w0
+
+        super(BrownianTree, self).__init__(t0=t0,
+                                           t1=t1,
+                                           shape=w0.shape,
+                                           dtype=w0.dtype,
+                                           device=w0.device,
+                                           entropy=entropy,
+                                           tol=tol,
+                                           pool_size=pool_size,
+                                           halfway_tree=True,
+                                           W=W)
+        self._w0 = w0
+
+    def __call__(self, t, tb=None, return_U=False, return_A=False):
+        # Deliberately called t rather than ta, for backward compatibility
+        # The extra tb, return_U, return_A arguments are all needed for compatibility with the current solvers.
+        assert not return_U
+        assert not return_A
+        out = super(BrownianTree, self).__call__(t, tb)
+        if tb is None:
+            out = out + self._w0
+        return out
