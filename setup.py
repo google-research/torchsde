@@ -14,14 +14,21 @@
 
 import os
 import platform
-
+import warnings
 import setuptools
+import subprocess
+import sys
+from importlib import reload
 
 try:
     import torch
     from torch.utils import cpp_extension
 except ModuleNotFoundError:
-    raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.6.0 at https://pytorch.org.")
+    warnings.warn(ModuleNotFoundError("Unable to import torch. Installing torch>=1.6.0"))
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "torch==1.6.0"])
+
+    import torch
+    from torch.utils import cpp_extension
 
 extra_compile_args = []
 extra_link_args = []
