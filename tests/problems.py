@@ -45,9 +45,15 @@ class Ex1(BaseSDE):
         self.mu = nn.Parameter(mu, requires_grad=True)
         self.sigma = nn.Parameter(sigma, requires_grad=True)
 
-    def f(self, t, y):
+        self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
+
+    def f_ito(self, t, y):
         self._nfe += 1
         return self.mu * y
+
+    def f_stratonovich(self, t, y):
+        self._nfe += 1
+        return self.mu * y - .5 * (self.sigma ** 2) * y
 
     def g(self, t, y):
         self._nfe += 1
@@ -66,9 +72,15 @@ class Ex2(BaseSDE):
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
-    def f(self, t, y):
+        self.f = self.f_ito if sde_type == SDE_TYPES.ito else self.f_stratonovich
+
+    def f_ito(self, t, y):
         self._nfe += 1
         return -self.p ** 2. * torch.sin(y) * torch.cos(y) ** 3.
+
+    def f_stratonovich(self, t, y):
+        self._nfe += 1
+        return torch.zeros_like(y)
 
     def g(self, t, y):
         self._nfe += 1
