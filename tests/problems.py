@@ -72,7 +72,7 @@ class Ex2(BaseSDE):
 
     def g(self, t, y):
         self._nfe += 1
-        return (self.p * torch.cos(y) ** 2).unsqueeze(dim=1)
+        return (self.p * torch.cos(y) ** 2).unsqueeze(dim=-1)
 
     @property
     def nfe(self):
