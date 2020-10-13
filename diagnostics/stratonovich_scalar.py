@@ -16,9 +16,9 @@ import os
 
 import torch
 
-from tests.problems import Ex1
+from tests.problems import Ex2
 from torchsde import BrownianInterval
-from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES, NOISE_TYPES
+from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES
 from . import inspection
 from . import utils
 
@@ -28,7 +28,7 @@ def main():
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
-    sde = Ex1(d=d, sde_type=SDE_TYPES.stratonovich, noise_type=NOISE_TYPES.scalar).to(device)
+    sde = Ex2(d=d, sde_type=SDE_TYPES.stratonovich).to(device)
     methods = ('heun', 'euler_heun', 'midpoint', 'milstein', 'milstein')
     options = (None, None, None, None, dict(grad_free=True))
     labels = ('heun', 'euler-heun', 'midpoint', 'milstein', 'grad-free milstein')

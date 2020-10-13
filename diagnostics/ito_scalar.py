@@ -28,7 +28,7 @@ def main():
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
-    sde = Ex2(d=d, noise_type=NOISE_TYPES.scalar).to(device)
+    sde = Ex2(d=d).to(device)
     methods = ('euler', 'srk', 'milstein')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'ito_scalar')
 
