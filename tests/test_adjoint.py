@@ -50,12 +50,12 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
     if method == METHODS.srk and sde_cls.noise_type == NOISE_TYPES.general:
         return
 
-    d = 5
+    d = 3
     m = {
         NOISE_TYPES.scalar: 1,
         NOISE_TYPES.diagonal: d,
-        NOISE_TYPES.general: 3,
-        NOISE_TYPES.additive: 3
+        NOISE_TYPES.general: 2,
+        NOISE_TYPES.additive: 2
     }[sde_cls.noise_type]
     batch_size = 4
     t0, t1 = ts = torch.tensor([0.0, 0.5], device=device)
