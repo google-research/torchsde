@@ -49,6 +49,8 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
         return
     if method == METHODS.milstein and sde_cls.noise_type == NOISE_TYPES.general:
         return
+    if method == METHODS.srk and sde_cls.noise_type == NOISE_TYPES.general:
+        return
 
     d = 5
     m = {
