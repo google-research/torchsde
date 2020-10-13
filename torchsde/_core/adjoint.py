@@ -120,7 +120,7 @@ def sdeint_adjoint(sde: nn.Module,
                    adjoint_params=None,
                    names: Optional[Dict[str, str]] = None,
                    **unused_kwargs) -> Tensor:
-    """Numerically integrate an Itô SDE with stochastic adjoint support.
+    """Numerically integrate an SDE with stochastic adjoint support.
 
     Args:
         sde (torch.nn.Module): Object with methods `f` and `g` representing the
