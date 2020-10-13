@@ -19,6 +19,7 @@ jobs:
       max-parallel: 4
       matrix:
         python-version: [3.6, 3.8]
+        # TODO: Add back windows after blist is removed.
         os: [ubuntu-latest, macOS-latest]
 
     steps:
