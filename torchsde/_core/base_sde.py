@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import abc
 
 import torch
 from torch import nn
 
 from . import misc
-from . import settings
+from ..settings import NOISE_TYPES, SDE_TYPES
 
 
 class BaseSDE(abc.ABC, nn.Module):
@@ -33,119 +29,149 @@ class BaseSDE(abc.ABC, nn.Module):
 
     def __init__(self, noise_type, sde_type):
         super(BaseSDE, self).__init__()
-        if noise_type not in settings.NOISE_TYPES:
-            raise ValueError(f"Expected noise type in {settings.NOISE_TYPES}, but found {noise_type}")
-        if sde_type not in settings.SDE_TYPES:
-            raise ValueError(f"Expected sde type in {settings.SDE_TYPES}, but found {sde_type}")
-        # TODO: Making these Python properties breaks `torch.jit.script`.
+        if noise_type not in NOISE_TYPES:
+            raise ValueError(f"Expected noise type in {NOISE_TYPES}, but found {noise_type}")
+        if sde_type not in SDE_TYPES:
+            raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde_type}")
+        # Making these Python properties breaks `torch.jit.script`.
         self.noise_type = noise_type
         self.sde_type = sde_type
 
 
-# TODO: Lint error "Class SDEIto must implement all abstract methods" comes from changes in torch==1.6.0.
-#  Should be gone in future version. See https://github.com/pytorch/pytorch/issues/42305 for more.
+class ForwardSDE(BaseSDE):
+
+    def __init__(self, sde, fast_dg_ga_jvp_column_sum=False):
+        super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
+        self._base_sde = sde
+        self.f = sde.f
+        self.g = sde.g
+
+        # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
+        # by making sure it's a one-time cost.
+        self.g_prod = {
+            NOISE_TYPES.diagonal: self.g_prod_diagonal,
+        }.get(sde.noise_type, self.g_prod_default)
+        self.gdg_prod = {
+            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
+            NOISE_TYPES.additive: self._return_zero,
+        }.get(sde.noise_type, self.gdg_prod_default)
+        self.dg_ga_jvp_column_sum = {
+            NOISE_TYPES.general: (
+                self.dg_ga_jvp_column_sum_v2 if fast_dg_ga_jvp_column_sum else self.dg_ga_jvp_column_sum_v1
+            )
+        }.get(sde.noise_type, self._return_zero)
+
+    ########################################
+    #                g_prod                #
+    ########################################
+
+    def g_prod_diagonal(self, t, y, v):
+        return self.g(t, y) * v
+
+    def g_prod_default(self, t, y, v):
+        return misc.batch_mvp(self.g(t, y), v)
+
+    ########################################
+    #               gdg_prod               #
+    ########################################
+
+    # Computes: sum_{j, l} g_{j, l} d g_{j, l} d x_i v_l.
+    def gdg_prod_default(self, t, y, v):
+        requires_grad = torch.is_grad_enabled()
+        with torch.enable_grad():
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self.g(t, y)
+            vg_dg_vjp, = misc.vjp(
+                outputs=g,
+                inputs=y,
+                grad_outputs=g * v.unsqueeze(-2),
+                create_graph=requires_grad,
+                allow_unused=True
+            )
+        return vg_dg_vjp
+
+    def gdg_prod_diagonal(self, t, y, v):
+        requires_grad = torch.is_grad_enabled()
+        with torch.enable_grad():
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self.g(t, y)
+            vg_dg_vjp, = misc.vjp(
+                outputs=g,
+                inputs=y,
+                grad_outputs=g * v,
+                create_graph=requires_grad,
+                allow_unused=True
+            )
+        return vg_dg_vjp
+
+    ########################################
+    #              dg_ga_jvp               #
+    ########################################
+
+    # Computes: sum_{j,k,l} d g_{i,l} / d x_j g_{j,k} A_{k,l}.
+    def dg_ga_jvp_column_sum_v1(self, t, y, a):
+        requires_grad = torch.is_grad_enabled()
+        with torch.enable_grad():
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self.g(t, y)
+            ga = torch.bmm(g, a)
+            dg_ga_jvp = [
+                misc.jvp(
+                    outputs=g[..., col_idx],
+                    inputs=y,
+                    grad_inputs=ga[..., col_idx],
+                    retain_graph=True,
+                    create_graph=requires_grad,
+                    allow_unused=True
+                )[0]
+                for col_idx in range(g.size(-1))
+            ]
+            dg_ga_jvp = sum(dg_ga_jvp)
+        return dg_ga_jvp
+
+    def dg_ga_jvp_column_sum_v2(self, t, y, a):
+        # Faster, but more memory intensive.
+        requires_grad = torch.is_grad_enabled()
+        with torch.enable_grad():
+            y = y if y.requires_grad else y.detach().requires_grad_(True)
+            g = self.g(t, y)
+            ga = torch.bmm(g, a)
+
+            batch_size, d, m = g.size()
+            y_dup = torch.repeat_interleave(y, repeats=m, dim=0)
+            g_dup = self.g(t, y_dup)
+            ga_flat = ga.transpose(1, 2).flatten(0, 1)
+            dg_ga_jvp, = misc.jvp(
+                outputs=g_dup,
+                inputs=y_dup,
+                grad_inputs=ga_flat,
+                create_graph=requires_grad,
+                allow_unused=True
+            )
+            dg_ga_jvp = dg_ga_jvp.reshape(batch_size, m, d, m).permute(0, 2, 1, 3)
+            dg_ga_jvp = dg_ga_jvp.diagonal(dim1=-2, dim2=-1).sum(-1)
+        return dg_ga_jvp
+
+    def _return_zero(self, t, y, v):  # noqa
+        return 0.
+
+
+class RenameMethodsSDE(BaseSDE):
+
+    def __init__(self, sde, drift='f', diffusion='g'):
+        super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
+        self._base_sde = sde
+        self.f = getattr(sde, drift)
+        self.g = getattr(sde, diffusion)
+
+
 class SDEIto(BaseSDE):
 
     def __init__(self, noise_type):
-        super(SDEIto, self).__init__(noise_type=noise_type, sde_type='ito')
-
-
-class ForwardSDEIto(SDEIto):
-    """Wrapper SDE for the forward pass.
-
-    `g_prod` and `gdg_prod` are additional functions that high-order solvers will call.
-    """
-
-    def __init__(self, base_sde):
-        super(ForwardSDEIto, self).__init__(noise_type=base_sde.noise_type)
-        self._base_sde = base_sde
-
-    def f(self, t, y):
-        return self._base_sde.f(t, y)
-
-    def g(self, t, y):
-        return self._base_sde.g(t, y)
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y)
-
-    def g_prod(self, t, y, v):
-        if self.noise_type == "diagonal":
-            return misc.seq_mul(self._base_sde.g(t, y), v)
-        elif self.noise_type == "scalar":
-            return misc.seq_mul_bc(self._base_sde.g(t, y), v)
-        return misc.seq_batch_mvp(ms=self._base_sde.g(t, y), vs=v)
-
-    def gdg_prod(self, t, y, v):
-        with torch.enable_grad():
-            y = [y_.detach().requires_grad_(True) if not y_.requires_grad else y_ for y_ in y]
-            val = self._base_sde.g(t, y)
-            val = misc.make_seq_requires_grad(val)
-            vjp_val = misc.grad(
-                outputs=val, inputs=y, grad_outputs=misc.seq_mul(val, v), create_graph=True, allow_unused=True)
-            vjp_val = misc.convert_none_to_zeros(vjp_val, y)
-        return vjp_val
-
-
-class AdjointSDEIto(SDEIto):
-    """Base class for reverse-time adjoint SDE.
-
-    Each forward SDE with different noise type has a different adjoint SDE.
-    """
-
-    def __init__(self, base_sde, noise_type):
-        super(AdjointSDEIto, self).__init__(noise_type=noise_type)
-        self._base_sde = base_sde
-
-    @abc.abstractmethod
-    def f(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def g(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def h(self, t, y):
-        pass
-
-    @abc.abstractmethod
-    def g_prod(self, t, y, v):
-        pass
-
-    @abc.abstractmethod
-    def gdg_prod(self, t, y, v):
-        pass
+        super(SDEIto, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.ito)
 
 
 class SDEStratonovich(BaseSDE):
 
     def __init__(self, noise_type):
-        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type='stratonovich')
-
-
-class TupleSDE(BaseSDE):
-
-    def __init__(self, base_sde):
-        super(TupleSDE, self).__init__(noise_type=base_sde.noise_type, sde_type=base_sde.sde_type)
-        self._base_sde = base_sde
-
-    def f(self, t, y):
-        return self._base_sde.f(t, y[0]),
-
-    def g(self, t, y):
-        return self._base_sde.g(t, y[0]),
-
-    def h(self, t, y):
-        return self._base_sde.h(t, y[0]),
-
-
-class RenameMethodsSDE(BaseSDE):
-
-    def __init__(self, base_sde, drift='f', diffusion='g', prior_drift='h'):
-        super(RenameMethodsSDE, self).__init__(noise_type=base_sde.noise_type, sde_type=base_sde.sde_type)
-        self._base_sde = base_sde
-        self.f = getattr(base_sde, drift)
-        self.g = getattr(base_sde, diffusion)
-        if hasattr(base_sde, prior_drift):
-            self.h = getattr(base_sde, prior_drift)
+        super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.stratonovich)

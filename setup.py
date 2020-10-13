@@ -52,12 +52,12 @@ else:
 
 setuptools.setup(
     name="torchsde",
-    version="0.1.1",
+    version="0.1.2",
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
     url="https://github.com/google-research/torchsde",
-    packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
+    packages=setuptools.find_packages(exclude=['diagnostics', 'tests', 'benchmarks']),
     ext_modules=[
         extension_func(name='torchsde._brownian_lib',
                        sources=sources,
@@ -67,7 +67,8 @@ setuptools.setup(
                        optional=True)
     ],
     cmdclass={'build_ext': cpp_extension.BuildExtension},
-    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0', 'scipy'],
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.19.1', 'boltons>=20.2.1', 'scipy'],
+    python_requires='~=3.6',
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",

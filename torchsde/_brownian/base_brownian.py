@@ -12,45 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import abc
 
+from .._core import better_abc
 
-class Brownian(abc.ABC):
 
-    def __init__(self):
-        pass
-
+class BaseBrownian(metaclass=better_abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, *args, **kwargs):
-        pass
+    def __call__(self, ta, tb, return_U=False, return_A=False):
+        raise NotImplementedError
 
     @abc.abstractmethod
     def __repr__(self):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def to(self, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
-    @property
-    @abc.abstractmethod
-    def dtype(self):
-        pass
+    dtype = better_abc.abstract_attribute()
+    device = better_abc.abstract_attribute()
+    shape = better_abc.abstract_attribute()
+    levy_area_approximation = better_abc.abstract_attribute()
 
-    @property
-    @abc.abstractmethod
-    def device(self):
-        pass
-
-    @property
-    @abc.abstractmethod
-    def shape(self):
-        pass
-
-    @abc.abstractmethod
     def size(self):
-        pass
+        return self.shape

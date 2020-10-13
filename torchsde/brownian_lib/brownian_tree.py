@@ -13,23 +13,26 @@
 # limitations under the License.
 
 import random
-from typing import Union, Optional
+import warnings
 
 import torch
 from torchsde._brownian_lib import BrownianTree as _BrownianTree  # noqa
 
-from torchsde._brownian import utils  # noqa
-from torchsde._brownian.base_brownian import Brownian  # noqa
+from .._brownian import base_brownian
+from .._brownian import utils
+from .._core.misc import handle_unused_kwargs
+from ..settings import LEVY_AREA_APPROXIMATIONS
+from ..types import Scalar, Optional
 
 
-class BrownianTree(Brownian):
+class BrownianTree(base_brownian.BaseBrownian):
     """Brownian tree with fixed entropy.
 
     Trades in speed for memory.
 
     To use:
     >>> bm = BrownianTree(t0=0.0, w0=torch.zeros(4, 1))
-    >>> bm(0.5)
+    >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
             [ 0.1872],
@@ -37,15 +40,19 @@ class BrownianTree(Brownian):
     """
 
     def __init__(self,
-                 t0: Union[float, torch.Tensor],
+                 t0: Scalar,
                  w0: torch.Tensor,
-                 t1: Optional[Union[float, torch.Tensor]] = None,
+                 t1: Optional[Scalar] = None,
                  w1: Optional[torch.Tensor] = None,
                  entropy: Optional[int] = None,
                  tol: float = 1e-6,
                  cache_depth: int = 9,
                  safety: Optional[float] = None,
-                 **kwargs):  # noqa
+                 levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
+                 **unused_kwargs):
+        handle_unused_kwargs(unused_kwargs, msg=self.__class__.__name__)
+        del unused_kwargs
+
         super(BrownianTree, self).__init__()
         if not utils.is_scalar(t0):
             raise ValueError('Initial time t0 should be a float or 0-d torch.Tensor.')
@@ -56,6 +63,12 @@ class BrownianTree(Brownian):
             raise ValueError('Terminal time t1 should be a float or 0-d torch.Tensor.')
         if t0 > t1:
             raise ValueError(f'Initial time {t0} should be less than terminal time {t1}.')
+
+        if levy_area_approximation != LEVY_AREA_APPROXIMATIONS.none:
+            raise ValueError(
+                "Only BrownianInterval currently supports levy_area_approximation for values other than 'none'."
+            )
+
         t0, t1 = float(t0), float(t1)
 
         if safety is None:
@@ -93,8 +106,34 @@ class BrownianTree(Brownian):
         self.tol = tol
         self.cache_depth = cache_depth
         self.safety = safety
+        self.levy_area_approximation = levy_area_approximation
 
-    def __call__(self, t):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
+        if tb is None:
+            W = self.call(ta)
+        else:
+            W = self.call(tb) - self.call(ta)
+        U = None
+        A = None
+
+        if return_U:
+            if return_A:
+                return W, U, A
+            else:
+                return W, U
+        else:
+            if return_A:
+                return W, A
+            else:
+                return W
+
+    def call(self, t):
+        if t < self._t0:
+            warnings.warn(f"Should have t>=t0 but got t={t} and t0={self._t0}.")
+            t = self._t0
+        if t > self._t1:
+            warnings.warn(f"Should have t<=t1 but got t={t} and t1={self._t1}.")
+            t = self._t1
         return self._bm(t)
 
     def __repr__(self):
@@ -129,9 +168,6 @@ class BrownianTree(Brownian):
     @property
     def shape(self):
         return self._bm.get_w0().shape
-
-    def size(self):
-        return self._bm.get_w0().size()
 
     def get_cache(self):
         return self._bm.get_cache()

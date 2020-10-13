@@ -12,43 +12,89 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import argparse
 import logging
 import math
 import os
+import random
 from collections import namedtuple
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.random as npr
 import torch
 import tqdm
-from torch import nn, optim
-from torch.distributions import Normal, Laplace, kl_divergence
+from torch import nn, optim, distributions
 
-from examples import utils
-from torchsde import sdeint, sdeint_adjoint, SDEIto, BrownianPath
+import torchsde
 
+# w/ underscore -> numpy; w/o underscore -> torch.
 Data = namedtuple('Data', ['ts_', 'ts_ext_', 'ts_vis_', 'ts', 'ts_ext', 'ts_vis', 'ys', 'ys_'])
 
 
-class LatentSDE(SDEIto):
+class LinearScheduler(object):
+    def __init__(self, iters, maxval=1.0):
+        self._iters = max(1, iters)
+        self._val = maxval / self._iters
+        self._maxval = maxval
+
+    def step(self):
+        self._val = min(self._maxval, self._val + self._maxval / self._iters)
+
+    @property
+    def val(self):
+        return self._val
+
+
+class EMAMetric(object):
+    def __init__(self, gamma: Optional[float] = .99):
+        super(EMAMetric, self).__init__()
+        self._val = 0.
+        self._gamma = gamma
+
+    def step(self, x: Union[torch.Tensor, np.ndarray]):
+        x = x.detach().cpu().numpy() if torch.is_tensor(x) else x
+        self._val = self._gamma * self._val + (1 - self._gamma) * x
+        return self._val
+
+    @property
+    def val(self):
+        return self._val
+
+
+def str2bool(v):
+    """Used for boolean arguments in argparse; avoiding `store_true` and `store_false`."""
+    if isinstance(v, bool): return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'): return False
+    else: raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def manual_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def _stable_division(a, b, epsilon=1e-7):
+    b = torch.where(b.abs().detach() > epsilon, b, torch.full_like(b, fill_value=epsilon) * b.sign())
+    return a / b
+
+
+class LatentSDE(torchsde.SDEIto):
 
     def __init__(self, theta=1.0, mu=0.0, sigma=0.5):
         super(LatentSDE, self).__init__(noise_type="diagonal")
+        logvar = math.log(sigma ** 2 / (2. * theta))
+
         # Prior drift.
-        self.theta = nn.Parameter(torch.tensor([[theta]]), requires_grad=False)
-        self.mu = nn.Parameter(torch.tensor([[mu]]), requires_grad=False)
-        self.sigma = nn.Parameter(torch.tensor([[sigma]]), requires_grad=False)
+        self.register_buffer("theta", torch.tensor([[theta]]))
+        self.register_buffer("mu", torch.tensor([[mu]]))
+        self.register_buffer("sigma", torch.tensor([[sigma]]))
 
         # p(y0).
-        logvar = math.log(sigma ** 2. / (2. * theta))
-        self.py0_mean = nn.Parameter(torch.tensor([[mu]]), requires_grad=False)
-        self.py0_logvar = nn.Parameter(torch.tensor([[logvar]]), requires_grad=False)
+        self.register_buffer("py0_mean", torch.tensor([[mu]]))
+        self.register_buffer("py0_logvar", torch.tensor([[logvar]]))
 
         # Approximate posterior drift: Takes in 2 positional encodings and the state.
         self.net = nn.Sequential(
@@ -58,6 +104,7 @@ class LatentSDE(SDEIto):
             nn.Tanh(),
             nn.Linear(200, 1)
         )
+        # Initialization trick from Glow.
         self.net[-1].weight.data.fill_(0.)
         self.net[-1].bias.data.fill_(0.)
 
@@ -65,52 +112,63 @@ class LatentSDE(SDEIto):
         self.qy0_mean = nn.Parameter(torch.tensor([[mu]]), requires_grad=True)
         self.qy0_logvar = nn.Parameter(torch.tensor([[logvar]]), requires_grad=True)
 
-    def h(self, t, y):  # Prior drift.
-        return self.theta * (self.mu - y)
-
     def f(self, t, y):  # Approximate posterior drift.
         if t.dim() == 0:
-            t = float(t) * torch.ones_like(y)
-        # Positional encoding in transformers; must use `t`, since the posterior is likely inhomogeneous.
-        inp = torch.cat((torch.sin(t), torch.cos(t), y), dim=-1)
-        return self.net(inp)
+            t = torch.full_like(y, fill_value=t)
+        # Positional encoding in transformers for time-inhomogeneous posterior.
+        return self.net(torch.cat((torch.sin(t), torch.cos(t), y), dim=-1))
 
     def g(self, t, y):  # Shared diffusion.
         return self.sigma.repeat(y.size(0), 1)
 
+    def h(self, t, y):  # Prior drift.
+        return self.theta * (self.mu - y)
+
+    def f_aug(self, t, y):  # Drift for augmented dynamics with logqp term.
+        y = y[:, 0:1]
+        f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
+        u = _stable_division(f - h, g)
+        f_logqp = .5 * torch.norm(u, dim=1, keepdim=True) ** 2
+        return torch.cat([f, f_logqp], dim=1)
+
+    def g_aug(self, t, y):  # Diffusion for augmented dynamics with logqp term.
+        y = y[:, 0:1]
+        g = self.g(t, y)
+        g_logqp = torch.zeros_like(y)
+        return torch.cat([g, g_logqp], dim=1)
+
     def forward(self, ts, batch_size, eps=None):
         eps = torch.randn(batch_size, 1).to(self.qy0_std) if eps is None else eps
         y0 = self.qy0_mean + eps * self.qy0_std
+        qy0 = distributions.Normal(loc=self.qy0_mean, scale=self.qy0_std)
+        py0 = distributions.Normal(loc=self.py0_mean, scale=self.py0_std)
+        logqp0 = distributions.kl_divergence(qy0, py0).sum(dim=1)  # KL(t=0).
 
-        qy0 = Normal(loc=self.qy0_mean, scale=self.qy0_std)
-        py0 = Normal(loc=self.py0_mean, scale=self.py0_std)
-        logqp0 = kl_divergence(qy0, py0).sum(1).mean(0)  # KL(time=0).
-
-        # `trapezoidal_approx` is for SRK. Disabling it gives better performance.
-        if args.adjoint:
-            zs, logqp = sdeint_adjoint(
-                self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
-            )
-        else:
-            zs, logqp = sdeint(
-                self, y0, ts, logqp=True, method=args.method, dt=args.dt, adaptive=args.adaptive, rtol=args.rtol,
-                atol=args.atol, options={'trapezoidal_approx': False}
-            )
-        logqp = logqp.sum(0).mean(0)
-        log_ratio = logqp0 + logqp  # KL(time=0) + KL(path).
-
-        return zs, log_ratio
+        aug_y0 = torch.cat([y0, torch.zeros(batch_size, 1).to(y0)], dim=1)
+        aug_ys = sdeint_fn(
+            sde=self,
+            y0=aug_y0,
+            ts=ts,
+            method=args.method,
+            dt=args.dt,
+            adaptive=args.adaptive,
+            rtol=args.rtol,
+            atol=args.atol,
+            names={'drift': 'f_aug', 'diffusion': 'g_aug'}
+        )
+        ys, logqp_path = aug_ys[:, :, 0:1], aug_ys[-1, :, 1]
+        logqp = (logqp0 + logqp_path).mean(dim=0)  # KL(t=0) + KL(path).
+        return ys, logqp
 
     def sample_p(self, ts, batch_size, eps=None, bm=None):
         eps = torch.randn(batch_size, 1).to(self.py0_mean) if eps is None else eps
         y0 = self.py0_mean + eps * self.py0_std
-        return sdeint(self, y0, ts, bm=bm, method='srk', dt=args.dt, names={'drift': 'h'})
+        return sdeint_fn(self, y0, ts, bm=bm, method='srk', dt=args.dt, names={'drift': 'h'})
 
     def sample_q(self, ts, batch_size, eps=None, bm=None):
         eps = torch.randn(batch_size, 1).to(self.qy0_mean) if eps is None else eps
         y0 = self.qy0_mean + eps * self.qy0_std
-        return sdeint(self, y0, ts, bm=bm, method='srk', dt=args.dt)
+        return sdeint_fn(self, y0, ts, bm=bm, method='srk', dt=args.dt)
 
     @property
     def py0_std(self):
@@ -122,38 +180,37 @@ class LatentSDE(SDEIto):
 
 
 def make_segmented_cosine_data():
-    with torch.no_grad():
-        ts_ = np.concatenate((np.linspace(0.3, 0.8, 10), np.linspace(1.2, 1.5, 10)), axis=0)
-        ts_ext_ = np.array([0.] + list(ts_) + [2.0])
-        ts_vis_ = np.linspace(0., 2.0, 300)
-        ys_ = np.cos(ts_ * (2. * math.pi))[:, None]
+    ts_ = np.concatenate((np.linspace(0.3, 0.8, 10), np.linspace(1.2, 1.5, 10)), axis=0)
+    ts_ext_ = np.array([0.] + list(ts_) + [2.0])
+    ts_vis_ = np.linspace(0., 2.0, 300)
+    ys_ = np.cos(ts_ * (2. * math.pi))[:, None]
 
-        ts = torch.tensor(ts_).float()
-        ts_ext = torch.tensor(ts_ext_).float()
-        ts_vis = torch.tensor(ts_vis_).float()
-        ys = torch.tensor(ys_).float().to(device)
-        return Data(ts_, ts_ext_, ts_vis_, ts, ts_ext, ts_vis, ys, ys_)
+    ts = torch.tensor(ts_).float()
+    ts_ext = torch.tensor(ts_ext_).float()
+    ts_vis = torch.tensor(ts_vis_).float()
+    ys = torch.tensor(ys_).float().to(device)
+    return Data(ts_, ts_ext_, ts_vis_, ts, ts_ext, ts_vis, ys, ys_)
 
 
 def make_irregular_sine_data():
-    with torch.no_grad():
-        ts_ = np.sort(npr.uniform(low=0.4, high=1.6, size=16))
-        ts_ext_ = np.array([0.] + list(ts_) + [2.0])
-        ts_vis_ = np.linspace(0., 2.0, 300)
-        ys_ = np.sin(ts_ * (2. * math.pi))[:, None] * 0.8
+    ts_ = np.sort(np.random.uniform(low=0.4, high=1.6, size=16))
+    ts_ext_ = np.array([0.] + list(ts_) + [2.0])
+    ts_vis_ = np.linspace(0., 2.0, 300)
+    ys_ = np.sin(ts_ * (2. * math.pi))[:, None] * 0.8
 
-        ts = torch.tensor(ts_).float()
-        ts_ext = torch.tensor(ts_ext_).float()
-        ts_vis = torch.tensor(ts_vis_).float()
-        ys = torch.tensor(ys_).float().to(device)
-        return Data(ts_, ts_ext_, ts_vis_, ts, ts_ext, ts_vis, ys, ys_)
+    ts = torch.tensor(ts_).float()
+    ts_ext = torch.tensor(ts_ext_).float()
+    ts_vis = torch.tensor(ts_vis_).float()
+    ys = torch.tensor(ys_).float().to(device)
+    return Data(ts_, ts_ext_, ts_vis_, ts, ts_ext, ts_vis, ys, ys_)
 
 
 def make_data():
-    return {
-        'segmented_cosine': make_segmented_cosine_data(),
-        'irregular_sine': make_irregular_sine_data()
+    data_constructor = {
+        'segmented_cosine': make_segmented_cosine_data,
+        'irregular_sine': make_irregular_sine_data
     }[args.data]
+    return data_constructor()
 
 
 def main():
@@ -165,7 +222,7 @@ def main():
     ylims = (-1.75, 1.75)
     alphas = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
     percentiles = [0.999, 0.99, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-    vis_idx = npr.permutation(vis_batch_size)
+    vis_idx = np.random.permutation(vis_batch_size)
     # From https://colorbrewer2.org/.
     if args.color == "blue":
         sample_colors = ('#8c96c6', '#8c6bb1', '#810f7c')
@@ -178,19 +235,24 @@ def main():
         mean_color = '#800026'
         num_samples = len(sample_colors)
 
-    # Fix seed for the random draws used in the plots.
-    eps = torch.randn(vis_batch_size, 1).to(device)
-    bm = BrownianPath(t0=ts_vis[0], w0=torch.zeros(vis_batch_size, 1).to(device))
+    eps = torch.randn(vis_batch_size, 1).to(device)  # Fix seed for the random draws used in the plots.
+    bm = torchsde.BrownianInterval(
+        t0=ts_vis[0],
+        t1=ts_vis[-1],
+        shape=(vis_batch_size, 1),
+        device=device,
+        levy_area_approximation='space-time'
+    )  # We need space-time Levy area to use the SRK solver
 
     # Model.
     model = LatentSDE().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=.999)
-    kl_scheduler = utils.LinearScheduler(iters=args.kl_anneal_iters)
+    kl_scheduler = LinearScheduler(iters=args.kl_anneal_iters)
 
-    logp_metric = utils.EMAMetric()
-    log_ratio_metric = utils.EMAMetric()
-    loss_metric = utils.EMAMetric()
+    logpy_metric = EMAMetric()
+    kl_metric = EMAMetric()
+    loss_metric = EMAMetric()
 
     if args.show_prior:
         with torch.no_grad():
@@ -268,44 +330,51 @@ def main():
 
                 if args.save_ckpt:
                     torch.save(
-                        {'model': model.state_dict()}, os.path.join(ckpt_dir, f'global_step_{global_step}.ckpt')
+                        {'model': model.state_dict(),
+                         'optimizer': optimizer.state_dict(),
+                         'scheduler': scheduler.state_dict(),
+                         'kl_scheduler': kl_scheduler},
+                        os.path.join(ckpt_dir, f'global_step_{global_step}.ckpt')
                     )
 
         # Train.
         optimizer.zero_grad()
-        zs, log_ratio = model(ts=ts_ext, batch_size=args.batch_size)
+        zs, kl = model(ts=ts_ext, batch_size=args.batch_size)
         zs = zs.squeeze()
         zs = zs[1:-1]  # Drop first and last which are only used to penalize out-of-data region and spread uncertainty.
 
-        likelihood = {
-            "laplace": Laplace(loc=zs, scale=args.scale),
-            "normal": Normal(loc=zs, scale=args.scale)
-        }[args.likelihood]
-        logp = likelihood.log_prob(ys).sum(dim=0).mean(dim=0)
+        likelihood_constructor = {"laplace": distributions.Laplace, "normal": distributions.Normal}[args.likelihood]
+        likelihood = likelihood_constructor(loc=zs, scale=args.scale)
+        logpy = likelihood.log_prob(ys).sum(dim=0).mean(dim=0)
 
-        loss = -logp + log_ratio * kl_scheduler()
+        loss = -logpy + kl * kl_scheduler.val
         loss.backward()
+
         optimizer.step()
         scheduler.step()
         kl_scheduler.step()
 
-        logp_metric.step(logp)
-        log_ratio_metric.step(log_ratio)
+        logpy_metric.step(logpy)
+        kl_metric.step(kl)
         loss_metric.step(loss)
 
         logging.info(
             f'global_step: {global_step}, '
-            f'logp: {logp_metric.val():.3f}, log_ratio: {log_ratio_metric.val():.3f}, loss: {loss_metric.val():.3f}'
+            f'logpy: {logpy_metric.val:.3f}, '
+            f'kl: {kl_metric.val:.3f}, '
+            f'loss: {loss_metric.val:.3f}'
         )
 
 
 if __name__ == '__main__':
+    # The argparse format supports both `--boolean-argument` and `--boolean-argument True`.
+    # Trick from https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse.
     parser = argparse.ArgumentParser()
-    parser.add_argument('--no-gpu', action='store_true')
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--no-gpu', type=str2bool, default=False, const=True, nargs="?")
+    parser.add_argument('--debug', type=str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--train-dir', type=str, required=True)
-    parser.add_argument('--save-ckpt', action='store_true')
+    parser.add_argument('--save-ckpt', type=str2bool, default=False, const=True, nargs="?")
 
     parser.add_argument('--data', type=str, default='segmented_cosine', choices=['segmented_cosine', 'irregular_sine'])
     parser.add_argument('--kl-anneal-iters', type=int, default=100, help='Number of iterations for linear KL schedule.')
@@ -315,33 +384,33 @@ if __name__ == '__main__':
     parser.add_argument('--likelihood', type=str, choices=['normal', 'laplace'], default='laplace')
     parser.add_argument('--scale', type=float, default=0.05, help='Scale parameter of Normal and Laplace.')
 
-    parser.add_argument('--adjoint', action='store_true')
-    parser.add_argument('--adaptive', action='store_true')
+    parser.add_argument('--adjoint', type=str2bool, default=False, const=True, nargs="?")
+    parser.add_argument('--adaptive', type=str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--method', type=str, default='euler', choices=('euler', 'milstein', 'srk'),
                         help='Name of numerical solver.')
     parser.add_argument('--dt', type=float, default=1e-2)
     parser.add_argument('--rtol', type=float, default=1e-3)
     parser.add_argument('--atol', type=float, default=1e-3)
 
-    parser.add_argument('--show-prior', type=utils.str2bool, default=True)
-    parser.add_argument('--show-samples', type=utils.str2bool, default=True)
-    parser.add_argument('--show-percentiles', type=utils.str2bool, default=True)
-    parser.add_argument('--show-arrows', type=utils.str2bool, default=True)
-    parser.add_argument('--show-mean', type=utils.str2bool, default=False)
-    parser.add_argument('--hide-ticks', type=utils.str2bool, default=False)
+    parser.add_argument('--show-prior', type=str2bool, default=True, const=True, nargs="?")
+    parser.add_argument('--show-samples', type=str2bool, default=True, const=True, nargs="?")
+    parser.add_argument('--show-percentiles', type=str2bool, default=True, const=True, nargs="?")
+    parser.add_argument('--show-arrows', type=str2bool, default=True, const=True, nargs="?")
+    parser.add_argument('--show-mean', type=str2bool, default=False, const=True, nargs="?")
+    parser.add_argument('--hide-ticks', type=str2bool, default=False, const=True, nargs="?")
     parser.add_argument('--dpi', type=int, default=300)
     parser.add_argument('--color', type=str, default='blue', choices=('blue', 'red'))
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
-
-    npr.seed(args.seed)
-    torch.manual_seed(args.seed)
+    manual_seed(args.seed)
 
     if args.debug:
         logging.getLogger().setLevel(logging.INFO)
 
     ckpt_dir = os.path.join(args.train_dir, 'ckpts')
-    utils.makedirs_if_not_found(args.train_dir, ckpt_dir)
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    sdeint_fn = torchsde.sdeint_adjoint if args.adjoint else torchsde.sdeint
 
     main()

@@ -13,14 +13,12 @@
 # limitations under the License.
 
 """Problems of various noise types."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import torch
 from torch import nn
 
-from torchsde import SDEIto
+from torchsde import SDEIto, BaseSDE
+
+from torchsde.settings import SDE_TYPES
 
 
 class BasicSDE1(SDEIto):
@@ -114,9 +112,9 @@ class GeneralSDE(SDEIto):
         return torch.sigmoid(y)
 
 
-class AdditiveSDE(SDEIto):
-    def __init__(self, d=10, m=3):
-        super(AdditiveSDE, self).__init__(noise_type="additive")
+class AdditiveSDE(BaseSDE):
+    def __init__(self, d=10, m=3, sde_type=SDE_TYPES.ito):
+        super(AdditiveSDE, self).__init__(noise_type="additive", sde_type=sde_type)
         self.f_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
         self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, m)), requires_grad=True)
 
@@ -133,11 +131,8 @@ class AdditiveSDE(SDEIto):
 class ScalarSDE(AdditiveSDE):
     def __init__(self, d=10, m=3):
         super(ScalarSDE, self).__init__(d=d, m=m)
-        self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d)), requires_grad=True)
+        self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, 1)), requires_grad=True)
         self.noise_type = "scalar"
-
-    def g(self, t, y):
-        return self.g_param.repeat(y.size(0), 1)
 
 
 class TupleSDE(SDEIto):

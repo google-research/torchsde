@@ -12,28 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import functools
-import operator
-import types
+import warnings
 
 import torch
 
 
+def assert_no_grad(names, maybe_tensors):
+    for name, maybe_tensor in zip(names, maybe_tensors):
+        if torch.is_tensor(maybe_tensor) and maybe_tensor.requires_grad:
+            raise ValueError(f"Argument {name} must not require gradient.")
+
+
+def handle_unused_kwargs(unused_kwargs, msg=None):
+    if len(unused_kwargs) > 0:
+        if msg is not None:
+            warnings.warn(f"{msg}: Unexpected arguments {unused_kwargs}")
+        else:
+            warnings.warn(f"Unexpected arguments {unused_kwargs}")
+
+
 def flatten(sequence):
-    flat = [p.reshape(-1) for p in sequence]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
-
-
-def flatten_convert_none_to_zeros(sequence, like_sequence):
-    flat = [
-        p.reshape(-1) if p is not None else torch.zeros_like(q).reshape(-1)
-        for p, q in zip(sequence, like_sequence)
-    ]
-    return torch.cat(flat) if len(flat) > 0 else torch.tensor([])
+    return torch.cat([p.reshape(-1) for p in sequence]) if len(sequence) > 0 else torch.tensor([])
 
 
 def convert_none_to_zeros(sequence, like_sequence):
@@ -41,19 +40,11 @@ def convert_none_to_zeros(sequence, like_sequence):
 
 
 def make_seq_requires_grad(sequence):
-    """Replace tensors in sequence that doesn't require gradients with tensors that requires gradients.
-
-    Args:
-        sequence: an Iterable of tensors.
-
-    Returns:
-        A list of tensors that all require gradients.
-    """
     return [p if p.requires_grad else p.detach().requires_grad_(True) for p in sequence]
 
 
-def is_increasing(t):
-    return torch.all(torch.gt(t[1:], t[:-1]))
+def is_strictly_increasing(ts):
+    return all(x < y for x, y in zip(ts[:-1], ts[1:]))
 
 
 def is_nan(t):
@@ -64,95 +55,49 @@ def seq_add(*seqs):
     return [sum(seq) for seq in zip(*seqs)]
 
 
-def seq_mul(*seqs):
-    return [functools.reduce(operator.mul, seq) for seq in zip(*seqs)]
-
-
-def seq_mul_bc(*seqs):  # Supports broadcasting.
-    soln = []
-    for seq in zip(*seqs):
-        cumprod = seq[0]
-        for tensor in seq[1:]:
-            # Insert dummy dims at the end of the tensor with fewer dims.
-            num_missing_dims = cumprod.dim() - tensor.dim()
-            if num_missing_dims > 0:
-                new_size = tensor.size() + (1,) * num_missing_dims
-                tensor = tensor.reshape(*new_size)
-            elif num_missing_dims < 0:
-                new_size = cumprod.size() + (1,) * num_missing_dims
-                cumprod = cumprod.reshape(*new_size)
-            cumprod = cumprod * tensor
-        soln += [cumprod]
-    return soln
-
-
 def seq_sub(xs, ys):
     return [x - y for x, y in zip(xs, ys)]
 
 
-def seq_div(xs, ys):
-    return [_stable_div(x, y) for x, y in zip(xs, ys)]
-
-
-def seq_sub_div(xs, ys, zs):
-    return [_stable_div(x - y, z) for x, y, z in zip(xs, ys, zs)]
-
-
-def _stable_div(x: torch.Tensor, y: torch.Tensor, epsilon: float = 1e-7):
-    y = torch.where(
-        y.abs() > epsilon,
-        y,
-        torch.ones_like(y).fill_(epsilon) * y.sign()
-    )
-    return x / y
-
-
-def seq_batch_mvp(ms, vs):
-    return [batch_mvp(m, v) for m, v in zip(ms, vs)]
-
-
-def is_seq_not_nested(x):
-    if not _is_tuple_or_list(x):
-        return False
-    for xi in x:
-        if _is_tuple_or_list(xi):
-            return False
-    return True
-
-
-def _is_tuple_or_list(x):
-    return isinstance(x, tuple) or isinstance(x, list)
-
-
-def join(*iterables):
-    """Return a generator which is an aggregate of all input generators.
-
-    Useful for combining parameters of different `nn.Module` objects.
-    """
-    for iterable in iterables:
-        assert isinstance(iterable, types.GeneratorType)
-        yield from iterable
-
-
 def batch_mvp(m, v):
-    """Batched matrix vector product.
-
-    Args:
-        m: A tensor of size (batch_size, d, m).
-        v: A tensor of size (batch_size, m).
-
-    Returns:
-        A tensor of size (batch_size, d).
-    """
-    v = v.unsqueeze(dim=-1)  # (batch_size, m, 1)
-    mvp = torch.bmm(m, v)  # (batch_size, d, 1)
-    mvp = mvp.squeeze(dim=-1)  # (batch_size, d)
-    return mvp
+    return torch.bmm(m, v.unsqueeze(-1)).squeeze(dim=-1)
 
 
-def grad(inputs, **kwargs):
-    # Workaround for PyTorch bug #39784
+def vjp(outputs, inputs, **kwargs):
     if torch.is_tensor(inputs):
-        inputs = (inputs,)
-    _inputs = [torch.as_strided(input_, (), ()) for input_ in inputs]
-    return torch.autograd.grad(inputs=inputs, **kwargs)
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
+    outputs = make_seq_requires_grad(outputs)
+
+    _vjp = torch.autograd.grad(outputs, inputs, **kwargs)
+    return convert_none_to_zeros(_vjp, inputs)
+
+
+def jvp(outputs, inputs, grad_inputs=None, **kwargs):
+    # Unlike `torch.autograd.functional.jvp`, this function avoids repeating forward computation.
+    if torch.is_tensor(inputs):
+        inputs = [inputs]
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+
+    if torch.is_tensor(outputs):
+        outputs = [outputs]
+    outputs = make_seq_requires_grad(outputs)
+
+    dummy_outputs = [torch.zeros_like(o, requires_grad=True) for o in outputs]
+    _vjp = torch.autograd.grad(outputs, inputs, grad_outputs=dummy_outputs, create_graph=True, allow_unused=True)
+    _vjp = make_seq_requires_grad(convert_none_to_zeros(_vjp, inputs))
+
+    _jvp = torch.autograd.grad(_vjp, dummy_outputs, grad_outputs=grad_inputs, **kwargs)
+    return convert_none_to_zeros(_jvp, dummy_outputs)
+
+
+def flat_to_shape(flat_tensor, shapes):
+    """Convert a flat tensor to a list of tensors with specified shapes.
+
+    `flat_tensor` must have exactly the number of elements as stated in `shapes`.
+    """
+    numels = [shape.numel() for shape in shapes]
+    return [flat.reshape(shape) for flat, shape in zip(flat_tensor.split(split_size=numels), shapes)]
