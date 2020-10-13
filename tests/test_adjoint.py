@@ -42,8 +42,6 @@ stratonovich_methods = {'midpoint': 'stratonovich', 'log_ode': 'stratonovich'}
 @pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
 @pytest.mark.parametrize('adaptive', (False, True))
 def test_adjoint(sde_cls, method, sde_type, adaptive):
-    if method == METHODS.euler and adaptive:  # Skip this, since no theoretical guarantee.
-        return
     # Skipping below, since method not supported for corresponding noise types.
     if method == METHODS.log_ode_midpoint and sde_cls.noise_type == NOISE_TYPES.diagonal:
         return
