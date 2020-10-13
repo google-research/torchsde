@@ -33,8 +33,10 @@ from torchsde.settings import NOISE_TYPES, SDE_TYPES
 
 
 class Ex1(BaseSDE):
+    noise_type = NOISE_TYPES.diagonal
+
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex1, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.diagonal)
+        super(Ex1, self).__init__(sde_type=sde_type, noise_type=Ex1.noise_type)
         self._nfe = 0
 
         # Use non-exploding initialization.
@@ -57,8 +59,10 @@ class Ex1(BaseSDE):
 
 
 class Ex2(BaseSDE):
+    noise_type = NOISE_TYPES.scalar
+
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex2, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.scalar)
+        super(Ex2, self).__init__(sde_type=sde_type, noise_type=Ex2.noise_type)
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
@@ -76,8 +80,10 @@ class Ex2(BaseSDE):
 
 
 class Ex3(BaseSDE):
+    noise_type = NOISE_TYPES.additive
+
     def __init__(self, d, m, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex3, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.additive)
+        super(Ex3, self).__init__(sde_type=sde_type, noise_type=Ex3.noise_type)
         self._nfe = 0
         self.m = m
 
@@ -99,8 +105,10 @@ class Ex3(BaseSDE):
 
 
 class Ex4(BaseSDE):
+    noise_type = NOISE_TYPES.general
+
     def __init__(self, d, m, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex4, self).__init__(sde_type=sde_type, noise_type=NOISE_TYPES.general)
+        super(Ex4, self).__init__(sde_type=sde_type, noise_type=Ex4.noise_type)
         self._nfe = 0
         self.d = d
         self.m = m
