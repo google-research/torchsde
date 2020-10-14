@@ -47,7 +47,7 @@ class ReverseBrownian(brownian_base.BaseBrownian):
         return self.base_brownian.levy_area_approximation
 
 
-class BrownianPath(brownian_interval.BrownianInterval):
+class BrownianPath(brownian_base.BaseBrownian):
     """Brownian path, storing every computed value.
 
     Useful for speed, when memory isn't a concern.
@@ -69,22 +69,38 @@ class BrownianPath(brownian_interval.BrownianInterval):
             window_size: Unused; deprecated.
         """
         t1 = t0 + 1
-        super(BrownianPath, self).__init__(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device,
-                                           cache_size=None)
         self._w0 = w0
+        self._interval = brownian_interval.BrownianInterval(t0=t0, t1=t1, size=w0.shape, dtype=w0.dtype,
+                                                            device=w0.device, cache_size=None)
 
     def __call__(self, t, tb=None, return_U=False, return_A=False):
         # Deliberately called t rather than ta, for backward compatibility
-        # The extra tb, return_U, return_A arguments are all needed for compatibility with the current solvers.
-        assert not return_U
-        assert not return_A
-        out = super(BrownianPath, self).__call__(t, tb)
-        if tb is None:
+        out = super(BrownianPath, self).__call__(t, tb, return_U=return_U, return_A=return_A)
+        if tb is None and not return_U and not return_A:
             out = out + self._w0
         return out
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(interval={self._interval})"
 
-class BrownianTree(brownian_interval.BrownianInterval):
+    @property
+    def dtype(self):
+        return self._interval.dtype
+
+    @property
+    def device(self):
+        return self._interval.device
+
+    @property
+    def shape(self):
+        return self._interval.shape
+
+    @property
+    def levy_area_approximation(self):
+        return self._interval.levy_area_approximation
+
+
+class BrownianTree(brownian_base.BaseBrownian):
     """Brownian tree with fixed entropy.
 
     Useful when the map from entropy -> Brownian motion shouldn't depend on the
@@ -132,25 +148,40 @@ class BrownianTree(brownian_interval.BrownianInterval):
             W = None
         else:
             W = w1 - w0
-
-        super(BrownianTree, self).__init__(t0=t0,
-                                           t1=t1,
-                                           shape=w0.shape,
-                                           dtype=w0.dtype,
-                                           device=w0.device,
-                                           entropy=entropy,
-                                           tol=tol,
-                                           pool_size=pool_size,
-                                           halfway_tree=True,
-                                           W=W)
         self._w0 = w0
+        self._interval = brownian_interval.BrownianInterval(t0=t0,
+                                                            t1=t1,
+                                                            size=w0.shape,
+                                                            dtype=w0.dtype,
+                                                            device=w0.device,
+                                                            entropy=entropy,
+                                                            tol=tol,
+                                                            pool_size=pool_size,
+                                                            halfway_tree=True,
+                                                            W=W)
 
     def __call__(self, t, tb=None, return_U=False, return_A=False):
         # Deliberately called t rather than ta, for backward compatibility
-        # The extra tb, return_U, return_A arguments are all needed for compatibility with the current solvers.
-        assert not return_U
-        assert not return_A
         out = super(BrownianTree, self).__call__(t, tb)
-        if tb is None:
+        if tb is None and not return_U and not return_A:
             out = out + self._w0
         return out
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(interval={self._interval})"
+
+    @property
+    def dtype(self):
+        return self._interval.dtype
+
+    @property
+    def device(self):
+        return self._interval.device
+
+    @property
+    def shape(self):
+        return self._interval.shape
+
+    @property
+    def levy_area_approximation(self):
+        return self._interval.levy_area_approximation

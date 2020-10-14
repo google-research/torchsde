@@ -107,7 +107,7 @@ def check_efficiency():
 
 def test_adjoint_inputs():
     sde = problems.Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
-    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
+    bm = BrownianInterval(t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device)
 
     def func(inputs, modules):
         y0, sde = inputs[0], modules[0]
@@ -119,7 +119,7 @@ def test_adjoint_inputs():
 
 def test_adjoint_params():
     sde = problems.Ex5(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
-    bm = BrownianInterval(t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device)
+    bm = BrownianInterval(t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device)
 
     def func(inputs, modules):
         """Outputs gradient norm squared."""

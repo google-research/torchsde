@@ -71,7 +71,7 @@ def test_adjoint(problem, method, sde_type, noise_type, adaptive):
         'log_ode': 'foster'
     }[method]
     bm = torchsde.BrownianInterval(
-        t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device,
+        t0=t0, t1=t1, size=(batch_size, d), dtype=dtype, device=device,
         levy_area_approximation=levy_area_approximation
     )
     with torch.no_grad():

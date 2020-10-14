@@ -52,7 +52,7 @@ def _setup(device, levy_area_approximation, shape):
     ta = torch.rand([], device=device)
     tb = torch.rand([], device=device)
     ta, tb = min(ta, tb), max(ta, tb)
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=shape, device=device,
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=shape, device=device,
                                    levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
     return ta, tb, bm
 
@@ -204,7 +204,7 @@ def test_normality_conditional(device, levy_area_approximation):
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
@@ -267,7 +267,7 @@ def test_consistency(device, levy_area_approximation):
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
@@ -304,14 +304,14 @@ def test_entropy_determinism(random_order, device, levy_area_approximation, retu
 
     tol = 1e-6 if random_order else 0.
 
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(), device=device,
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(), device=device,
                                    levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
                                    halfway_tree=random_order)
     for point1, point2 in zip(points1, points2):
         point1, point2 = sorted([point1, point2])
         outs.append(bm(point1, point2, return_U=return_U, return_A=return_A))
 
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(), device=device,
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(), device=device,
                                    levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
                                    halfway_tree=random_order)
     if random_order:

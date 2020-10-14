@@ -28,9 +28,9 @@ _rsqrt3 = 1 / math.sqrt(3)
 _r12 = 1 / 12
 
 
-def _randn(shape, dtype, device, seed):
+def _randn(size, dtype, device, seed):
     generator = torch.Generator(device).manual_seed(seed)
-    return torch.randn(shape, dtype=dtype, device=device, generator=generator)
+    return torch.randn(size, dtype=dtype, device=device, generator=generator)
 
 
 def _is_scalar(x):
@@ -44,8 +44,8 @@ def _assert_floating_tensor(name, tensor):
         raise ValueError(f"{name}={tensor} should be floating point.")
 
 
-def _check_tensor_info(*tensors, shape, dtype, device):
-    """Check if shapes, dtypes, and devices of input tensors all match prescribed values."""
+def _check_tensor_info(*tensors, size, dtype, device):
+    """Check if sizes, dtypes, and devices of input tensors all match prescribed values."""
     tensors = list(filter(torch.is_tensor, tensors))
 
     if dtype is None and len(tensors) == 0:
@@ -53,8 +53,8 @@ def _check_tensor_info(*tensors, shape, dtype, device):
     if device is None and len(tensors) == 0:
         device = torch.device("cpu")
 
-    shapes = [] if shape is None else [shape]
-    shapes += [t.shape for t in tensors]
+    sizes = [] if size is None else [size]
+    sizes += [t.shape for t in tensors]
 
     dtypes = [] if dtype is None else [dtype]
     dtypes += [t.dtype for t in tensors]
@@ -62,18 +62,18 @@ def _check_tensor_info(*tensors, shape, dtype, device):
     devices = [] if device is None else [device]
     devices += [t.device for t in tensors]
 
-    if len(shapes) == 0:
-        raise ValueError(f"Must either specify `shape` or pass in `W` or `H` to implicitly define the shape.")
+    if len(sizes) == 0:
+        raise ValueError(f"Must either specify `size` or pass in `W` or `H` to implicitly define the size.")
 
-    if not all(i == shapes[0] for i in shapes):
-        raise ValueError(f"Multiple shapes found. Make sure `shape` and `W` or `H` are consistent.")
+    if not all(i == sizes[0] for i in sizes):
+        raise ValueError(f"Multiple sizes found. Make sure `size` and `W` or `H` are consistent.")
     if not all(i == dtypes[0] for i in dtypes):
         raise ValueError(f"Multiple dtypes found. Make sure `dtype` and `W` or `H` are consistent.")
     if not all(i == devices[0] for i in devices):
         raise ValueError(f"Multiple devices found. Make sure `device` and `W` or `H` are consistent.")
 
-    # Make sure shape is a tuple (not a torch.Size) for neat repr-printing purposes.
-    return tuple(shapes[0]), dtypes[0], devices[0]
+    # Make sure size is a tuple (not a torch.Size) for neat repr-printing purposes.
+    return tuple(sizes[0]), dtypes[0], devices[0]
 
 
 def _davie_foster_approximation(W, H, h, levy_area_approximation, get_noise):
@@ -230,15 +230,15 @@ class _Interval:
         # We generate random noise deterministically wrt some seed; this seed is determined by the generator.
         # This means that if we drop out of the cache, then we'll create the same random noise next time, as we still
         # have the generator.
-        shape = self._top._shape
-        return _randn(shape, self._top._dtype, self._top._device, seed)
+        size = self._top._size
+        return _randn(size, self._top._dtype, self._top._device, seed)
 
     def _a_seed(self):
         return self._parent._left_a_seed if self._is_left else self._parent._right_a_seed
 
     def _randn_levy(self):
-        shape = (*self._top._shape, *self._top._shape[-1:])
-        return _randn(shape, self._top._dtype, self._top._device, self._a_seed())
+        size = (*self._top._size, *self._top._size[-1:])
+        return _randn(size, self._top._dtype, self._top._device, self._a_seed())
 
     ########################################
     # Locate an interval in the hierarchy  #
@@ -342,7 +342,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
     Computes increments (and optionally Levy area).
 
     To use:
-    >>> bm = BrownianInterval(t0=0.0, t1=1.0, shape=(4, 1), device='cuda')
+    >>> bm = BrownianInterval(t0=0.0, t1=1.0, size=(4, 1), device='cuda')
     >>> bm(0., 0.5)
     tensor([[ 0.0733],
             [-0.5692],
@@ -352,7 +352,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
 
     __slots__ = (
                  # Inputs
-                 '_shape',
+                 '_size',
                  '_dtype',
                  '_device',
                  '_entropy',
@@ -380,7 +380,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
     def __init__(self,
                  t0: Scalar,
                  t1: Scalar,
-                 shape: Optional[Tuple[int, ...]] = None,
+                 size: Optional[Tuple[int, ...]] = None,
                  dtype: Optional[torch.dtype] = None,
                  device: Optional[Union[str, torch.device]] = None,
                  entropy: Optional[int] = None,
@@ -397,7 +397,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
         Args:
             t0 (float or Tensor): Initial time.
             t1 (float or Tensor): Terminal time.
-            shape (tuple of int): The shape of each Brownian sample.
+            size (tuple of int): The shape of each Brownian sample.
                 If zero dimensional represents a scalar Brownian motion.
                 If one dimensional represents a batch of scalar Brownian motions.
                 If >two dimensional the last dimension represents the size of a
@@ -469,7 +469,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
             if tol < 0.:
                 raise ValueError("`tol` should be non-negative.")
 
-        shape, dtype, device = _check_tensor_info(W, H, shape=shape, dtype=dtype, device=device)
+        size, dtype, device = _check_tensor_info(W, H, size=size, dtype=dtype, device=device)
 
         # Let numpy dictate randomness, so we have fewer seeds to set for reproducibility.
         if entropy is None:
@@ -483,7 +483,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
         #          Record inputs            #
         #####################################
 
-        self._shape = shape
+        self._size = size
         self._dtype = dtype
         self._device = device
         self._entropy = entropy
@@ -597,14 +597,14 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
             raise RuntimeError(f"Query times ta={ta:.3f} and tb={tb:.3f} must respect ta <= tb.")
 
         if ta == tb:
-            W = torch.zeros(self._shape, dtype=self._dtype, device=self._device)
+            W = torch.zeros(self._size, dtype=self._dtype, device=self._device)
             H = None
             A = None
             if self._have_H:
-                H = torch.zeros(self._shape, dtype=self._dtype, device=self._device)
+                H = torch.zeros(self._size, dtype=self._dtype, device=self._device)
             if self._have_A:
-                shape = (*self._shape, *self._shape[-1:])  # not self._shape[-1] as that may not exist
-                A = torch.zeros(shape, dtype=self._dtype, device=self._device)
+                size = (*self._size, *self._size[-1:])  # not self._size[-1] as that may not exist
+                A = torch.zeros(size, dtype=self._dtype, device=self._device)
         else:
             if self._dt is None and not self._halfway_tree:
                 self._num_evaluations += 1
@@ -642,8 +642,8 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
                         term1 = (interval._end - interval._start) * (Hi + 0.5 * W)
                         term2 = (interval._start - ta) * (H - 0.5 * Wi)
                         H = (term1 + term2) / (interval._end - ta)
-                    if self._have_A and len(self._shape) not in (0, 1):
-                        # If len(self._shape) in (0, 1) then we treat our scalar / single dimension as a batch
+                    if self._have_A and len(self._size) not in (0, 1):
+                        # If len(self._size) in (0, 1) then we treat our scalar / single dimension as a batch
                         # dimension, so we have zero Levy area. (And these unsqueezes will result in a tensor of shape
                         # (batch, batch) which is wrong.)
 
@@ -705,7 +705,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
         return (f"{self.__class__.__name__}("
                 f"t0={self._start:.3f}, "
                 f"t1={self._end:.3f}, "
-                f"shape={self._shape}, "
+                f"size={self._size}, "
                 f"dtype={self._dtype}, "
                 f"device={repr(self._device)}, "
                 f"entropy={self._entropy}, "
@@ -729,7 +729,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
 
     @property
     def shape(self):
-        return self._shape
+        return self._size
 
     @property
     def dtype(self):
@@ -768,4 +768,4 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
         return self._halfway_tree
 
     def size(self):
-        return self._shape
+        return self._size

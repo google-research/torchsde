@@ -68,7 +68,7 @@ class TestAdjointLogqp(unittest.TestCase):
 
 def _test_forward_and_backward(sde):
     bm = BrownianInterval(
-        t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
+        t0=t0, t1=t1, size=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
     )
     for method in methods:
         _test_forward(sde, bm, method=method)

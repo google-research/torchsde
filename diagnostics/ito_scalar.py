@@ -34,14 +34,14 @@ def main():
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
-        t0=t0, t1=t1, shape=(small_batch_size, 1), dtype=y0.dtype, device=device,
+        t0=t0, t1=t1, size=(small_batch_size, 1), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
     inspection.inspect_samples(y0, ts, dt, sde, bm, img_dir, methods)
 
     y0 = torch.full((large_batch_size, d), fill_value=0.1, device=device)
     bm = BrownianInterval(
-        t0=t0, t1=t1, shape=(large_batch_size, 1), dtype=y0.dtype, device=device,
+        t0=t0, t1=t1, size=(large_batch_size, 1), dtype=y0.dtype, device=device,
         levy_area_approximation=LEVY_AREA_APPROXIMATIONS.space_time
     )
     inspection.inspect_orders(y0, t0, t1, dts, sde, bm, img_dir, methods)
