@@ -25,7 +25,7 @@ from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 class Heun(base_solver.BaseSDESolver):
     weak_order = 1.0
     sde_type = SDE_TYPES.stratonovich
-    noise_types = (NOISE_TYPES.additive, NOISE_TYPES.diagonal, NOISE_TYPES.general, NOISE_TYPES.scalar)
+    noise_types = NOISE_TYPES.all()
     levy_area_approximations = LEVY_AREA_APPROXIMATIONS.all()
 
     def __init__(self, sde, **kwargs):

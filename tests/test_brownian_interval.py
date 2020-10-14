@@ -37,7 +37,7 @@ LARGE_BATCH_SIZE = 131072
 REPS = 3
 MEDIUM_REPS = 25
 LARGE_REPS = 500
-ALPHA = 0.00001
+ALPHA = 0.0001
 POOL_SIZE = 32
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]

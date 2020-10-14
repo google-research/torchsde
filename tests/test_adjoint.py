@@ -22,77 +22,69 @@ import unittest
 
 import pytest
 import torch
+from . import utils
 
 import torchsde
+from torchsde.settings import NOISE_TYPES, METHODS
 from .basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from .problems import Ex1, Ex2, Ex3
-from .utils import assert_allclose
+from .problems import Ex1, Ex2, Ex3, Ex4
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype = torch.get_default_dtype()
 
-ito_methods = {'euler': 'ito',
-               'milstein': 'ito',
-               'srk': 'ito'}
-stratonovich_methods = {'midpoint': 'stratonovich',
-                        'log_ode': 'stratonovich'}
+ito_methods = {'milstein': 'ito', 'srk': 'ito'}
+stratonovich_methods = {'midpoint': 'stratonovich'}
 
 
-@pytest.mark.parametrize("problem", [Ex1, Ex2, Ex3])
+@pytest.mark.parametrize("sde_cls", [Ex1, Ex2, Ex3, Ex4])
 @pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
-@pytest.mark.parametrize("noise_type", ['diagonal', 'scalar', 'additive', 'general'])
-@pytest.mark.parametrize('adaptive', (False, True))
-def test_adjoint(problem, method, sde_type, noise_type, adaptive):
-    if method == 'euler' and adaptive:
+@pytest.mark.parametrize('adaptive', (False,))
+def test_adjoint(sde_cls, method, sde_type, adaptive):
+    # Skipping below, since method not supported for corresponding noise types.
+    if method == METHODS.milstein and sde_cls.noise_type == NOISE_TYPES.general:
         return
-    if problem is not Ex3 and noise_type == 'additive':
-        return
-    # TODO: remove this once we have adjoint implemented for other noise/sde combinations
-    if sde_type == 'stratonovich' and noise_type != 'general':
-        return
-    if sde_type == 'ito' and noise_type == 'general':
+    if method == METHODS.srk and sde_cls.noise_type == NOISE_TYPES.general:
         return
 
-    d = 1 if noise_type == 'scalar' else 10
-    batch_size = 128
+    d = 3
+    m = {
+        NOISE_TYPES.scalar: 1,
+        NOISE_TYPES.diagonal: d,
+        NOISE_TYPES.general: 2,
+        NOISE_TYPES.additive: 2
+    }[sde_cls.noise_type]
+    batch_size = 4
     t0, t1 = ts = torch.tensor([0.0, 0.5], device=device)
     dt = 1e-3
     y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
-
-    problem = problem(d, sde_type=sde_type, noise_type=noise_type).to(device)
+    sde = sde_cls(d=d, m=m, sde_type=sde_type).to(device)
 
     levy_area_approximation = {
         'euler': 'none',
         'milstein': 'none',
         'srk': 'space-time',
-        'midpoint': 'none',
-        'log_ode': 'foster'
+        'midpoint': 'none'
     }[method]
     bm = torchsde.BrownianInterval(
-        t0=t0, t1=t1, size=(batch_size, d), dtype=dtype, device=device,
+        t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device,
         levy_area_approximation=levy_area_approximation
     )
-    with torch.no_grad():
-        grad_outputs = torch.ones(batch_size, d).to(device)
-        alt_grad = problem.analytical_grad(y0, t1, grad_outputs, bm)
 
-    problem.zero_grad()
-    _, yt = torchsde.sdeint_adjoint(problem, y0, ts, bm=bm, method=method, dt=dt, adaptive=adaptive)
-    loss = yt.sum(dim=1).mean(dim=0)
-    loss.backward()
-    adj_grad = torch.cat(tuple(p.grad for p in problem.parameters()))
-    assert_allclose(alt_grad, adj_grad)
+    def func(inputs, modules):
+        y0, sde = inputs[0], modules[0]
+        ys = torchsde.sdeint_adjoint(sde, y0, ts, bm, dt=dt, method=method, adaptive=adaptive)
+        return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
+
+    # `grad_inputs=True` also works, but we really only care about grad wrt params and want fast tests.
+    utils.gradcheck(func, y0, sde, eps=1e-6, rtol=1e-2, atol=1e-2, grad_params=True)
 
 
 @pytest.mark.parametrize("problem", [BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4])
 @pytest.mark.parametrize("method", ito_methods.keys())
 @pytest.mark.parametrize('adaptive', (False, True))
 def test_basic(problem, method, adaptive):
-    if method == 'euler' and adaptive:
-        return
-
     d = 10
     batch_size = 128
     ts = torch.tensor([0.0, 0.5], device=device)

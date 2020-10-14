@@ -72,10 +72,11 @@ class BrownianPath(brownian_base.BaseBrownian):
         self._w0 = w0
         self._interval = brownian_interval.BrownianInterval(t0=t0, t1=t1, size=w0.shape, dtype=w0.dtype,
                                                             device=w0.device, cache_size=None)
+        super(BrownianPath, self).__init__()
 
     def __call__(self, t, tb=None, return_U=False, return_A=False):
         # Deliberately called t rather than ta, for backward compatibility
-        out = super(BrownianPath, self).__call__(t, tb, return_U=return_U, return_A=return_A)
+        out = self._interval(t, tb, return_U=return_U, return_A=return_A)
         if tb is None and not return_U and not return_A:
             out = out + self._w0
         return out
@@ -159,10 +160,11 @@ class BrownianTree(brownian_base.BaseBrownian):
                                                             pool_size=pool_size,
                                                             halfway_tree=True,
                                                             W=W)
+        super(BrownianTree, self).__init__()
 
     def __call__(self, t, tb=None, return_U=False, return_A=False):
         # Deliberately called t rather than ta, for backward compatibility
-        out = super(BrownianTree, self).__call__(t, tb)
+        out = self._interval(t, tb, return_U=return_U, return_A=return_A)
         if tb is None and not return_U and not return_A:
             out = out + self._w0
         return out

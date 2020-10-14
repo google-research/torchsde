@@ -83,7 +83,9 @@ class AdjointSDE(base_sde.BaseSDE):
 
         requires_grad = torch.is_grad_enabled()
 
-        y, adj_y = misc.flat_to_shape(y_aug, self._shapes[:2])
+        shapes = self._shapes[:2]
+        numel = sum(shape.numel() for shape in shapes)
+        y, adj_y = misc.flat_to_shape(y_aug[:numel], shapes)
 
         # To support the later differentiation wrt y, we set it to require_grad if it doesn't already.
         if not y.requires_grad:
