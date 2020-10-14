@@ -7,18 +7,24 @@ Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in
   <img width="600" height="450" src="./assets/latent_sde.gif">
 </p>
 
-## Requirements
-- torch>=1.6.0
-- blist
-- numpy>=1.19.1
-- boltons>=20.2.1
-
-These requirements are specified in `setup.py` using `install_requires`.
-
 ## Installation
+#### Command
+
 ```shell script
 pip install git+https://github.com/google-research/torchsde.git
 ```
+
+#### Requirements
+Python >=3.6 and PyTorch >=1.6.0
+
+In full:
+- torch>=1.6.0
+- numpy>=1.19.1
+- scipy>=1.5.2
+- boltons>=20.2.1
+- trampoline>=0.1.2
+
+(These will be installed automatically if installing with `pip`.)
 
 ## Examples
 [`demo.ipynb`](examples/demo.ipynb) in the [`examples`](examples) folder is a short guide on how one may use the codebase for solving SDEs without considering gradient computation.

@@ -27,7 +27,6 @@ from scipy.stats import kstest
 
 import pytest
 import torchsde
-from torchsde._brownian import utils
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -44,12 +43,16 @@ POOL_SIZE = 32
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
 
+def _U_to_H(W: torch.Tensor, U: torch.Tensor, h: float) -> torch.Tensor:
+    return U / h - .5 * W
+
+
 def _setup(device, levy_area_approximation, shape):
     t0, t1 = torch.tensor([0., 1.], device=device)
     ta = torch.rand([], device=device)
     tb = torch.rand([], device=device)
     ta, tb = min(ta, tb), max(ta, tb)
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=shape, device=device,
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=shape, device=device,
                                    levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
     return ta, tb, bm
 
@@ -128,7 +131,7 @@ def test_determinism_simple(device, levy_area_approximation, return_U, return_A)
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_determinism_large(device, levy_area_approximation, return_U, return_A):
     """
-    Tests that BrownianInterval deterministically produces the same results when queried at the same points.
+    Tests that a single Brownian motion deterministically produces the same results when queried at the same points.
 
     We first of all query it at lots of points (larger than its internal cache), and then re-query at the same set of
     points, and compare.
@@ -183,7 +186,7 @@ def test_normality_simple(device, levy_area_approximation):
 
         if levy_area_approximation != 'none':
             W, U = bm(t0, t_, return_U=True)
-            H = utils.U_to_H(W, U, t_ - t0)
+            H = _U_to_H(W, U, t_ - t0)
 
             mean_H = 0
             std_H = math.sqrt((t_ - t0) / 12)
@@ -201,7 +204,7 @@ def test_normality_conditional(device, levy_area_approximation):
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,), device=device,
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
@@ -237,9 +240,9 @@ def test_normality_conditional(device, levy_area_approximation):
                 b = h1 ** 0.5 * h2 ** 3.5 / (2 * h * denom)
                 c = math.sqrt(3) * h1 ** 1.5 * h2 ** 1.5 / (6 * denom)
 
-                H = utils.U_to_H(W, U, h)
-                H1 = utils.U_to_H(W1, U1, h1)
-                H2 = utils.U_to_H(W2, U2, h2)
+                H = _U_to_H(W, U, h)
+                H1 = _U_to_H(W1, U1, h1)
+                H2 = _U_to_H(W2, U2, h2)
 
                 mean_H1 = H * (h1 / h) ** 2
                 std_H1 = math.sqrt(a**2 + c**2) / h1
@@ -264,8 +267,7 @@ def test_consistency(device, levy_area_approximation):
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
-        bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=(LARGE_BATCH_SIZE,),
-                                       device=device,
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
                                        levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
 
         for _ in range(MEDIUM_REPS):
@@ -285,3 +287,49 @@ def test_consistency(device, levy_area_approximation):
                 torch.testing.assert_allclose(U1 + U2 + (tb - t_) * W1, U, rtol=1e-6, atol=1e-6)
 
             # We don't test the return_A case because we don't expect that to be consistent.
+
+
+@pytest.mark.parametrize("random_order", [False, True])
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
+def test_entropy_determinism(random_order, device, levy_area_approximation, return_U, return_A):
+    if device == gpu and not torch.cuda.is_available():
+        pytest.skip(msg="CUDA not available.")
+
+    t0, t1 = 0.0, 1.0
+    entropy = 56789
+    points1 = torch.rand(1000)
+    points2 = torch.rand(1000)
+    outs = []
+
+    tol = 1e-6 if random_order else 0.
+
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(), device=device,
+                                   levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
+                                   halfway_tree=random_order)
+    for point1, point2 in zip(points1, points2):
+        point1, point2 = sorted([point1, point2])
+        outs.append(bm(point1, point2, return_U=return_U, return_A=return_A))
+
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(), device=device,
+                                   levy_area_approximation=levy_area_approximation, entropy=entropy, tol=tol,
+                                   halfway_tree=random_order)
+    if random_order:
+        perm = torch.randperm(1000)
+        points1 = points1[perm]
+        points2 = points2[perm]
+        outs = [outs[i.item()] for i in perm]
+    for point1, point2, out in zip(points1, points2, outs):
+        point1, point2 = sorted([point1, point2])
+        out_ = bm(point1, point2, return_U=return_U, return_A=return_A)
+
+        # Assert equal
+        if torch.is_tensor(out):
+            out = (out,)
+        if torch.is_tensor(out_):
+            out_ = (out_,)
+        for outi, outi_ in zip(out, out_):
+            if torch.is_tensor(outi):
+                assert (outi == outi_).all()
+            else:
+                assert outi == outi_

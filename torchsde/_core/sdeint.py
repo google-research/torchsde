@@ -186,7 +186,7 @@ def check_contract(sde, y0, ts, bm, method, names):
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.foster
         else:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], shape=(*batch_dimensions, noise_channels), dtype=y0.dtype,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], size=(*batch_dimensions, noise_channels), dtype=y0.dtype,
                               device=y0.device, levy_area_approximation=levy_area_approximation)
 
     return sde, y0, ts, bm

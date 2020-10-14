@@ -35,7 +35,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype = torch.get_default_dtype()
 
 ito_methods = {'milstein': 'ito', 'srk': 'ito'}
-stratonovich_methods = {'midpoint': 'stratonovich', 'log_ode': 'stratonovich'}
+stratonovich_methods = {'midpoint': 'stratonovich'}
 
 
 @pytest.mark.parametrize("sde_cls", [Ex1, Ex2, Ex3, Ex4])
@@ -43,11 +43,7 @@ stratonovich_methods = {'midpoint': 'stratonovich', 'log_ode': 'stratonovich'}
 @pytest.mark.parametrize('adaptive', (False,))
 def test_adjoint(sde_cls, method, sde_type, adaptive):
     # Skipping below, since method not supported for corresponding noise types.
-    if method == METHODS.log_ode_midpoint and sde_cls.noise_type == NOISE_TYPES.diagonal:
-        return
-    if method == METHODS.milstein and sde_cls.noise_type == NOISE_TYPES.general:
-        return
-    if method == METHODS.srk and sde_cls.noise_type == NOISE_TYPES.general:
+    if sde_cls.noise_type == NOISE_TYPES.general and method in (METHODS.milstein, METHODS.srk):
         return
 
     d = 3
@@ -67,11 +63,10 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
         'euler': 'none',
         'milstein': 'none',
         'srk': 'space-time',
-        'midpoint': 'none',
-        'log_ode': 'foster'
+        'midpoint': 'none'
     }[method]
     bm = torchsde.BrownianInterval(
-        t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device,
+        t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device,
         levy_area_approximation=levy_area_approximation
     )
 

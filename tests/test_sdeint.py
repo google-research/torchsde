@@ -47,13 +47,13 @@ basic_sdes = (
 
 # Make bms explicitly for testing.
 bm_diagonal = BrownianInterval(
-    t0=t0, t1=t1, shape=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
+    t0=t0, t1=t1, size=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
 )
 bm_general = BrownianInterval(
-    t0=t0, t1=t1, shape=(batch_size, m), dtype=dtype, device=device, levy_area_approximation='space-time'
+    t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device, levy_area_approximation='space-time'
 )
 bm_scalar = BrownianInterval(
-    t0=t0, t1=t1, shape=(batch_size, 1), dtype=dtype, device=device, levy_area_approximation='space-time'
+    t0=t0, t1=t1, size=(batch_size, 1), dtype=dtype, device=device, levy_area_approximation='space-time'
 )
 
 

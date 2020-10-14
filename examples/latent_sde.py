@@ -239,7 +239,7 @@ def main():
     bm = torchsde.BrownianInterval(
         t0=ts_vis[0],
         t1=ts_vis[-1],
-        shape=(vis_batch_size, 1),
+        size=(vis_batch_size, 1),
         device=device,
         levy_area_approximation='space-time'
     )  # We need space-time Levy area to use the SRK solver

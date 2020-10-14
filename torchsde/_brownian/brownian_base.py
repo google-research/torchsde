@@ -14,26 +14,37 @@
 
 import abc
 
-from .._core import better_abc
 
+class BaseBrownian(metaclass=abc.ABCMeta):
+    __slots__ = ()
 
-class BaseBrownian(metaclass=better_abc.ABCMeta):
     @abc.abstractmethod
-    def __call__(self, ta, tb, return_U=False, return_A=False):
+    def __call__(self, ta, tb=None, return_U=False, return_A=False):
         raise NotImplementedError
 
     @abc.abstractmethod
     def __repr__(self):
         raise NotImplementedError
 
+    @property
     @abc.abstractmethod
-    def to(self, *args, **kwargs):
+    def dtype(self):
         raise NotImplementedError
 
-    dtype = better_abc.abstract_attribute()
-    device = better_abc.abstract_attribute()
-    shape = better_abc.abstract_attribute()
-    levy_area_approximation = better_abc.abstract_attribute()
+    @property
+    @abc.abstractmethod
+    def device(self):
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def shape(self):
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def levy_area_approximation(self):
+        raise NotImplementedError
 
     def size(self):
         return self.shape

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import brownian_lib
 from ._brownian import BaseBrownian, BrownianInterval, BrownianPath, BrownianTree
 from ._core.adjoint import sdeint_adjoint
 from ._core.base_sde import BaseSDE, SDEIto, SDEStratonovich

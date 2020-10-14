@@ -42,43 +42,32 @@ def _time_query(bm, ts):
 
 
 def _compare(w0, ts, msg=''):
-    bm = torchsde.brownian_lib.BrownianPath(t0=t0, w0=w0)
-    bp_cpp_time = _time_query(bm, ts)
-    logging.warning(f'{msg} (brownian_lib.BrownianPath): {bp_cpp_time:.4f}')
-
     bm = torchsde.BrownianPath(t0=t0, w0=w0)
     bp_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
 
-    bm = torchsde.brownian_lib.BrownianTree(t0=t0, w0=w0, t1=t1, tol=1e-5)
-    bt_cpp_time = _time_query(bm, ts)
-    logging.warning(f'{msg} (brownian_lib.BrownianTree): {bt_cpp_time:.4f}')
-
-    bm = torchsde.BrownianTree(t0=t0, w0=w0, t1=t1, tol=1e-5)
+    bm = torchsde.BrownianTree(t0=t0, t1=t1, w0=w0, tol=1e-5)
     bt_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
 
-    bm = torchsde.BrownianInterval(t0=t0, t1=t1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=w0.shape, dtype=w0.dtype, device=w0.device)
     bi_py_time = _time_query(bm, ts)
     logging.warning(f'{msg} (torchsde.BrownianInterval): {bi_py_time:.4f}')
 
-    return bp_cpp_time, bp_py_time, bt_cpp_time, bt_py_time, bi_py_time
+    return bp_py_time, bt_py_time, bi_py_time
 
 
 def sequential_access():
     ts = torch.linspace(t0, t1, steps=steps)
 
     w0 = torch.zeros(small_batch_size, small_d).to(device)
-    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s, bi_py_time_s = _compare(w0, ts,
-                                                                                      msg='small sequential access')
+    bp_py_time_s, bt_py_time_s, bi_py_time_s = _compare(w0, ts, msg='small sequential access')
 
     w0 = torch.zeros(large_batch_size, large_d).to(device)
-    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l, bi_py_time_l = _compare(w0, ts,
-                                                                                      msg='large sequential access')
+    bp_py_time_l, bt_py_time_l, bi_py_time_l = _compare(w0, ts, msg='large sequential access')
 
     w0 = torch.zeros(huge_batch_size, huge_d).to(device)
-    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts,
-                                                                                      msg="huge sequential access")
+    bp_py_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts, msg="huge sequential access")
 
     img_path = os.path.join('.', 'benchmarks', f'plots-{device}', 'sequential_access.png')
     if not os.path.exists(os.path.dirname(img_path)):
@@ -89,9 +78,7 @@ def sequential_access():
     utils.swiss_knife_plotter(
         img_path,
         plots=[
-            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
-            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
             {'x': xaxis, 'y': [bi_py_time_s, bi_py_time_l, bi_py_time_h], 'label': 'bi_py', 'marker': 'x'},
         ],
@@ -106,16 +93,17 @@ def sequential_access():
 
 
 def random_access():
-    ts = torch.empty(steps).uniform_(t0, t1)
+    generator = torch.Generator().manual_seed(456789)
+    ts = torch.empty(steps).uniform_(t0, t1, generator=generator)
 
     w0 = torch.zeros(small_batch_size, small_d).to(device)
-    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s, bi_py_time_s = _compare(w0, ts, msg='small random access')
+    bp_py_time_s, bt_py_time_s, bi_py_time_s = _compare(w0, ts, msg='small random access')
 
     w0 = torch.zeros(large_batch_size, large_d).to(device)
-    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l, bi_py_time_l = _compare(w0, ts, msg='large random access')
+    bp_py_time_l, bt_py_time_l, bi_py_time_l = _compare(w0, ts, msg='large random access')
 
     w0 = torch.zeros(huge_batch_size, huge_d).to(device)
-    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts, msg="huge random access")
+    bp_py_time_h, bt_py_time_h, bi_py_time_h = _compare(w0, ts, msg="huge random access")
 
     img_path = os.path.join('.', 'benchmarks', f'plots-{device}', 'random_access.png')
     if not os.path.exists(os.path.dirname(img_path)):
@@ -126,9 +114,7 @@ def random_access():
     utils.swiss_knife_plotter(
         img_path,
         plots=[
-            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
-            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
             {'x': xaxis, 'y': [bi_py_time_s, bi_py_time_l, bi_py_time_h], 'label': 'bi_py', 'marker': 'x'},
         ],
@@ -179,27 +165,19 @@ def _time_sdeint_adjoint(sde, y0, ts, bm):
 
 
 def _compare_sdeint(w0, sde, y0, ts, func, msg=''):
-    bm = torchsde.brownian_lib.BrownianPath(t0, w0)
-    bp_cpp_time = func(sde, y0, ts, bm)
-    logging.warning(f'{msg} (brownian_lib.BrownianPath): {bp_cpp_time:.4f}')
-
-    bm = torchsde.BrownianPath(t0, w0)
+    bm = torchsde.BrownianPath(t0=t0, w0=w0)
     bp_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianPath): {bp_py_time:.4f}')
 
-    bm = torchsde.brownian_lib.BrownianTree(t0, w0)
-    bt_cpp_time = func(sde, y0, ts, bm)
-    logging.warning(f'{msg} (brownian_lib.BrownianTree): {bt_cpp_time:.4f}')
-
-    bm = torchsde.BrownianTree(t0, w0)
+    bm = torchsde.BrownianTree(t0=t0, t1=t1, w0=w0, tol=1e-5)
     bt_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianTree): {bt_py_time:.4f}')
 
-    bm = torchsde.BrownianInterval(t0, t0 + 1, shape=w0.shape, dtype=w0.dtype, device=w0.device)
+    bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=w0.shape, dtype=w0.dtype, device=w0.device)
     bi_py_time = func(sde, y0, ts, bm)
     logging.warning(f'{msg} (torchsde.BrownianInterval): {bi_py_time:.4f}')
 
-    return bp_cpp_time, bp_py_time, bt_cpp_time, bt_py_time, bi_py_time
+    return bp_py_time, bt_py_time, bi_py_time
 
 
 def solver_access(func=_time_sdeint):
@@ -207,16 +185,13 @@ def solver_access(func=_time_sdeint):
     sde = SDE().to(device)
 
     y0 = w0 = torch.zeros(small_batch_size, small_d).to(device)
-    bp_cpp_time_s, bp_py_time_s, bt_cpp_time_s, bt_py_time_s, bi_py_time_s = _compare_sdeint(w0, sde, y0, ts, func,
-                                                                                             msg='small')
+    bp_py_time_s, bt_py_time_s, bi_py_time_s = _compare_sdeint(w0, sde, y0, ts, func, msg='small')
 
     y0 = w0 = torch.zeros(large_batch_size, large_d).to(device)
-    bp_cpp_time_l, bp_py_time_l, bt_cpp_time_l, bt_py_time_l, bi_py_time_l = _compare_sdeint(w0, sde, y0, ts, func,
-                                                                                             msg='large')
+    bp_py_time_l, bt_py_time_l, bi_py_time_l = _compare_sdeint(w0, sde, y0, ts, func, msg='large')
 
     y0 = w0 = torch.zeros(huge_batch_size, huge_d).to(device)
-    bp_cpp_time_h, bp_py_time_h, bt_cpp_time_h, bt_py_time_h, bi_py_time_h = _compare_sdeint(w0, sde, y0, ts, func,
-                                                                                             msg='huge')
+    bp_py_time_h, bt_py_time_h, bi_py_time_h = _compare_sdeint(w0, sde, y0, ts, func, msg='huge')
 
     name = {
         _time_sdeint: 'sdeint',
@@ -233,9 +208,7 @@ def solver_access(func=_time_sdeint):
     utils.swiss_knife_plotter(
         img_path,
         plots=[
-            {'x': xaxis, 'y': [bp_cpp_time_s, bp_cpp_time_l, bp_cpp_time_h], 'label': 'bp_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bp_py_time_s, bp_py_time_l, bp_py_time_h], 'label': 'bp_py', 'marker': 'x'},
-            {'x': xaxis, 'y': [bt_cpp_time_s, bt_cpp_time_l, bt_cpp_time_h], 'label': 'bt_cpp', 'marker': 'x'},
             {'x': xaxis, 'y': [bt_py_time_s, bt_py_time_l, bt_py_time_h], 'label': 'bt_py', 'marker': 'x'},
             {'x': xaxis, 'y': [bi_py_time_s, bi_py_time_l, bi_py_time_h], 'label': 'bi_py', 'marker': 'x'},
         ],
