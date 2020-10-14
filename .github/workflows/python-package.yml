@@ -20,7 +20,6 @@ jobs:
         python-version: [3.6, 3.8]
         # TODO: Add back windows after blist is removed.
         os: [ubuntu-latest, macOS-latest]
-
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -43,4 +42,5 @@ jobs:
     - name: Test with pytest
       run: |
         python setup.py develop
-        pytest tests
+        cd ..
+        pytest torchsde/tests
