@@ -1,4 +1,4 @@
-# PyTorch Implementation of Differentiable SDE Solvers
+# PyTorch Implementation of Differentiable SDE Solvers ![Python package](https://github.com/google-research/torchsde/workflows/Python%20package/badge.svg?branch=dev)
 This codebase provides [stochastic differential equation (SDE)](https://en.wikipedia.org/wiki/Stochastic_differential_equation) solvers with GPU support and efficient sensitivity analysis.
 Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in this repository are fully supported to run on GPUs.
 
