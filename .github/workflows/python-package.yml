@@ -29,9 +29,7 @@ jobs:
 
       - name: Check version
         if: (github.event_name == 'pull_request' && github.base_ref == 'master')
-        # TODO: Remove torch installation here after deprecating C++ code.
         run: |
-          pip install torch
           pip install git+https://github.com/google-research/torchsde.git
           master_info=$(pip list | grep torchsde)
           master_version=$(echo ${master_info} | cut -d " " -f2)
@@ -61,8 +59,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.6, 3.8 ]
-        # TODO: Add back windows after blist is removed.
-        os: [ ubuntu-latest, macOS-latest ]
+        os: [ ubuntu-latest, macOS-latest, windows-latest ]
     needs: [ check_version ]
     steps:
       - name: Checkout code
@@ -74,11 +71,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        # TODO: Remove torch installation here after deprecating C++ code.
         run: |
           python -m pip install --upgrade pip
           pip install flake8 pytest
-          pip install torch
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Lint with flake8
