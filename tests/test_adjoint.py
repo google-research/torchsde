@@ -81,7 +81,7 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
         return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
     # `grad_inputs=True` also works, but we really only care about grad wrt params and want fast tests.
-    utils.gradcheck(func, y0, sde, eps=1e-6, rtol=1e-2, atol=1e-3, grad_params=True)
+    utils.gradcheck(func, y0, sde, eps=1e-6, rtol=1e-2, atol=1e-2, grad_params=True)
 
 
 @pytest.mark.parametrize("problem", [BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4])
