@@ -43,9 +43,7 @@ stratonovich_methods = {'midpoint': 'stratonovich'}
 @pytest.mark.parametrize('adaptive', (False,))
 def test_adjoint(sde_cls, method, sde_type, adaptive):
     # Skipping below, since method not supported for corresponding noise types.
-    if method == METHODS.milstein and sde_cls.noise_type == NOISE_TYPES.general:
-        return
-    if method == METHODS.srk and sde_cls.noise_type == NOISE_TYPES.general:
+    if sde_cls.noise_type == NOISE_TYPES.general and method in (METHODS.milstein, METHODS.srk):
         return
 
     d = 3
