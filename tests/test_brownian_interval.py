@@ -34,11 +34,11 @@ torch.set_default_dtype(torch.float64)
 D = 3
 SMALL_BATCH_SIZE = 16
 LARGE_BATCH_SIZE = 131072
-REPS = 3
+REPS = 2
 MEDIUM_REPS = 25
 LARGE_REPS = 500
 ALPHA = 0.0001
-POOL_SIZE = 32
+POOL_SIZE = 48
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
@@ -245,14 +245,14 @@ def test_normality_conditional(device, levy_area_approximation):
                 H2 = _U_to_H(W2, U2, h2)
 
                 mean_H1 = H * (h1 / h) ** 2
-                std_H1 = math.sqrt(a**2 + c**2) / h1
+                std_H1 = math.sqrt(a ** 2 + c ** 2) / h1
                 rescaled_H1 = (H1 - mean_H1) / std_H1
 
                 _, pval = kstest(rescaled_H1.cpu().detach().numpy(), 'norm')
                 assert pval >= ALPHA
 
                 mean_H2 = H * (h2 / h) ** 2
-                std_H2 = math.sqrt(b**2 + c**2) / h2
+                std_H2 = math.sqrt(b ** 2 + c ** 2) / h2
                 rescaled_H2 = (H2 - mean_H2) / std_H2
 
                 _, pval = kstest(rescaled_H2.cpu().detach().numpy(), 'norm')
