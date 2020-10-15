@@ -16,11 +16,9 @@ import sys
 
 sys.path = sys.path[1:]  # A hack so that we always import the installed library.
 
-import contextlib
 import pytest
 import torch
 import torchsde
-import warnings
 
 from tests import basic_sde
 
@@ -38,6 +36,14 @@ t1 = 0.3
 T = 5
 dt = 1e-2
 dtype = torch.get_default_dtype()
+
+
+class _nullcontext:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 
 @pytest.mark.parametrize('device', devices)
@@ -149,7 +155,7 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     if adaptive and method == 'euler' and sde.noise_type != 'additive':
         ctx = pytest.warns(UserWarning)
     else:
-        ctx = contextlib.nullcontext()
+        ctx = _nullcontext()
 
     # Using `f` as drift.
     with torch.no_grad():
