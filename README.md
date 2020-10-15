@@ -1,125 +1,79 @@
-# PyTorch Implementation of Differentiable SDE Solvers ![Python package](https://github.com/google-research/torchsde/workflows/Python%20package/badge.svg?branch=dev)
-This codebase provides [stochastic differential equation (SDE)](https://en.wikipedia.org/wiki/Stochastic_differential_equation) solvers with GPU support and efficient sensitivity analysis.
-Similar to [torchdiffeq](https://github.com/rtqichen/torchdiffeq), algorithms in this repository are fully supported to run on GPUs.
+<h1 align='center'>torchsde</h1>
+<h2 align='center'>Differentiable GPU-capable SDE solvers</h2>
+
+![Python package](https://github.com/google-research/torchsde/workflows/Python%20package/badge.svg?branch=dev)
+
+This library provides [stochastic differential equation (SDE)](https://en.wikipedia.org/wiki/Stochastic_differential_equation) solvers with GPU support and efficient backpropagation.
 
 ---
 <p align="center">
-  <img width="600" height="450" src="./assets/latent_sde.gif">
+  <img width="400" height="300" src="./assets/latent_sde.gif">
 </p>
 
 ## Installation
-#### Command
-
 ```shell script
 pip install git+https://github.com/google-research/torchsde.git
 ```
 
-#### Requirements
-Python 3 and PyTorch >=1.6.0
+**Requirements:** Python >=3.6 and PyTorch >=1.6.0.
 
-In full:
-- torch>=1.6.0
-- numpy>=1.19.1
-- scipy>=1.5.2
-- boltons>=20.2.1
-- trampoline>=0.1.2
-
-(These will be installed automatically if installing with `pip`.)
+## Documentation
+Available [here](./DOCUMENTATION.md).
 
 ## Examples
-[`demo.ipynb`](examples/demo.ipynb) in the [`examples`](examples) folder is a short guide on how one may use the codebase for solving SDEs without considering gradient computation.
-It covers subtle points such as fixing the randomness in the solver and the consequence of *noise types*.
-Unlike with ordinary differential equation (ODE), where general high-order solvers can be applied, the numerical efficiency of SDE solvers highly depends on the assumption on the noise (i.e. assumptions on the diffusion function).
-We encourage those who are interested in using this codebase to take a peek at the notebook.
-
-[`latent_sde.py`](examples/latent_sde.py) in the [`examples`](examples) folder learns a *latent stochastic differential equation* (cf. Section 5 of [\[1\]](https://arxiv.org/pdf/2001.01328.pdf) and references therein).
-The example fits an SDE to data, all the while regularizing it to be like an [Ornstein-Uhlenbeck](https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process) prior process.
-The model can be loosely viewed as a [variational autoencoder](https://en.wikipedia.org/wiki/Autoencoder#Variational_autoencoder_(VAE)) with its prior and approximate posterior being SDEs.
-Note, the example contains many simplifications and is meant to demonstrate basic usage regarding gradient computation.
-
-To run the latent SDE example, execute the following command from the root folder of this repo:
-```shell script
-python3 -m examples.latent_sde --train-dir ${TRAIN_DIR}
-```
-Once in a while, the program writes a figure to the path specified by `TRAIN_DIR`.
-Training should stabilize after 500 iterations with the default hyperparameters.
-
-## Usage
-The central functions of interest are `sdeint` and `sdeint_adjoint`. They can be imported as follows:
-```Python
-from torchsde import sdeint, sdeint_adjoint
-```
-
-### Integrating SDEs
-SDEs are defined with two vector fields, named respectively the *drift* and *diffusion* functions.
-The drift is analogous to the vector field in ODEs, whereas the diffusion controls how the [Brownian motion](https://en.wikipedia.org/wiki/Brownian_motion) affects the system.
-
-By default, solvers in the codebase integrate SDEs that are `torch.nn.Module` objects with the drift function `f` and diffusion function `g`.
-For instance, the [Geometric Brownian motion](https://en.wikipedia.org/wiki/Geometric_Brownian_motion) can be integrated as follows:
-```Python
+### Quick example
+```python
 import torch
-from torchsde import sdeint
+import torchsde
 
+batch_size, state_size, brownian_size = 32, 3, 2
+t_size = 20
 
 class SDE(torch.nn.Module):
+    noise_type = 'general'
+    sde_type = 'ito'
 
-    def __init__(self, mu, sigma):
+    def __init__(self):
         super().__init__()
-        self.noise_type="diagonal"
-        self.sde_type = "ito"
-
-        self.mu = mu
-        self.sigma = sigma
+        self.mu = torch.nn.Linear(state_size, 
+                                  state_size)
+        self.sigma = torch.nn.Linear(state_size, 
+                                     state_size * brownian_size)
 
     def f(self, t, y):
-        return self.mu * y
+        return self.mu(y)  # shape (batch_size, state_size)
 
     def g(self, t, y):
-        return self.sigma * y
+        return self.sigma(y).view(batch_size, 
+                                  state_size, 
+                                  brownian_size)
 
-batch_size, d, m = 4, 1, 1  # State dimension d, Brownian motion dimension m.
-geometric_bm = SDE(mu=0.5, sigma=1)
-y0 = torch.zeros(batch_size, d).fill_(0.1)  # Initial state.
-ts = torch.linspace(0, 1, 20)
-ys = sdeint(geometric_bm, y0, ts)
+sde = SDE()
+y0 = torch.full((batch_size, state_size), 0.1)
+ts = torch.linspace(0, 1, t_size)
+# Initial state y0, the SDE is solved over the interval [ts[0], ts[-1]].
+# ys will have shape (t_size, batch_size, state_size)
+ys = torchsde.sdeint(sde, y0, ts)
 ```
-To ensure the solvers work, `f` and `g` must take in the time `t` and state `y` in the specific order.
-**Most importantly, the SDE class must have the attributes `sde_type` and `noise_type`.**
-The noise type of the SDE determines what numerical algorithms may be used.
-See [`demo.ipynb`](examples/demo.ipynb) for more on this.
 
-#### Possible noise types and explanations when state dimension=d
-- `diagonal`: The diffusion `g` is element-wise and has output size (d,). The Brownian motion is d-dimensional.
-- `additive`: The diffusion `g` is constant w.r.t. `y` and has output size (d, m). The Brownian motion is m-dimensional.
-- `scalar`: The diffusion `g` has output size (d, 1). The Brownian motion is 1-dimensional.
-- `general`: The diffusion `g` has output size (d, m). The Brownian motion is m-dimensional.
+### Notebook
 
-In practice, we found `diagonal` and `additive` to produce a good trade-off between model flexibility and computational efficiency, and we recommend sticking to these two noise types if possible.
+[`examples/demo.ipynb`](examples/demo.ipynb) gives a short guide on how to solve SDEs, including subtle points such as fixing the randomness in the solver and the choice of *noise types*.
 
-### Keyword arguments of `sdeint`
-- `bm`: A `BrownianPath` or `BrownianTree` object. Optionally include to seed the solver's computation.
-- `logqp`: If True, also return the Radon-Nikodym derivative, which is a log-ratio penalty across the whole path.
-- `method`: One of the solvers listed below.
-- `dt`: A float for the constant step size or initial step size for adaptive time-stepping.
-- `adaptive`: If True, use adaptive time-stepping.
-- `rtol`: Relative tolerance.
-- `atol`: Absolute tolerance.
-- `dt_min`: Minimum step size.
+### Latent SDE
 
-#### List of SDE solvers
-- `euler`: [Euler-Maruyama method](https://en.wikipedia.org/wiki/Euler%E2%80%93Maruyama_method)
-- `milstein`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
-- `srk`: <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_method_(SDE)">Stochastic Runge-Kutta methods</a>
+[`examples/latent_sde.py`](examples/latent_sde.py) learns a *latent stochastic differential equation*, as in Section 5 of [\[1\]](https://arxiv.org/pdf/2001.01328.pdf).
+The example fits an SDE to data, whilst regularizing it to be like an [Ornstein-Uhlenbeck](https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process) prior process.
+The model can be loosely viewed as a [variational autoencoder](https://en.wikipedia.org/wiki/Autoencoder#Variational_autoencoder_(VAE)) with its prior and approximate posterior being SDEs. This example can be run via
+```shell script
+python -m examples.latent_sde --train-dir <TRAIN_DIR>
+```
+The program outputs figures to the path specified by `<TRAIN_DIR>`.
+Training should stabilize after 500 iterations with the default hyperparameters.
 
-Note that stochastic Runge-Kutta methods is a class of numerical methods, and the precise formulation for one noise type may be much different than that for another. Internally, `sdeint` selects the algorithm based on the attribute `noise_type` of the SDE object.
+## Citation
 
-### References
-\[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations." *International Conference on Artificial Intelligence and Statistics.* 2020. [[arxiv]](https://arxiv.org/pdf/2001.01328.pdf)
-
----
-This is a research project, not an official Google product. Expect bugs and sharp edges. Please help by trying it out, reporting bugs, and letting us know what you think!
-
-If you found this codebase useful in your research, please consider citing
+If you found this codebase useful in your research, please consider citing:
 ```
 @article{li2020scalable,
   title={Scalable gradients for stochastic differential equations},
@@ -128,3 +82,9 @@ If you found this codebase useful in your research, please consider citing
   year={2020}
 }
 ```
+
+## References
+\[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations." *International Conference on Artificial Intelligence and Statistics.* 2020. [[arxiv]](https://arxiv.org/pdf/2001.01328.pdf)
+
+---
+This is a research project, not an official Google product. Expect bugs and sharp edges. Please help by trying it out, reporting bugs, and letting us know what you think!
