@@ -160,9 +160,9 @@ will suffice, and will be faster.
 
 ### BrownianPath and BrownianTree
 
-These are old ways of creating Brownian motions, corresponding to each of the two important special cases above (respectively).
+`torchsde.BrownianPath` and `torchsde.BrownianTree` are the legacy ways of creating Brownian motions, corresponding to each of the two important special cases above (respectively).
 
-These are still supported, but we encourage using the more flexible BrownianInterval for new projects.
+These are still supported, but we encourage using the more flexible `BrownianInterval` for new projects.
 
 ### Levy area approximation
 The `levy_area_approximation` argument may be either `"none"`, `"space-time"`, `"davie"` or `"foster"`. Levy area approximations are used in certain higher-order SDE solvers, and so this must be set to the appropriate value if using these higher-order solvers.
