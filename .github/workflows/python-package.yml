@@ -75,6 +75,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 pytest
 
+      - name: Windows patch  # Specifically for windows, since pip fails to fetch torch 1.6.0 as of Oct 2020.
+        if: runner.os == 'Windows'
+        run: pip install torch
+
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
