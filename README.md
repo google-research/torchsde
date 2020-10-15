@@ -1,13 +1,9 @@
-<h1 align='center'>torchsde</h1>
-<h2 align='center'>Differentiable GPU-capable SDE solvers</h2>
-
-![Python package](https://github.com/google-research/torchsde/workflows/Python%20package/badge.svg?branch=dev)
-
+# PyTorch Implementation of Differentiable SDE Solvers ![Python package](https://github.com/google-research/torchsde/workflows/Python%20package/badge.svg?branch=dev)
 This library provides [stochastic differential equation (SDE)](https://en.wikipedia.org/wiki/Stochastic_differential_equation) solvers with GPU support and efficient backpropagation.
 
 ---
 <p align="center">
-  <img width="400" height="300" src="./assets/latent_sde.gif">
+  <img width="600" height="450" src="./assets/latent_sde.gif">
 </p>
 
 ## Installation

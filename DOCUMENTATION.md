@@ -57,7 +57,7 @@ The available solvers depends on the SDE type and the noise type.
 
 **Stratonovich solvers**
 - `"euler_heun"`: [Euler-Heun method](https://infoscience.epfl.ch/record/143450/files/sde_tutorial.pdf)
-- `"heun"`: Heun's method
+- `"heun"`: [Heun's method](https://arxiv.org/abs/1102.4401)
 - `"midpoint"`: Midpoint method
 - `"milstein"`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
 
