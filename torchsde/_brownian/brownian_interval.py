@@ -415,27 +415,27 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
                 This is needed for some higher-order SDE solvers.
             dt (float or Tensor): The expected average step size of the SDE
                 solver. Set it if you know it (e.g. when using a fixed-step
-                solver); else it will default to equal the first step this is
-                evaluated with. This allows us to set up a structure that should
-                be efficient to query at these intervals.
+                solver); else it will be estimated from the first few queries.
+                This is used to set up the data structure such that it is
+                efficient to query at these intervals.
             tol (float or Tensor): What tolerance to resolve the Brownian motion
                 to. Must be non-negative. Defaults to zero, i.e. floating point
-                resolution.
+                resolution. Usually worth setting in conjunction with
+                `halfway_tree`, below.
             pool_size (int): Size of the pooled entropy. If you care about
                 statistical randomness then increasing this will help (but will
                 slow things down).
             cache_size (int): How big a cache of recent calculations to use.
                 (As new calculations depend on old calculations, this speeds
                 things up dramatically, rather than recomputing things.)
-                The default is set to be pretty close to the optimum: smaller
-                values imply more recalculation, whilst larger values imply
-                more time spent keeping track of the cache.
-            halfway_tree (bool): Whether the dependency tree should align with
-                the halfway points of intervals. Defaults to False. Normally,
-                the sample path is deterministic with respect to both `entropy`,
-                 _and_ the locations and order of the query points. Setting this
-                 to True will make it deterministic with respect to just
-                 `entropy`. However this is much slower.
+                Set this to `None` to use an infinite cache, which will be fast
+                but memory inefficient.
+            halfway_tree (bool): Whether the dependency tree (the internal data
+                structure) should be the dyadic tree. Defaults to `False`.
+                Normally, the sample path is determined by both `entropy`,
+                _and_ the locations and order of the query points. Setting this
+                 to `True` will make it deterministic with respect to just
+                 `entropy`; however this is much slower.
             W (Tensor): The increment of the Brownian motion over the interval
                 [t0, t1]. Will be generated randomly if not provided.
             H (Tensor): The space-time Levy area of the Brownian motion over the
