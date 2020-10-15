@@ -71,6 +71,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in adjoint_params]
         shapes = [t.size() for t in aug_state]
         adjoint_sde = AdjointSDE(sde, adjoint_params, shapes)
+        adjoint_method = sdeint.select_default_method(adjoint_sde, adjoint_method)
         reverse_bm = ReverseBrownian(bm)
 
         for i in range(ys.size(0) - 1, 0, -1):
@@ -105,7 +106,7 @@ def sdeint_adjoint(sde: nn.Module,
                    y0: Tensor,
                    ts: Vector,
                    bm: Optional[BaseBrownian] = None,
-                   method: Optional[str] = "srk",
+                   method: Optional[str] = None,
                    adjoint_method: Optional[str] = None,
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
@@ -134,10 +135,13 @@ def sdeint_adjoint(sde: nn.Module,
         bm (Brownian, optional): A 'BrownianInterval', `BrownianPath` or
             `BrownianTree` object. Should return tensors of size (batch_size, m)
             for `__call__`. Defaults to `BrownianInterval`.
-        method (str, optional): Name of numerical integration method.
+        method (str, optional): Numerical integration method to use. Must be
+            compatible with the SDE type (Ito/Stratonovich) and the noise type
+            (scalar/additive/diagonal/general). Defaults to a sensible choice
+            depending on the SDE type and noise type of the supplied SDE.
         adjoint_method (str, optional): Name of numerical integration method for
             backward adjoint solve. Defaults to a sensible choice depending on
-            the noise type of the supplied SDE.
+            the SDE type and noise type of the supplied SDE.
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
@@ -184,29 +188,13 @@ def sdeint_adjoint(sde: nn.Module,
                          'can be specified explicitly via the `adjoint_params` argument. If there are no parameters '
                          'then it is allowable to set `adjoint_params=()`.')
 
-    sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
+    sde, y0, ts, bm, method = sdeint.check_contract(sde, y0, ts, bm, method, names)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'adjoint_rtol', 'atol', 'adjoint_atol', 'dt_min'],
                         [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
-    adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
 
     return _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
         adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params
     )
-
-
-def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str) -> str:
-    """Select the default method for adjoint computation based on the noise type of the forward SDE."""
-    if adjoint_method is None:
-        adjoint_method = {
-            SDE_TYPES.ito: {
-                NOISE_TYPES.diagonal: METHODS.milstein,
-                NOISE_TYPES.additive: METHODS.euler,
-                NOISE_TYPES.scalar: METHODS.euler,
-                NOISE_TYPES.general: METHODS.euler,
-            }[sde.noise_type],
-            SDE_TYPES.stratonovich: METHODS.midpoint,
-        }[sde.sde_type]
-    return adjoint_method
