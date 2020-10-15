@@ -38,8 +38,8 @@ The output tensor `ys` will have shape `(t_size, batch_size, state_size)`, and c
 - `general`: The diffusion `g` has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is `brownian_size`-dimensional.
 
 ### Keyword arguments for `sdeint`
-- `bm`: A `BrownianInterval` object, see [below](#list-of-sde-solvers). Optionally include to control the Brownian motion.
-- `method`: A string, corresponding to one of the solvers listed [below](#brownian-motion).
+- `bm`: A `BrownianInterval` object, see [below](#brownian-motion). Optionally include to control the Brownian motion.
+- `method`: A string, corresponding to one of the solvers listed [below](#list-of-sde-solvers).
 - `dt`: A float for the constant step size, or initial step size for adaptive time-stepping. Defaults to `1e-3`.
 - `adaptive`: If True, use adaptive time-stepping. Defaults to False.
 - `rtol`: Relative tolerance for adaptive time-stepping. Defaults to `1e-5`.
