@@ -60,6 +60,7 @@ jobs:
       matrix:
         python-version: [ 3.6, 3.8 ]
         os: [ ubuntu-latest, macOS-latest, windows-latest ]
+      fail-fast: false
     needs: [ check_version ]
     steps:
       - name: Checkout code
