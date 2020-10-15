@@ -120,7 +120,7 @@ def check_contract(sde, y0, ts, bm, method, names):
     if sde.sde_type not in SDE_TYPES:
         raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde.sde_type}.")
 
-    method = select_default_method(sde, method)
+    method = select_default_method(sde, method, have_g=True)
 
     if method not in METHODS:
         raise ValueError(f"Expected method in {METHODS}, but found {method}.")
@@ -197,13 +197,14 @@ def check_contract(sde, y0, ts, bm, method, names):
     return sde, y0, ts, bm, method
 
 
-def select_default_method(sde: base_sde.BaseSDE, method: Optional[str]) -> str:
+def select_default_method(sde: base_sde.BaseSDE, method: Optional[str], have_g: bool) -> str:
+    ito_method = METHODS.srk if have_g else METHODS.milstein
     if method is None:
         method = {
             SDE_TYPES.ito: {
-                NOISE_TYPES.scalar: METHODS.srk,
-                NOISE_TYPES.additive: METHODS.srk,
-                NOISE_TYPES.diagonal: METHODS.srk,
+                NOISE_TYPES.scalar: ito_method,
+                NOISE_TYPES.additive: ito_method,
+                NOISE_TYPES.diagonal: ito_method,
                 NOISE_TYPES.general: METHODS.euler
             }[sde.noise_type],
             SDE_TYPES.stratonovich: METHODS.midpoint,

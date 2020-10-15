@@ -16,16 +16,19 @@ import sys
 
 sys.path = sys.path[1:]  # A hack so that we always import the installed library.
 
-import unittest
-
+import contextlib
+import pytest
 import torch
+import torchsde
+import warnings
 
 from tests import basic_sde
-from torchsde import BrownianInterval, sdeint
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+devices = ['cpu']
+if torch.cuda.is_available():
+    devices.append('cuda')
 
 batch_size = 16
 d = 3
@@ -35,152 +38,141 @@ t1 = 0.3
 T = 5
 dt = 1e-2
 dtype = torch.get_default_dtype()
-ts = torch.linspace(t0, t1, steps=T, device=device)
-y0 = torch.ones(batch_size, d, device=device)
-
-basic_sdes = (
-    basic_sde.BasicSDE1(d=d).to(device),
-    basic_sde.BasicSDE2(d=d).to(device),
-    basic_sde.BasicSDE3(d=d).to(device),
-    basic_sde.BasicSDE4(d=d).to(device),
-)
-
-# Make bms explicitly for testing.
-bm_diagonal = BrownianInterval(
-    t0=t0, t1=t1, size=(batch_size, d), dtype=dtype, device=device, levy_area_approximation='space-time'
-)
-bm_general = BrownianInterval(
-    t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device, levy_area_approximation='space-time'
-)
-bm_scalar = BrownianInterval(
-    t0=t0, t1=t1, size=(batch_size, 1), dtype=dtype, device=device, levy_area_approximation='space-time'
-)
 
 
-class TestSdeint(unittest.TestCase):
+@pytest.mark.parametrize('device', devices)
+def test_rename_methods(device):
+    # Test renaming works with a subset of names.
+    sde = basic_sde.CustomNamesSDE().to(device)
+    y0 = torch.ones(batch_size, d, device=device)
+    ts = torch.linspace(t0, t1, steps=T, device=device)
+    ans = torchsde.sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward'})
+    assert ans.shape == (T, batch_size, d)
 
-    def test_rename_methods(self):
-        # Test renaming works with a subset of names.
-        sde = basic_sde.CustomNamesSDE().to(device)
-        ans = sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward'})
-        self.assertEqual(ans.shape, (T, batch_size, d))
 
-    def test_rename_methods_logqp(self):
-        self.skipTest("Temporarily deprecating logqp.")
+@pytest.mark.skip("Temporarily deprecating logqp.")
+@pytest.mark.parametrize('device', devices)
+def test_rename_methods_logqp(device):
+    # Test renaming works with a subset of names when `logqp=True`.
+    sde = basic_sde.CustomNamesSDELogqp().to(device)
+    y0 = torch.ones(batch_size, d, device=device)
+    ts = torch.linspace(t0, t1, steps=T, device=device)
+    ans = torchsde.sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward', 'prior_drift': 'w'}, logqp=True)
+    assert ans[0].shape == (T, batch_size, d)
+    assert ans[1].shape == (T - 1, batch_size)
 
-        # Test renaming works with a subset of names when `logqp=True`.
-        sde = basic_sde.CustomNamesSDELogqp().to(device)
-        ans = sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward', 'prior_drift': 'w'}, logqp=True)
-        self.assertEqual(ans[0].shape, (T, batch_size, d))
-        self.assertEqual(ans[1].shape, (T - 1, batch_size))
 
-    def test_sdeint_general(self):
-        sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
-        for method in ('euler',):
-            self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+def _use_bm__levy_area_approximation():
+    yield False, None
+    yield True, 'none'
+    yield True, 'space-time'
+    yield True, 'davie'
+    yield True, 'foster'
 
-    def test_sdeint_general_logqp(self):
-        self.skipTest("Temporarily deprecating logqp.")
 
-        sde = basic_sde.GeneralSDE(d=d, m=m).to(device)
-        for method in ('euler',):
-            self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+@pytest.mark.parametrize('sde_cls', [basic_sde.ScalarSDE, basic_sde.AdditiveSDE, basic_sde.DiagonalSDE,
+                                     basic_sde.GeneralSDE])
+@pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
+@pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
+@pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
+@pytest.mark.parametrize('adaptive', [False, True])
+@pytest.mark.parametrize('logqp', [False, True])
+@pytest.mark.parametrize('device', devices)
+def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_type, method, adaptive, logqp, device):
+    # Tests that sdeint:
+    # (a) runs/raises an error as appropriate
+    # (b) produces tensors of the right shape
+    # (c) accepts every method
 
-    def test_sdeint_additive(self):
-        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
-        for method in ('euler', 'milstein', 'srk'):
-            self._test_sdeint(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+    if logqp:
+        pytest.skip("Temporarily deprecating logqp.")
 
-    def test_sdeint_additive_logqp(self):
-        self.skipTest("Temporarily deprecating logqp.")
+    should_fail = False
+    if sde_type == 'ito':
+        if method in ('euler_heun', 'heun', 'midpoint', 'log_ode'):
+            should_fail = True
+    else:
+        if method in ('euler', 'srk'):
+            should_fail = True
+    if method in ('milstein', 'srk') and sde_cls.noise_type == 'general':
+        should_fail = True
+    if method == 'srk' and levy_area_approximation == 'none':
+        should_fail = True
+    if method == 'log_ode' and levy_area_approximation in ('none', 'space-time'):
+        should_fail = True
+    if method == 'blah':
+        should_fail = True
 
-        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
-        for method in ('euler', 'milstein', 'srk'):
-            self._test_sdeint_logqp(sde, bm=bm_general, adaptive=False, method=method, dt=dt)
+    if sde_cls is basic_sde.ScalarSDE:
+        kwargs = {'d': d}
+    elif sde_cls is basic_sde.DiagonalSDE:
+        kwargs = {}
+    else:
+        kwargs = {'d': d, 'm': m}
+    sde = sde_cls(sde_type=sde_type, **kwargs).to(device)
 
-    def test_sde_scalar(self):
-        sde = basic_sde.ScalarSDE(d=d, m=m).to(device)
-        for method in ('euler', 'milstein', 'srk'):
-            self._test_sdeint(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
 
-    def test_sde_scalar_logqp(self):
-        self.skipTest("Temporarily deprecating logqp.")
-
-        sde = basic_sde.ScalarSDE(d=d, m=m).to(device)
-        for method in ('euler', 'milstein', 'srk'):
-            self._test_sdeint_logqp(sde, bm=bm_scalar, adaptive=False, method=method, dt=dt)
-
-    def test_srk_determinism(self):
-        # srk for additive.
-        sde = basic_sde.AdditiveSDE(d=d, m=m).to(device)
-        ys1 = sdeint(sde, y0, ts, bm=bm_general, adaptive=False, method='srk', dt=dt)
-        ys2 = sdeint(sde, y0, ts, bm=bm_general, adaptive=False, method='srk', dt=dt)
-        self.tensorAssertAllClose(ys1, ys2)
-
-        # srk for diagonal.
-        sde = basic_sde.BasicSDE1(d=d).to(device)
-        ys1 = sdeint(sde, y0, ts, bm=bm_diagonal, adaptive=False, method='srk', dt=dt)
-        ys2 = sdeint(sde, y0, ts, bm=bm_diagonal, adaptive=False, method='srk', dt=dt)
-        self.tensorAssertAllClose(ys1, ys2)
-
-    # All tests below for diagonal noise. These cases are to see if solvers still work when some of the functions don't
-    # depend on the states/params and when some states/params don't require gradients.
-    def test_sdeint_fixed(self):
-        for sde in basic_sdes:
-            for method in ('euler', 'milstein', 'srk'):
-                self._test_sdeint(sde, bm_diagonal, adaptive=False, method=method, dt=dt)
-
-    def test_sdeint_adaptive(self):
-        for sde in basic_sdes:
-            for method in ('milstein', 'srk'):
-                self._test_sdeint(sde, bm_diagonal, adaptive=True, method=method, dt=dt)
-
-    def test_sdeint_logqp_fixed(self):
-        self.skipTest("Temporarily deprecating logqp.")
-
-        for sde in basic_sdes:
-            for method in ('euler', 'milstein', 'srk'):
-                self._test_sdeint_logqp(sde, bm_diagonal, adaptive=False, method=method, dt=dt)
-
-    def test_sdeint_logqp_adaptive(self):
-        self.skipTest("Temporarily deprecating logqp.")
-
-        for sde in basic_sdes:
-            for method in ('milstein', 'srk'):
-                self._test_sdeint_logqp(sde, bm_diagonal, adaptive=True, method=method, dt=dt)
-
-    def _test_sdeint(self, sde, bm, adaptive, method, dt):
-        # Using `f` as drift.
-        with torch.no_grad():
-            ans = sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive)
-        self.assertEqual(ans.shape, (T, batch_size, d))
-
-        # Using `h` as drift.
-        with torch.no_grad():
-            ans = sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'})
-        self.assertEqual(ans.shape, (T, batch_size, d))
-
-    def _test_sdeint_logqp(self, sde, bm, adaptive, method, dt):
-        # Using `f` as drift.
-        with torch.no_grad():
-            ans, logqp = sdeint(sde, y0, ts, bm, logqp=True, method=method, dt=dt, adaptive=adaptive)
-        self.assertEqual(ans.shape, (T, batch_size, d))
-        self.assertEqual(logqp.shape, (T - 1, batch_size))
-
-        # Using `h` as drift.
-        with torch.no_grad():
-            ans, logqp = sdeint(
-                sde, y0, ts, bm, logqp=True, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'}
-            )
-        self.assertEqual(ans.shape, (T, batch_size, d))
-        self.assertEqual(logqp.shape, (T - 1, batch_size))
-
-    def tensorAssertAllClose(self, actual, expected, rtol=1e-2, atol=1e-3):
-        if actual is None:
-            self.assertEqual(expected, None)
+    if use_bm:
+        if sde_cls.noise_type == 'scalar':
+            size = (batch_size, 1)
+        elif sde_cls.noise_type == 'diagonal':
+            size = (batch_size, d)
         else:
-            torch.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)
+            assert sde_cls.noise_type in ('additive', 'general')
+            size = (batch_size, m)
+        bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=size, dtype=dtype, device=device,
+                                       levy_area_approximation=levy_area_approximation)
+    else:
+        bm = None
+
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
 
 
-if __name__ == '__main__':
-    unittest.main()
+@pytest.mark.parametrize("sde_cls", [basic_sde.BasicSDE1, basic_sde.BasicSDE2, basic_sde.BasicSDE3,
+                                     basic_sde.BasicSDE4])
+@pytest.mark.parametrize('method', ['euler', 'milstein', 'srk'])
+@pytest.mark.parametrize('adaptive', [False, True])
+@pytest.mark.parametrize('device', devices)
+def test_sdeint_dependencies(sde_cls, method, adaptive, device):
+    # This test uses diagonal noise. This checks if the solvers still work when some of the functions don't depend on
+    # the states/params and when some states/params don't require gradients.
+    sde = sde_cls(d=d).to(device)
+    bm = None
+    logqp = False
+    should_fail = False
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
+
+
+def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
+    y0 = torch.ones(batch_size, d, device=device)
+    ts = torch.linspace(t0, t1, steps=T, device=device)
+    if adaptive and method == 'euler' and sde.noise_type != 'additive':
+        ctx = pytest.warns(UserWarning)
+    else:
+        ctx = contextlib.nullcontext()
+
+    # Using `f` as drift.
+    with torch.no_grad():
+        try:
+            with ctx:
+                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive)
+        except Exception:
+            if should_fail:
+                return
+            raise
+        else:
+            if should_fail:
+                pytest.fail("Expected an error; did not get one.")
+    if logqp:
+        ans, logqp = ans
+        assert logqp.shape == (T - 1, batch_size)
+    assert ans.shape == (T, batch_size, d)
+
+    # Using `h` as drift.
+    with torch.no_grad():
+        with ctx:
+            ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'})
+    if logqp:
+        ans, logqp = ans
+        assert logqp.shape == (T - 1, batch_size)
+    assert ans.shape == (T, batch_size, d)

@@ -57,45 +57,51 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_ys):  # noqa
-        ys, ts, *adjoint_params = ctx.saved_tensors
-        sde = ctx.sde
-        dt = ctx.dt
-        bm = ctx.bm
-        adjoint_method = ctx.adjoint_method
-        adjoint_adaptive = ctx.adjoint_adaptive
-        adjoint_rtol = ctx.adjoint_rtol
-        adjoint_atol = ctx.adjoint_atol
-        dt_min = ctx.dt_min
-        adjoint_options = ctx.adjoint_options
+        try:
+            ys, ts, *adjoint_params = ctx.saved_tensors
+            sde = ctx.sde
+            dt = ctx.dt
+            bm = ctx.bm
+            adjoint_method = ctx.adjoint_method
+            adjoint_adaptive = ctx.adjoint_adaptive
+            adjoint_rtol = ctx.adjoint_rtol
+            adjoint_atol = ctx.adjoint_atol
+            dt_min = ctx.dt_min
+            adjoint_options = ctx.adjoint_options
 
-        aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in adjoint_params]
-        shapes = [t.size() for t in aug_state]
-        adjoint_sde = AdjointSDE(sde, adjoint_params, shapes)
-        adjoint_method = sdeint.select_default_method(adjoint_sde, adjoint_method)
-        reverse_bm = ReverseBrownian(bm)
+            aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in adjoint_params]
+            shapes = [t.size() for t in aug_state]
+            adjoint_sde = AdjointSDE(sde, adjoint_params, shapes)
+            adjoint_method = sdeint.select_default_method(adjoint_sde, adjoint_method, have_g=False)
+            reverse_bm = ReverseBrownian(bm)
 
-        for i in range(ys.size(0) - 1, 0, -1):
-            aug_state = misc.flatten(aug_state)
-            aug_state = _SdeintAdjointMethod.apply(adjoint_sde,
-                                                   torch.stack([-ts[i], -ts[i - 1]]),
-                                                   dt,
-                                                   reverse_bm,
-                                                   adjoint_method,
-                                                   adjoint_method,
-                                                   adjoint_adaptive,
-                                                   adjoint_adaptive,
-                                                   adjoint_rtol,
-                                                   adjoint_rtol,
-                                                   adjoint_atol,
-                                                   adjoint_atol,
-                                                   dt_min,
-                                                   adjoint_options,
-                                                   adjoint_options,
-                                                   aug_state,
-                                                   *adjoint_params)
-            aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
-            aug_state[0] = ys[i - 1]
-            aug_state[1] = aug_state[1] + grad_ys[i - 1]
+            for i in range(ys.size(0) - 1, 0, -1):
+                aug_state = misc.flatten(aug_state)
+                aug_state = _SdeintAdjointMethod.apply(adjoint_sde,
+                                                       torch.stack([-ts[i], -ts[i - 1]]),
+                                                       dt,
+                                                       reverse_bm,
+                                                       adjoint_method,
+                                                       adjoint_method,
+                                                       adjoint_adaptive,
+                                                       adjoint_adaptive,
+                                                       adjoint_rtol,
+                                                       adjoint_rtol,
+                                                       adjoint_atol,
+                                                       adjoint_atol,
+                                                       dt_min,
+                                                       adjoint_options,
+                                                       adjoint_options,
+                                                       aug_state,
+                                                       *adjoint_params)
+                aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
+                aug_state[0] = ys[i - 1]
+                aug_state[1] = aug_state[1] + grad_ys[i - 1]
+        except Exception as e:
+            import traceback
+            print(traceback.print_tb(e.__traceback__))
+            print(type(e), e)
+            raise
 
         return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, *aug_state[1:]
