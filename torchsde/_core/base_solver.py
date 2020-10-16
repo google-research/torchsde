@@ -48,14 +48,14 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                  options: Dict,
                  **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
-        assert sde.sde_type == self.sde_type, f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}"
-        assert sde.noise_type in self.noise_types, (
-            f"SDE has noise type {sde.noise_type} but solver only supports noise types {self.noise_types}"
-        )
-        assert bm.levy_area_approximation in self.levy_area_approximations, (
-            f"SDE solver requires one of {self.levy_area_approximations} set as the `levy_area_approximation` on the "
-            f"Brownian motion."
-        )
+        if sde.sde_type != self.sde_type:
+            raise ValueError(f"SDE is of type {sde.sde_type} but solver is for type {self.sde_type}")
+        if sde.noise_type not in self.noise_types:
+            raise ValueError(f"SDE has noise type {sde.noise_type} but solver only supports noise types "
+                             f"{self.noise_types}")
+        if bm.levy_area_approximation not in self.levy_area_approximations:
+            raise ValueError(f"SDE solver requires one of {self.levy_area_approximations} set as the "
+                             f"`levy_area_approximation` on the Brownian motion.")
         if sde.noise_type == NOISE_TYPES.scalar and torch.Size(bm.shape[1:]).numel() != 1:  # noqa
             raise ValueError("The Brownian motion for scalar SDEs must of dimension 1.")
 
@@ -96,7 +96,8 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         Returns:
             ys, where ys is a Tensor of size (T, batch_size, d).
         """
-        assert misc.is_strictly_increasing(ts), "Evaluation times `ts` must be strictly increasing."
+        if not misc.is_strictly_increasing(ts):
+            raise ValueError("Evaluation times `ts` must be strictly increasing.")
         y0, dt, adaptive, rtol, atol, dt_min = self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min
 
         step_size = dt

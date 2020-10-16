@@ -158,33 +158,6 @@ class ScalarSDE(AdditiveSDE):
         super(ScalarSDE, self).__init__(d=d, m=1, sde_type=sde_type)
 
 
-class TupleSDE(SDEIto):
-    def __init__(self, d=10):
-        super(TupleSDE, self).__init__(noise_type="diagonal")
-        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
-        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
-        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
-        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
-
-    def f(self, t, y):
-        y, = y
-        return (
-            self.shared_param * torch.sin(y) * 0.2 +
-            torch.sin(y ** 2.) * 0.1 +
-            torch.cos(t) +
-            self.no_grad_param * y,
-        )
-
-    def g(self, t, y):
-        y, = y
-        return torch.sigmoid(
-            self.shared_param * torch.cos(y) * .3 + torch.sin(t)) + torch.sigmoid(self.no_grad_param * y),
-
-    def h(self, t, y):
-        y, = y
-        return torch.sigmoid(y),
-
-
 class CustomNamesSDE(SDEIto):
     def __init__(self):
         super(CustomNamesSDE, self).__init__(noise_type="diagonal")

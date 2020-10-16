@@ -48,7 +48,7 @@ class _nullcontext:
 
 @pytest.mark.parametrize('device', devices)
 def test_rename_methods(device):
-    # Test renaming works with a subset of names.
+    """Test renaming works with a subset of names."""
     sde = basic_sde.CustomNamesSDE().to(device)
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
@@ -59,7 +59,7 @@ def test_rename_methods(device):
 @pytest.mark.skip("Temporarily deprecating logqp.")
 @pytest.mark.parametrize('device', devices)
 def test_rename_methods_logqp(device):
-    # Test renaming works with a subset of names when `logqp=True`.
+    """Test renaming works with a subset of names when `logqp=True`."""
     sde = basic_sde.CustomNamesSDELogqp().to(device)
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
@@ -85,28 +85,27 @@ def _use_bm__levy_area_approximation():
 @pytest.mark.parametrize('logqp', [False, True])
 @pytest.mark.parametrize('device', devices)
 def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_type, method, adaptive, logqp, device):
-    # Tests that sdeint:
-    # (a) runs/raises an error as appropriate
-    # (b) produces tensors of the right shape
-    # (c) accepts every method
+    """Tests that sdeint:
+    (a) runs/raises an error as appropriate
+    (b) produces tensors of the right shape
+    (c) accepts every method
+    """
 
     if logqp:
         pytest.skip("Temporarily deprecating logqp.")
 
     should_fail = False
     if sde_type == 'ito':
-        if method in ('euler_heun', 'heun', 'midpoint', 'log_ode'):
+        if method not in ('euler', 'srk', 'milstein'):
             should_fail = True
     else:
-        if method in ('euler', 'srk'):
+        if method not in ('euler_heun', 'heun', 'midpoint', 'log_ode', 'milstein'):
             should_fail = True
     if method in ('milstein', 'srk') and sde_cls.noise_type == 'general':
         should_fail = True
     if method == 'srk' and levy_area_approximation == 'none':
         should_fail = True
     if method == 'log_ode' and levy_area_approximation in ('none', 'space-time'):
-        should_fail = True
-    if method == 'blah':
         should_fail = True
 
     if sde_cls is basic_sde.ScalarSDE:
@@ -140,8 +139,10 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('device', devices)
 def test_sdeint_dependencies(sde_cls, method, adaptive, device):
-    # This test uses diagonal noise. This checks if the solvers still work when some of the functions don't depend on
-    # the states/params and when some states/params don't require gradients.
+    """This test uses diagonal noise. This checks if the solvers still work when some of the functions don't depend on
+    the states/params and when some states/params don't require gradients.
+    """
+
     sde = sde_cls(d=d).to(device)
     bm = None
     logqp = False
@@ -162,7 +163,7 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
         try:
             with ctx:
                 ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive)
-        except Exception:
+        except ValueError:
             if should_fail:
                 return
             raise
