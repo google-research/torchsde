@@ -105,7 +105,7 @@ def sdeint_adjoint(sde: nn.Module,
                    y0: Tensor,
                    ts: Vector,
                    bm: Optional[BaseBrownian] = None,
-                   method: Optional[str] = "srk",
+                   method: Optional[str] = None,
                    adjoint_method: Optional[str] = None,
                    dt: Optional[Scalar] = 1e-3,
                    adaptive: Optional[bool] = False,
@@ -134,10 +134,13 @@ def sdeint_adjoint(sde: nn.Module,
         bm (Brownian, optional): A 'BrownianInterval', `BrownianPath` or
             `BrownianTree` object. Should return tensors of size (batch_size, m)
             for `__call__`. Defaults to `BrownianInterval`.
-        method (str, optional): Name of numerical integration method.
+        method (str, optional): Numerical integration method to use. Must be
+            compatible with the SDE type (Ito/Stratonovich) and the noise type
+            (scalar/additive/diagonal/general). Defaults to a sensible choice
+            depending on the SDE type and noise type of the supplied SDE.
         adjoint_method (str, optional): Name of numerical integration method for
             backward adjoint solve. Defaults to a sensible choice depending on
-            the noise type of the supplied SDE.
+            the SDE type and noise type of the supplied SDE.
         dt (float, optional): The constant step size or initial step size for
             adaptive time-stepping.
         adaptive (bool, optional): If `True`, use adaptive time-stepping.
@@ -184,7 +187,7 @@ def sdeint_adjoint(sde: nn.Module,
                          'can be specified explicitly via the `adjoint_params` argument. If there are no parameters '
                          'then it is allowable to set `adjoint_params=()`.')
 
-    sde, y0, ts, bm = sdeint.check_contract(sde, y0, ts, bm, method, names)
+    sde, y0, ts, bm, method = sdeint.check_contract(sde, y0, ts, bm, method, names)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'adjoint_rtol', 'atol', 'adjoint_atol', 'dt_min'],
                         [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
