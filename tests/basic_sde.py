@@ -94,9 +94,12 @@ class BasicSDE4(SDEIto):
         return torch.sigmoid(y)
 
 
-class GeneralSDE(SDEIto):
-    def __init__(self, d=10, m=3):
-        super(GeneralSDE, self).__init__(noise_type="general")
+class GeneralSDE(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, d=10, m=3, sde_type=SDE_TYPES.ito):
+        super(GeneralSDE, self).__init__()
+        self.sde_type = sde_type
         self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
         self.no_grad_param = nn.Parameter(torch.randn(1, d, m), requires_grad=False)
         self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
@@ -112,9 +115,29 @@ class GeneralSDE(SDEIto):
         return torch.sigmoid(y)
 
 
-class AdditiveSDE(BaseSDE):
+class DiagonalSDE(torch.nn.Module):
+    noise_type = 'diagonal'
+
+    def __init__(self, sde_type=SDE_TYPES.ito):
+        super(DiagonalSDE, self).__init__()
+        self.sde_type = sde_type
+
+    def f(self, t, y):
+        return y.cos()
+
+    def g(self, t, y):
+        return y.sin()
+
+    def h(self, t, y):
+        return (y + 1).cos()
+
+
+class AdditiveSDE(torch.nn.Module):
+    noise_type = 'additive'
+
     def __init__(self, d=10, m=3, sde_type=SDE_TYPES.ito):
-        super(AdditiveSDE, self).__init__(noise_type="additive", sde_type=sde_type)
+        super(AdditiveSDE, self).__init__()
+        self.sde_type = sde_type
         self.f_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
         self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, m)), requires_grad=True)
 
@@ -129,37 +152,10 @@ class AdditiveSDE(BaseSDE):
 
 
 class ScalarSDE(AdditiveSDE):
-    def __init__(self, d=10, m=3):
-        super(ScalarSDE, self).__init__(d=d, m=m)
-        self.g_param = nn.Parameter(torch.sigmoid(torch.randn(1, d, 1)), requires_grad=True)
-        self.noise_type = "scalar"
+    noise_type = "scalar"
 
-
-class TupleSDE(SDEIto):
-    def __init__(self, d=10):
-        super(TupleSDE, self).__init__(noise_type="diagonal")
-        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
-        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
-        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
-        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
-
-    def f(self, t, y):
-        y, = y
-        return (
-            self.shared_param * torch.sin(y) * 0.2 +
-            torch.sin(y ** 2.) * 0.1 +
-            torch.cos(t) +
-            self.no_grad_param * y,
-        )
-
-    def g(self, t, y):
-        y, = y
-        return torch.sigmoid(
-            self.shared_param * torch.cos(y) * .3 + torch.sin(t)) + torch.sigmoid(self.no_grad_param * y),
-
-    def h(self, t, y):
-        y, = y
-        return torch.sigmoid(y),
+    def __init__(self, d=10, sde_type=SDE_TYPES.ito):
+        super(ScalarSDE, self).__init__(d=d, m=1, sde_type=sde_type)
 
 
 class CustomNamesSDE(SDEIto):
