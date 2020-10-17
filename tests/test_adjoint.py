@@ -26,8 +26,7 @@ from . import utils
 
 import torchsde
 from torchsde.settings import NOISE_TYPES, METHODS
-from .basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from .problems import Ex1, Ex2, Ex3, Ex4
+from .problems import Ex1, Ex2, Ex3, Ex4, BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
