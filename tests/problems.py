@@ -23,12 +23,17 @@ differential equations via natural embeddings and rejection sampling with memory
 Discrete and continuous dynamical systems. Series B 22.7 (2017): 2731.
 
 Ex4 is constructed to test schemes for SDEs with general noise and neural nets.
+
+BasicSDE1-4 are problems where the drift and diffusion may not depend on
+trainable parameters.
+
+CustomNamesSDE and CustomNamesSDELogqp are used to test the argument `names`.
 """
 
 import torch
 from torch import nn
 
-from torchsde import BaseSDE
+from torchsde import BaseSDE, SDEIto
 from torchsde.settings import NOISE_TYPES, SDE_TYPES
 
 
@@ -150,3 +155,101 @@ class Ex4(BaseSDE):
     @property
     def nfe(self):
         return self._nfe
+
+
+class BasicSDE1(SDEIto):
+    def __init__(self, d=10):
+        super(BasicSDE1, self).__init__(noise_type="diagonal")
+        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
+        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
+
+    def f(self, t, y):
+        return self.shared_param * torch.sin(y) * 0.2 + torch.cos(y ** 2.) * 0.1 + torch.cos(t) + self.no_grad_param * y
+
+    def g(self, t, y):
+        return torch.sigmoid(self.shared_param * torch.cos(y) * .3 + torch.sin(t)) + torch.sigmoid(
+            self.no_grad_param * y) + 0.1
+
+    def h(self, t, y):
+        return torch.sigmoid(y)
+
+
+class BasicSDE2(SDEIto):
+    def __init__(self, d=10):
+        super(BasicSDE2, self).__init__(noise_type="diagonal")
+        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
+        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
+
+    def f(self, t, y):
+        return self.shared_param * 0.2 + self.no_grad_param + torch.zeros_like(y)
+
+    def g(self, t, y):
+        return torch.sigmoid(self.shared_param * .3) + torch.sigmoid(self.no_grad_param) + torch.zeros_like(y) + 0.1
+
+    def h(self, t, y):
+        return torch.sigmoid(y)
+
+
+class BasicSDE3(SDEIto):
+    def __init__(self, d=10):
+        super(BasicSDE3, self).__init__(noise_type="diagonal")
+        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=True)
+        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=False)
+
+    def f(self, t, y):
+        return self.shared_param * 0.2 + self.no_grad_param + torch.zeros_like(y)
+
+    def g(self, t, y):
+        return torch.sigmoid(self.shared_param * .3) + torch.sigmoid(self.no_grad_param) + torch.zeros_like(y) + 0.1
+
+    def h(self, t, y):
+        return torch.sigmoid(y)
+
+
+class BasicSDE4(SDEIto):
+    def __init__(self, d=10):
+        super(BasicSDE4, self).__init__(noise_type="diagonal")
+        self.shared_param = nn.Parameter(torch.randn(1, d), requires_grad=True)
+        self.no_grad_param = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param1 = nn.Parameter(torch.randn(1, d), requires_grad=False)
+        self.unused_param2 = nn.Parameter(torch.randn(1, d), requires_grad=True)
+
+    def f(self, t, y):
+        return torch.zeros_like(y).fill_(0.1)
+
+    def g(self, t, y):
+        return torch.sigmoid(torch.zeros_like(y)) + 0.1
+
+    def h(self, t, y):
+        return torch.sigmoid(y)
+
+
+class CustomNamesSDE(SDEIto):
+    def __init__(self):
+        super(CustomNamesSDE, self).__init__(noise_type="diagonal")
+
+    def forward(self, t, y):
+        return y * t
+
+    def g(self, t, y):
+        return torch.sigmoid(t * y)
+
+
+class CustomNamesSDELogqp(SDEIto):
+    def __init__(self):
+        super(CustomNamesSDELogqp, self).__init__(noise_type="diagonal")
+
+    def forward(self, t, y):
+        return y * t
+
+    def g(self, t, y):
+        return torch.sigmoid(t * y)
+
+    def w(self, t, y):
+        return y * t
