@@ -128,7 +128,7 @@ class LatentSDE(torchsde.SDEIto):
         y = y[:, 0:1]
         f, g, h = self.f(t, y), self.g(t, y), self.h(t, y)
         u = _stable_division(f - h, g)
-        f_logqp = .5 * torch.norm(u, dim=1, keepdim=True) ** 2
+        f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
         return torch.cat([f, f_logqp], dim=1)
 
     def g_aug(self, t, y):  # Diffusion for augmented dynamics with logqp term.
