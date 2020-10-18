@@ -64,6 +64,10 @@ class Ex1(BaseSDE):
         self._nfe += 1
         return self.sigma * y
 
+    def h(self, t, y):
+        self._nfe += 1
+        return torch.zeros_like(y)
+
     @property
     def nfe(self):
         return self._nfe
@@ -91,6 +95,10 @@ class Ex2(BaseSDE):
         self._nfe += 1
         return (self.p * torch.cos(y) ** 2).unsqueeze(dim=-1)
 
+    def h(self, t, y):
+        self._nfe += 1
+        return torch.zeros_like(y)
+
     @property
     def nfe(self):
         return self._nfe
@@ -115,6 +123,10 @@ class Ex3(BaseSDE):
         self._nfe += 1
         fill_value = self.a * self.b / torch.sqrt(1. + t)
         return fill_value.unsqueeze(dim=0).unsqueeze(dim=-1).repeat(y.size(0), 1, self.m)
+
+    def h(self, t, y):
+        self._nfe += 1
+        return torch.zeros_like(y)
 
     @property
     def nfe(self):
@@ -151,6 +163,10 @@ class Ex4(BaseSDE):
         self._nfe += 1
         ty = torch.cat((t.expand_as(y[:, :1]), y), dim=1)
         return self.g_net(ty).reshape(-1, self.d, self.m)
+
+    def h(self, t, y):
+        self._nfe += 1
+        return torch.zeros_like(y)
 
     @property
     def nfe(self):
