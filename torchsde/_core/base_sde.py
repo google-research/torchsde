@@ -218,14 +218,14 @@ class SDELogqp(BaseSDE):
         g_logqp = y.new_zeros(size=(y.size(0), 1))
         return torch.cat([g, g_logqp], dim=1)
 
-    def f_general(self, t, y):
+    def f_general(self, t, y: Tensor):
         y = y[:, :-1]
         f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
         u = misc.batch_mvp(g.pinverse(), f - h)  # (batch_size, brownian_size).
         f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
         return torch.cat([f, f_logqp], dim=1)
 
-    def g_general(self, t, y):
+    def g_general(self, t, y: Tensor):
         y = y[:, :-1]
         g = self._base_sde.g(t, y)
         g_logqp = y.new_zeros(size=(g.size(0), 1, g.size(-1)))
