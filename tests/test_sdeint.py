@@ -81,7 +81,7 @@ def _use_bm__levy_area_approximation():
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
 @pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
 @pytest.mark.parametrize('adaptive', [False, True])
-@pytest.mark.parametrize('logqp', [False, True])
+@pytest.mark.parametrize('logqp', [True, False])
 @pytest.mark.parametrize('device', devices)
 def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_type, method, adaptive, logqp, device):
     """Tests that sdeint:
@@ -113,7 +113,7 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
         if sde_cls.noise_type == 'scalar':
             size = (batch_size, 1)
         elif sde_cls.noise_type == 'diagonal':
-            size = (batch_size, d)
+            size = (batch_size, d + 1) if logqp else (batch_size, d)
         else:
             assert sde_cls.noise_type in ('additive', 'general')
             size = (batch_size, m)
@@ -153,7 +153,7 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     with torch.no_grad():
         try:
             with ctx:
-                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive)
+                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, logqp=logqp)
         except ValueError:
             if should_fail:
                 return
@@ -162,15 +162,16 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
             if should_fail:
                 pytest.fail("Expected an error; did not get one.")
     if logqp:
-        ans, logqp = ans
-        assert logqp.shape == (T - 1, batch_size)
+        ans, log_ratio = ans
+        assert log_ratio.shape == (T - 1, batch_size)
     assert ans.shape == (T, batch_size, d)
 
     # Using `h` as drift.
     with torch.no_grad():
         with ctx:
-            ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'})
+            ans = torchsde.sdeint(
+                sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'}, logqp=logqp)
     if logqp:
-        ans, logqp = ans
-        assert logqp.shape == (T - 1, batch_size)
+        ans, log_ratio = ans
+        assert log_ratio.shape == (T - 1, batch_size)
     assert ans.shape == (T, batch_size, d)

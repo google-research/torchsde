@@ -20,8 +20,8 @@ from . import misc
 from . import sdeint
 from .adjoint_sde import AdjointSDE
 from .._brownian import BaseBrownian, ReverseBrownian
-from ..settings import METHODS, SDE_TYPES, NOISE_TYPES
-from ..types import Scalar, Vector, Optional, Dict, Any, Tensor
+from ..settings import METHODS, NOISE_TYPES, SDE_TYPES
+from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -119,7 +119,8 @@ def sdeint_adjoint(sde: nn.Module,
                    adjoint_options: Optional[Dict[str, Any]] = None,
                    adjoint_params=None,
                    names: Optional[Dict[str, str]] = None,
-                   **unused_kwargs) -> Tensor:
+                   logqp: Optional[bool] = False,
+                   **unused_kwargs) -> TensorOrTensors:
     """Numerically integrate an SDE with stochastic adjoint support.
 
     Args:
@@ -163,6 +164,9 @@ def sdeint_adjoint(sde: nn.Module,
             Expected keys are "drift" and "diffusion". Serves so that users can
             use methods with names not in `("f", "g")`, e.g. to use the
             method "foo" for the drift, we supply `names={"drift": "foo"}`.
+        logqp (bool, optional): If `True`, also return the log-ratio penalty.
+            This argument will be deprecated in the future and is only included
+            to support backward compatibility.
 
     Returns:
         A single state tensor of size (T, batch_size, d).
@@ -187,17 +191,29 @@ def sdeint_adjoint(sde: nn.Module,
                          'can be specified explicitly via the `adjoint_params` argument. If there are no parameters '
                          'then it is allowable to set `adjoint_params=()`.')
 
-    sde, y0, ts, bm, method = sdeint.check_contract(sde, y0, ts, bm, method, names)
+    sde, y0, ts, bm, method = sdeint.check_contract(sde, y0, ts, bm, method, names, logqp)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'adjoint_rtol', 'atol', 'adjoint_atol', 'dt_min'],
                         [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
 
-    return _SdeintAdjointMethod.apply(  # noqa
+    ys = _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
         adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params
     )
+
+    # --- Backwards compatibility: v0.1.1. ---
+    if logqp:
+        ys, log_ratio = ys.split(split_size=(y0.size(dim=1) - 1, 1), dim=2)
+        log_ratio_increments = torch.stack(
+            [log_ratio_t_plus_1 - log_ratio_t
+             for log_ratio_t_plus_1, log_ratio_t in zip(log_ratio[1:], log_ratio[:-1])], dim=0
+        ).squeeze(dim=2)
+        return ys, log_ratio_increments
+    # ----------------------------------------
+
+    return ys
 
 
 def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str) -> str:
