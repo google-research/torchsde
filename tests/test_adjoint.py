@@ -22,10 +22,11 @@ import unittest
 
 import pytest
 import torch
-from . import utils, problems
-
 import torchsde
 from torchsde.settings import NOISE_TYPES, METHODS
+
+from . import utils
+from . import problems
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
