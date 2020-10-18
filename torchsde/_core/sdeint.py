@@ -113,12 +113,6 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
     if len(missing_funcs) > 0:
         raise ValueError(f"sde is required to have the methods {required_funcs}. Missing functions: {missing_funcs}")
 
-    # --- Backwards compatibility: v0.1.1. ---
-    if logqp:
-        sde = base_sde.SDELogqp(sde)
-        y0 = torch.cat((y0, y0.new_zeros(size=(y0.size(0), 1))), dim=1)
-    # ----------------------------------------
-
     if not hasattr(sde, "noise_type"):
         raise ValueError(f"sde does not have the attribute noise_type.")
 
@@ -130,6 +124,12 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
 
     if sde.sde_type not in SDE_TYPES:
         raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde.sde_type}.")
+
+    # --- Backwards compatibility: v0.1.1. ---
+    if logqp:
+        sde = base_sde.SDELogqp(sde)
+        y0 = torch.cat((y0, y0.new_zeros(size=(y0.size(0), 1))), dim=1)
+    # ----------------------------------------
 
     if method is None:
         method = {
