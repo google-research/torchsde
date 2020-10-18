@@ -165,7 +165,7 @@ class RenameMethodsSDE(BaseSDE):
         self.f = getattr(sde, drift)
         self.g = getattr(sde, diffusion)
 
-        # Prevents raising an error when we don't need to call h.
+        # Prevents raising an error when logqp is disabled and `sde` doesn't have an attribute for `h`.
         # Functions that raise exceptions cannot be simply rewritten as lambda functions; therefore using `def`.
         def default_h(*args, **kwargs):
             raise AttributeError(f"'{type(self)}' object has no attribute '{prior_drift}'")
