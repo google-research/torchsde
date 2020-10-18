@@ -19,8 +19,9 @@ sys.path = sys.path[1:]  # A hack so that we always import the installed library
 import pytest
 import torch
 import torchsde
+from torchsde.settings import NOISE_TYPES
 
-from tests import basic_sde
+from . import problems
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -49,18 +50,17 @@ class _nullcontext:
 @pytest.mark.parametrize('device', devices)
 def test_rename_methods(device):
     """Test renaming works with a subset of names."""
-    sde = basic_sde.CustomNamesSDE().to(device)
+    sde = problems.CustomNamesSDE().to(device)
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
     ans = torchsde.sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward'})
     assert ans.shape == (T, batch_size, d)
 
 
-@pytest.mark.skip("Temporarily deprecating logqp.")
 @pytest.mark.parametrize('device', devices)
 def test_rename_methods_logqp(device):
     """Test renaming works with a subset of names when `logqp=True`."""
-    sde = basic_sde.CustomNamesSDELogqp().to(device)
+    sde = problems.CustomNamesSDELogqp().to(device)
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
     ans = torchsde.sdeint(sde, y0, ts, dt=dt, names={'drift': 'forward', 'prior_drift': 'w'}, logqp=True)
@@ -76,8 +76,7 @@ def _use_bm__levy_area_approximation():
     yield True, 'foster'
 
 
-@pytest.mark.parametrize('sde_cls', [basic_sde.ScalarSDE, basic_sde.AdditiveSDE, basic_sde.DiagonalSDE,
-                                     basic_sde.GeneralSDE])
+@pytest.mark.parametrize('sde_cls', [problems.Ex1, problems.Ex2, problems.Ex4, problems.Ex4])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
 @pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
@@ -90,10 +89,6 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     (b) produces tensors of the right shape
     (c) accepts every method
     """
-
-    if logqp:
-        pytest.skip("Temporarily deprecating logqp.")
-
     should_fail = False
     if sde_type == 'ito':
         if method not in ('euler', 'srk', 'milstein'):
@@ -108,14 +103,11 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     if method == 'log_ode' and levy_area_approximation in ('none', 'space-time'):
         should_fail = True
 
-    if sde_cls is basic_sde.ScalarSDE:
+    if sde_cls.noise_type in (NOISE_TYPES.scalar, NOISE_TYPES.diagonal):
         kwargs = {'d': d}
-    elif sde_cls is basic_sde.DiagonalSDE:
-        kwargs = {}
     else:
         kwargs = {'d': d, 'm': m}
     sde = sde_cls(sde_type=sde_type, **kwargs).to(device)
-
 
     if use_bm:
         if sde_cls.noise_type == 'scalar':
@@ -133,8 +125,7 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
 
 
-@pytest.mark.parametrize("sde_cls", [basic_sde.BasicSDE1, basic_sde.BasicSDE2, basic_sde.BasicSDE3,
-                                     basic_sde.BasicSDE4])
+@pytest.mark.parametrize("sde_cls", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
 @pytest.mark.parametrize('method', ['euler', 'milstein', 'srk'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('device', devices)
