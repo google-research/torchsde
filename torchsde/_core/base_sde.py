@@ -19,6 +19,7 @@ from torch import nn
 
 from . import misc
 from ..settings import NOISE_TYPES, SDE_TYPES
+from ..types import Tensor
 
 
 class BaseSDE(abc.ABC, nn.Module):
@@ -158,11 +159,18 @@ class ForwardSDE(BaseSDE):
 
 class RenameMethodsSDE(BaseSDE):
 
-    def __init__(self, sde, drift='f', diffusion='g'):
+    def __init__(self, sde, drift='f', diffusion='g', prior_drift='h'):
         super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
         self._base_sde = sde
         self.f = getattr(sde, drift)
         self.g = getattr(sde, diffusion)
+
+        # Prevents raising an error when logqp is disabled and `sde` doesn't have an attribute for `h`.
+        # Functions that raise exceptions cannot be simply rewritten as lambda functions; therefore using `def`.
+        def default_h(*args, **kwargs):
+            raise AttributeError(f"'{type(self)}' object has no attribute '{prior_drift}'")
+
+        self.h = getattr(sde, prior_drift, default_h)
 
 
 class SDEIto(BaseSDE):
@@ -175,3 +183,51 @@ class SDEStratonovich(BaseSDE):
 
     def __init__(self, noise_type):
         super(SDEStratonovich, self).__init__(noise_type=noise_type, sde_type=SDE_TYPES.stratonovich)
+
+
+# --- Backwards compatibility: v0.1.1. ---
+class SDELogqp(BaseSDE):
+
+    def __init__(self, sde):
+        super(SDELogqp, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
+        self._base_sde = sde
+
+        # Make this redirection a one-time cost.
+        self._base_f = sde.f
+        self._base_g = sde.g
+        self._base_h = sde.h
+
+        # Make this method selection a one-time cost.
+        if sde.noise_type == NOISE_TYPES.diagonal:
+            self.f = self.f_diagonal
+            self.g = self.g_diagonal
+        else:
+            self.f = self.f_general
+            self.g = self.g_general
+
+    def f_diagonal(self, t, y: Tensor):
+        y = y[:, :-1]
+        f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
+        u = misc.stable_division(f - h, g)
+        f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
+        return torch.cat([f, f_logqp], dim=1)
+
+    def g_diagonal(self, t, y: Tensor):
+        y = y[:, :-1]
+        g = self._base_g(t, y)
+        g_logqp = y.new_zeros(size=(y.size(0), 1))
+        return torch.cat([g, g_logqp], dim=1)
+
+    def f_general(self, t, y: Tensor):
+        y = y[:, :-1]
+        f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
+        u = misc.batch_mvp(g.pinverse(), f - h)  # (batch_size, brownian_size).
+        f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
+        return torch.cat([f, f_logqp], dim=1)
+
+    def g_general(self, t, y: Tensor):
+        y = y[:, :-1]
+        g = self._base_sde.g(t, y)
+        g_logqp = y.new_zeros(size=(g.size(0), 1, g.size(-1)))
+        return torch.cat([g, g_logqp], dim=1)
+# ----------------------------------------

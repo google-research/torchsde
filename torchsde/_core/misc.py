@@ -63,6 +63,11 @@ def batch_mvp(m, v):
     return torch.bmm(m, v.unsqueeze(-1)).squeeze(dim=-1)
 
 
+def stable_division(a, b, epsilon=1e-7):
+    b = torch.where(b.abs().detach() > epsilon, b, torch.full_like(b, fill_value=epsilon) * b.sign())
+    return a / b
+
+
 def vjp(outputs, inputs, **kwargs):
     if torch.is_tensor(inputs):
         inputs = [inputs]

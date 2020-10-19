@@ -22,12 +22,11 @@ import unittest
 
 import pytest
 import torch
-from . import utils
-
 import torchsde
 from torchsde.settings import NOISE_TYPES, METHODS
-from .basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from .problems import Ex1, Ex2, Ex3, Ex4
+
+from . import utils
+from . import problems
 
 torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
@@ -38,7 +37,7 @@ ito_methods = {'milstein': 'ito', 'srk': 'ito'}
 stratonovich_methods = {'midpoint': 'stratonovich'}
 
 
-@pytest.mark.parametrize("sde_cls", [Ex1, Ex2, Ex3, Ex4])
+@pytest.mark.parametrize("sde_cls", [problems.Ex1, problems.Ex2, problems.Ex3, problems.Ex4])
 @pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
 @pytest.mark.parametrize('adaptive', (False,))
 def test_adjoint(sde_cls, method, sde_type, adaptive):
@@ -79,7 +78,7 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
     utils.gradcheck(func, y0, sde, eps=1e-6, rtol=1e-2, atol=1e-2, grad_params=True)
 
 
-@pytest.mark.parametrize("problem", [BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4])
+@pytest.mark.parametrize("problem", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
 @pytest.mark.parametrize("method", ito_methods.keys())
 @pytest.mark.parametrize('adaptive', (False, True))
 def test_basic(problem, method, adaptive):

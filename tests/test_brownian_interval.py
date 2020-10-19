@@ -37,8 +37,7 @@ LARGE_BATCH_SIZE = 131072
 REPS = 2
 MEDIUM_REPS = 25
 LARGE_REPS = 500
-ALPHA = 0.0001
-POOL_SIZE = 48
+ALPHA = 0.00001
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
@@ -53,7 +52,7 @@ def _setup(device, levy_area_approximation, shape):
     tb = torch.rand([], device=device)
     ta, tb = min(ta, tb), max(ta, tb)
     bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=shape, device=device,
-                                   levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+                                   levy_area_approximation=levy_area_approximation)
     return ta, tb, bm
 
 
@@ -205,7 +204,7 @@ def test_normality_conditional(device, levy_area_approximation):
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
         bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
-                                       levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+                                       levy_area_approximation=levy_area_approximation)
 
         for _ in range(MEDIUM_REPS):
             ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
@@ -268,7 +267,7 @@ def test_consistency(device, levy_area_approximation):
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
         bm = torchsde.BrownianInterval(t0=t0, t1=t1, size=(LARGE_BATCH_SIZE,), device=device,
-                                       levy_area_approximation=levy_area_approximation, pool_size=POOL_SIZE)
+                                       levy_area_approximation=levy_area_approximation)
 
         for _ in range(MEDIUM_REPS):
             ta, t_, tb = sorted(npr.uniform(low=t0, high=t1, size=(3,)))
