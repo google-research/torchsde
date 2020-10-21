@@ -3,12 +3,14 @@
 # This follows the paper "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs"
 ###################
 
+import matplotlib.pyplot as plt
 import torch
 try:
     import torchcde
 except ImportError as e:
     raise ImportError("`torchcde` is not installed: go to https://github.com/patrick-kidger/torchcde.") from e
 import torchsde
+import tqdm
 
 
 ###################
@@ -23,44 +25,35 @@ class MLP(torch.nn.Module):
                  torch.nn.Softplus()]
         for _ in range(num_layers - 1):
             model.append(torch.nn.Linear(mlp_size, mlp_size))
+            ###################
+            # Note the use of softplus activations: these are used for theoretical reasons regarding the smoothness of
+            # the vector fields of our SDE. It's unclear how much it matters in practice, though.
+            ###################
             model.append(torch.nn.Softplus())
         model.append(torch.nn.Linear(mlp_size, out_size))
         if tanh:
             model.append(torch.nn.Tanh())
         self._model = torch.nn.Sequential(*model)
 
-        ###################
-        # Note the use of softplus activations: these are used for theoretical reasons regarding the smoothness of the
-        # vector fields of our SDE. It's unclear how much it matters in practice, though.
-        ###################
-
     def forward(self, x):
         return self._model(x)
 
 
 def gp_penalty(generated, real, call):
-    for fake_, real_ in zip(generated, real):
-        assert fake_.shape == real_.shape  # including batch dimension
-    batch_size = generated[0].size(0)
-    for fake_ in generated:
-        assert fake_.size(0) == batch_size
+    assert generated.shape == real.shape  # including batch dimension
+    batch_size = generated.size(0)
 
-    alpha = torch.rand(batch_size, dtype=generated[0].dtype, device=generated[0].device)
-    interpolated = []
-    for fake_, real_ in zip(generated, real):
-        alpha_ = alpha
-        for _ in range(fake_.ndimension() - 1):
-            alpha_ = alpha_.unsqueeze(-1)
-        interpolated_ = alpha_ * real_.detach() + (1 - alpha_) * fake_.detach()
-        interpolated_.requires_grad_(True)
-        interpolated.append(interpolated_)
+    alpha = torch.rand(batch_size, *[1 for _ in range(real.ndimension() - 1)],
+                       dtype=generated.dtype, device=generated.device)
+    interpolated = alpha * real.detach() + (1 - alpha) * generated.detach()
+    interpolated.requires_grad_(True)
 
     with torch.enable_grad():
-        score_interpolated = call(*interpolated)
-        penalties = torch.autograd.grad(score_interpolated, tuple(interpolated),
-                                        torch.ones_like(score_interpolated),
-                                        create_graph=True, retain_graph=True)
-    penalty = torch.cat([penalty.reshape(batch_size, -1) for penalty in penalties], dim=1)
+        score_interpolated = call(interpolated)
+        penalty = torch.autograd.grad(score_interpolated, interpolated,
+                                      torch.ones_like(score_interpolated),
+                                      create_graph=True, retain_graph=True)[0]
+    penalty = penalty.reshape(batch_size, -1)
     return penalty.norm(2, dim=-1).sub(1).pow(2).mean()
 
 
@@ -80,8 +73,11 @@ class GeneratorFunc(torch.nn.Module):
     def __init__(self, noise_size, hidden_size, mlp_size, num_layers):
         super(GeneratorFunc, self).__init__()
 
+        self._noise_size = noise_size
+        self._hidden_size = hidden_size
+
         ###################
-        # Drift and diffusion are MLPs. We happen to make them the same size.
+        # Drift and diffusion are MLPs. They happen to be the same size.
         # Note the final tanh nonlinearity: this is typically important for good performance, to constrain the rate of
         # change of the hidden state.
         ###################
@@ -101,7 +97,7 @@ class GeneratorFunc(torch.nn.Module):
         # x has shape (batch_size, hidden_size)
         t = t.expand(x.size(0), 1)
         tx = torch.cat([t, x], dim=1)
-        return self._diffusion(tx)
+        return self._diffusion(tx).view(x.size(0), self._hidden_size, self._noise_size)
 
 
 ###################
@@ -118,22 +114,261 @@ class Generator(torch.nn.Module):
         self._func = GeneratorFunc(noise_size, hidden_size, mlp_size, num_layers)
         self._readout = torch.nn.Linear(hidden_size, data_size)
 
-    def forward(self, t, batch_size):
-        # t has shape (seq_len,) and corresponds to the points we want to evaluate the SDE at.
+    def forward(self, ts, batch_size):
+        # ts has shape (seq_len,) and corresponds to the points we want to evaluate the SDE at.
 
         ###################
         # Actually solve the SDE.
         ###################
-        x0 = self._initial(torch.randn(batch_size, self._initial_noise_size, device=t.device))
-        xs = torchsde.sdeint(self._func, x0, t, method='midpoint', dt=1e-1)  # shape (seq_len, batch_size, data_size)
+        x0 = self._initial(torch.randn(batch_size, self._initial_noise_size, device=ts.device))
+        xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1e-1)  # shape (seq_len, batch_size, data_size)
         xs = xs.transpose(0, 1)  # switch seq_len and batch_size
-        return self._readout(xs)
+        vals = self._readout(xs)
+
+        ###################
+        # Normalise the data to the form that the discriminator expects, in particular including time as a channel.
+        ###################
+        seq_len = ts.size(0)
+        ts = ts.unsqueeze(0).unsqueeze(-1).expand(batch_size, seq_len, 1)
+        return torch.cat([ts, vals], dim=2)
 
 
 ###################
-# Next the discriminator.
-# There's a few different (roughly equivalent) ways of making the discriminator work. It's important to get this right.
-# This requires a bit of reading! It's quite straightforward, though, and by the end of this you should have a really
+# Next the discriminator. Here, we're going to use a neural controlled differential equation (neural CDE) as the
+# discriminator, just as in the "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs" paper.
+#
+# There's actually a few different (roughly equivalent) ways of making the discriminator work. The curious reader is
+# strongly encouraged to have a read of the comment at the bottom of this file for an in-depth explanation.
+###################
+
+class DiscriminatorFunc(torch.nn.Module):
+    def __init__(self, data_size, hidden_size, mlp_size, num_layers):
+        super(DiscriminatorFunc, self).__init__()
+        self._data_size = data_size
+        self._hidden_size = hidden_size
+        self._module = MLP(1 + hidden_size, hidden_size * (1 + data_size), mlp_size, num_layers, tanh=True)
+
+    def forward(self, t, h):
+        # t has shape ()
+        # h has shape (batch_size, hidden_size)
+        t = t.expand(h.size(0), 1)
+        th = torch.cat([t, h], dim=1)
+        return self._module(th).view(h.size(0), self._hidden_size, 1 + self._data_size)
+
+
+class Discriminator(torch.nn.Module):
+    def __init__(self, data_size, hidden_size, mlp_size, num_layers):
+        super(Discriminator, self).__init__()
+        self._initial = MLP(1 + data_size, hidden_size, mlp_size, num_layers, tanh=False)
+        self._func = DiscriminatorFunc(data_size, hidden_size, mlp_size, num_layers)
+        self._readout = torch.nn.Linear(hidden_size, 1)
+
+    def forward(self, ys_coeffs):
+        # ys_coeffs has shape (batch_size, seq_len, 1 + data_size)
+        # The +1 corresponds to time. When solving CDEs, It turns out to be most natural to treat time as just another
+        # channel: in particular this makes handling irregular data quite easy, when the times may be different between
+        # different samples in the batch.
+
+        Y = torchcde.LinearInterpolation(ys_coeffs)
+        Y0 = Y.evaluate(0)
+        # This 0 is the start of the region of integration. This doesn't have to align with the times that the data was
+        # measured at. (As per how neural CDEs work.)
+
+        h0 = self._initial(Y0)
+        # We happen to use midpoint with step_size=1e-1 for consistency with the SDE solve, but that isn't important.
+        hs = torchcde.cdeint(Y, self._func, h0, Y.interval, adjoint=False, method='midpoint',
+                             options=dict(step_size=1e-1))  # shape (batch_size, 2, hidden_size)
+        score = self._readout(hs[:, -1])
+        return score.mean()
+
+
+###################
+# Generate some data. For this example we generate some synthetic data based on the Heston SDE, from mathematical
+# finance.
+###################
+def get_data():
+    class HestonSDE(torch.nn.Module):
+        sde_type = 'ito'
+        noise_type = 'diagonal'
+
+        def __init__(self, mu, theta, kappa, xi):
+            assert 2 * kappa * theta > xi ** 2, "Feller condition not satisfied"
+            super(HestonSDE, self).__init__()
+            self.mu = mu
+            self.theta = theta
+            self.kappa = kappa
+            self.xi = xi
+
+        def f(self, t, y):
+            S, nu = y[:, 0], y[:, 1]
+            return torch.stack([self.mu * S, self.kappa * (self.theta - nu)], dim=1)
+
+        def g(self, t, y):
+            S, nu = y[:, 0], y[:, 1]
+            return torch.stack([nu.sqrt() * S, self.xi * nu.sqrt()], dim=1)
+
+    dataset_size = 1000
+    t_size = 100
+
+    heston_sde = HestonSDE(mu=1., theta=0.3, kappa=0.5, xi=0.3)
+    y0 = torch.rand(dataset_size, 2) * 0.1
+    ts = torch.linspace(0, 10, t_size)
+    ys = torchsde.sdeint(heston_sde, y0, ts, dt=1e-2)
+
+    ###################
+    # To demonstrate how to handle irregular data, then here we additionally drop some of the data (by setting it to
+    # NaN.)
+    ###################
+    ys_num = ys.numel()
+    to_drop = torch.randperm(ys_num)[:int(0.3 * ys_num)]
+    ys.view(-1)[to_drop] = float('nan')
+
+    ###################
+    # As discussed, time must be included as a channel for the discriminator.
+    ###################
+    ys = torch.cat([ts.unsqueeze(0).unsqueeze(-1).expand(dataset_size, t_size, 1),
+                    ys.transpose(0, 1)], dim=2)
+
+    return ts, ys  # shape (batch_size=10000, seq_len=100, 1 + data_size=3)
+
+
+###################
+# Now do normal GAN training, and plot the results.
+###################
+def main():
+    data_size = 2
+    initial_noise_size = 16  # How many noise dimensions to sample at the start of the SDE
+    noise_size = 3           # How many dimensions the Brownian motion has
+    hidden_size = 32         # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
+                             #     performance is generally obtained by making this larger than mlp_size.)
+    mlp_size = 16            # How big the layers in the various MLPs are.
+    num_layers = 2           # How many hidden layers to have in the various MLPs.
+
+    is_cuda = torch.cuda.is_available()
+    batch_size = 500
+    pre_epochs = 50
+    epochs = 500
+    device = 'cuda' if is_cuda else 'cpu'
+
+    print("Generating data...")
+    ts, ys = get_data()
+    print("Generated data.")
+    ts = ts.to(device)
+    ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
+    dataset = torch.utils.data.TensorDataset(ys_coeffs)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=6, pin_memory=is_cuda)
+
+    generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers).to(device)
+    discriminator = Discriminator(data_size, hidden_size, mlp_size, num_layers).to(device)
+
+    # Avoiding NaN loss
+    with torch.no_grad():
+        for parameter in generator.parameters():
+            parameter *= 0.1
+        for parameter in discriminator.parameters():
+            parameter *= 0.1
+
+    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=1e-4)
+    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=1e-4)
+
+    print("Pretraining discriminator...")
+    trange = tqdm.tqdm(range(pre_epochs))
+    for epoch in trange:
+        total_loss = 0
+        for real_samples, in dataloader:
+            real_samples = real_samples.to(device)
+            with torch.no_grad():
+                generated_samples = generator(ts, batch_size)
+            real_score = discriminator(real_samples)
+            generated_score = discriminator(generated_samples)
+            penalty = gp_penalty(generated_samples, real_samples, discriminator)
+            loss = generated_score - real_score
+            (penalty - loss).backward()
+            discriminator_optimiser.step()
+            discriminator_optimiser.zero_grad()
+            total_loss += loss.item()
+        if (epoch % 10) == 0 or epoch == pre_epochs - 1:
+            trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
+    print("Pretrained.")
+
+    print("Training...")
+    i = 0
+    trange = tqdm.tqdm(range(epochs))
+    for epoch in trange:
+        total_loss = 0
+        for real_samples, in dataloader:
+            real_samples = real_samples.to(device)
+            i += 1
+            if (i % 5) == 0:
+                # Train generator
+                generated_samples = generator(ts, batch_size)
+                # Computing coeffs is actually a no-op because there's no missing data (because this is the generated
+                # data), and the data itself is used as the coefficients for linear interpolation. Still we include it
+                # here for completeness.
+                generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
+                generated_score = discriminator(generated_samples)
+                generated_score.backward()
+                generator_optimiser.step()
+                generator_optimiser.zero_grad()
+                discriminator_optimiser.zero_grad()
+            else:
+                # Train discriminator
+                with torch.no_grad():
+                    generated_samples = generator(ts, batch_size)
+                real_score = discriminator(real_samples)
+                generated_score = discriminator(generated_samples)
+                penalty = gp_penalty(generated_samples, real_samples, discriminator)
+                loss = generated_score - real_score
+                (penalty - loss).backward()
+                discriminator_optimiser.step()
+                discriminator_optimiser.zero_grad()
+                total_loss += loss.item()
+
+        if (epoch % 10) == 0 or epoch == epochs - 1:
+            trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
+    print("Trained.")
+
+    print("Plotting...")
+    plot_size = 10
+    real_samples, = next(iter(dataloader))
+    real_samples = real_samples[:plot_size]
+    real_samples = torchcde.LinearInterpolation(real_samples).evaluate(ts)
+    # Each have shape (plot_size=10, seq_len=100, 1 + data_size=3)
+    # The three channels are time, S, nu. S is the one that's of most interest for this problem, so we're going to plot
+    # that.
+    real_samples = real_samples[..., 1]
+
+    with torch.no_grad():
+        generated_samples = generator(ts, plot_size)
+    generated_samples = torchcde.LinearInterpolation(generated_samples).evaluate(ts)
+    generated_samples = generated_samples[..., 1]
+
+    first = True
+    for real_sample in real_samples:
+        kwargs = {'label': 'Real'} if first else {}
+        first = False
+        plt.plot(ts.cpu(), real_sample.cpu(), color='blue', **kwargs)
+    first = True
+    for generated_sample in generated_samples:
+        kwargs = {'label': 'Generated'} if first else {}
+        first = False
+        plt.plot(ts.cpu(), generated_sample.cpu(), color='red', **kwargs)
+    plt.legend()
+    plt.show()
+    print("Done.")
+
+
+if __name__ == '__main__':
+    main()
+
+###################
+# And that's an SDE as a GAN. Now, exercise for the reader: turn all of this into a conditional GAN. :)
+###################
+
+###################
+# Appendix: discriminators for a neural SDE
+#
+# This is a little long, but should all be quite straightforward. By the end of this you should have a really
 # comprehensive knowledge of how these things fit together.
 #
 # Let Y be the real/generated sample, and let H be the hidden state of the discriminator.
@@ -209,72 +444,9 @@ class Generator(torch.nn.Module):
 # interpolation is piecewise smooth.) It wouldn't make sense to apply ODE solvers to some rough signal like Brownian
 # motion - that's what case (*) and SDE solvers are about.
 #
-# Right, let's wrap up this wall of text. Here, we're going to use option (**), (a2). This is arguably the simplest
-# option, and we'd like to keep the code readable in this example. To solve the CDEs we're going to the CDE solvers
-# available through torchcde: https://github.com/patrick-kidger/torchcde.
+# Right, let's wrap up this wall of text. Here, we use option (**), (a2). This is arguably the simplest option, and
+# is chosen as we'd like to keep the code readable in this example. To solve the CDEs we use the CDE solvers available
+# through torchcde: https://github.com/patrick-kidger/torchcde.
 # (Note that in the code for the "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs" paper, we actually used
 # option (*), (b).)
-###################
-
-class DiscriminatorFunc(torch.nn.Module):
-    def __init__(self, data_size, hidden_size, mlp_size, num_layers):
-        super(DiscriminatorFunc, self).__init__()
-        self._data_size = data_size
-        self._hidden_size = hidden_size
-        self._module = MLP(1 + data_size, hidden_size * data_size, mlp_size, num_layers, tanh=True)
-
-    def forward(self, t, h):
-        # t has shape ()
-        # h has shape (batch_size, hidden_size)
-        t = t.expand(h.size(0), 1)
-        th = torch.cat([t, h], dim=1)
-        return self._module(th).view(h.size(0), self._hidden_size, self._data_size)
-
-
-class Discriminator(torch.nn.Module):
-    def __init__(self, data_size, hidden_size, mlp_size, num_layers):
-        super(Discriminator, self).__init__()
-        self._initial = MLP(1 + data_size, hidden_size, mlp_size, num_layers, tanh=False)
-        self._func = DiscriminatorFunc(data_size, hidden_size, mlp_size, num_layers)
-        self._readout = torch.nn.Linear(hidden_size, 1)
-
-    def forward(self, y):
-        # y has shape (batch_size, seq_len, 1 + data_size)
-        # The +1 corresponds to time. When solving CDEs, It turns out to be most natural to treat time as just another
-        # channel: in particular this makes handling irregular data quite easy, when the times may be different between
-        # different samples in the batch.
-
-        y_coeffs = torchcde.linear_interplation_coeffs(y)
-        Y = torchcde.LinearInterpolation(y_coeffs)
-        Y0 = Y.evaluate(0)
-        # This 0 is the start of the region of integration. This doesn't have to align with the times that the data was
-        # measured at. (As per how neural CDEs work.)
-
-        h0 = self._initial(Y0)
-        # We happen to use midpoint with step_size=1e-1 for consistency with the SDE solve, but that isn't important.
-        hs = torchcde.cdeint(Y, self._func, h0, Y.interval, adjoint=False, method='midpoint',
-                             options=dict(step_size=1e-1))  # shape (batch_size, 2, hidden_size)
-        score = self._readout(hs[:, -1])
-        return score
-
-
-def get_data():
-    pass
-
-
-def main():
-    data_size
-    initial_noise_size = 40  # How many noise dimensions to sample at the start of the SDE
-    noise_size = 3           # How many dimensions the Brownian motion has
-    hidden_size = 64         # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
-                             #     performance is generally obtained by making this larger than mlp_size.)
-    mlp_size = 32            # How big the layers in the various MLPs are.
-    num_layers = 2           # How many hidden layers to have in the various MLPs.
-
-    generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers)
-    discriminator = Discriminator(data_size, hidden_size, mlp_size, num_layers)
-
-
-###################
-# And that's an SDE as a GAN. Now, exercise for the reader: turn all of this into a conditional GAN! :)
 ###################
