@@ -30,6 +30,7 @@ jobs:
       - name: Check version
         if: (github.event_name == 'pull_request' && github.base_ref == 'master')
         run: |
+          pip install torch>=1.6.0  # TODO: Remove this line after merging #77.
           pip install git+https://github.com/google-research/torchsde.git
           master_info=$(pip list | grep torchsde)
           master_version=$(echo ${master_info} | cut -d " " -f2)
