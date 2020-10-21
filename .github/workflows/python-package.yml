@@ -35,7 +35,7 @@ jobs:
           master_info=$(pip list | grep torchsde)
           master_version=$(echo ${master_info} | cut -d " " -f2)
 
-          pip uninstall torchsde
+          pip uninstall -y torchsde
           python setup.py install
           pr_info=$(pip list | grep torchsde)
           pr_version=$(echo ${pr_info} | cut -d " " -f2)
