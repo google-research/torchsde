@@ -13,30 +13,61 @@
 # limitations under the License.
 
 import os
-import re
+import platform
+
 import setuptools
 
+try:
+    import torch
+    from torch.utils import cpp_extension
+except ModuleNotFoundError:
+    raise ModuleNotFoundError("Unable to import torch. Please install torch>=1.6.0 at https://pytorch.org.")
 
-# for simplicity we actually store the version in the __version__ attribute in the source
-here = os.path.realpath(os.path.dirname(__file__))
-with open(os.path.join(here, 'torchsde', '__init__.py')) as f:
-    meta_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", f.read(), re.M)
-    if meta_match:
-        version = meta_match.group(1)
-    else:
-        raise RuntimeError("Unable to find __version__ string.")
+extra_compile_args = []
+extra_link_args = []
 
+# This is a problem of macOS: https://github.com/pytorch/pytorch/issues/16805.
+if platform.system() == "Darwin":
+    extra_compile_args += ["-stdlib=libc++"]
+    extra_link_args += ["-stdlib=libc++"]
+
+brownian_lib_prefix = os.path.join(".", "csrc")
+sources = os.listdir(brownian_lib_prefix)
+sources = filter(lambda x: x.endswith('.cpp'), sources)
+# Don't include C++ tests for now.
+sources = filter(lambda x: 'test' not in x, sources)
+sources = map(lambda x: os.path.join(brownian_lib_prefix, x), sources)
+sources = list(sources)
+
+USE_CUDA = torch.cuda.is_available() and cpp_extension.CUDA_HOME is not None
+if os.getenv('FORCE_CPU', '0') == '1':
+    USE_CUDA = False
+
+if USE_CUDA:
+    define_macros = [('USE_CUDA', None)]
+    extension_func = cpp_extension.CUDAExtension
+else:
+    define_macros = []
+    extension_func = cpp_extension.CppExtension
 
 setuptools.setup(
     name="torchsde",
-    version=version,
+    version="0.1.1",
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
     url="https://github.com/google-research/torchsde",
-    packages=setuptools.find_packages(exclude=['benchmarks', 'diagnostics', 'examples', 'tests']),
-    install_requires=['torch>=1.6.0', 'numpy>=1.19.1', 'boltons>=20.2.1', 'trampoline>=0.1.2', 'scipy>=1.5.2'],
-    python_requires='~=3.6',
+    packages=setuptools.find_packages(exclude=['diagnostics', 'tests']),
+    ext_modules=[
+        extension_func(name='torchsde._brownian_lib',
+                       sources=sources,
+                       extra_compile_args=extra_compile_args,
+                       extra_link_args=extra_link_args,
+                       define_macros=define_macros,
+                       optional=True)
+    ],
+    cmdclass={'build_ext': cpp_extension.BuildExtension},
+    install_requires=['torch>=1.6.0', 'blist', 'numpy>=1.17.0'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
