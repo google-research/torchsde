@@ -5,6 +5,7 @@
 
 import matplotlib.pyplot as plt
 import torch
+import torch.optim.swa_utils as swa_utils
 try:
     import torchcde
 except ImportError as e:
@@ -40,7 +41,7 @@ class MLP(torch.nn.Module):
 
 
 def gp_penalty(generated, real, call):
-    assert generated.shape == real.shape  # including batch dimension
+    assert generated.shape == real.shape
     batch_size = generated.size(0)
 
     alpha = torch.rand(batch_size, *[1 for _ in range(real.ndimension() - 1)],
@@ -50,9 +51,9 @@ def gp_penalty(generated, real, call):
 
     with torch.enable_grad():
         score_interpolated = call(interpolated)
-        penalty = torch.autograd.grad(score_interpolated, interpolated,
-                                      torch.ones_like(score_interpolated),
-                                      create_graph=True, retain_graph=True)[0]
+        penalty, = torch.autograd.grad(score_interpolated, interpolated,
+                                       torch.ones_like(score_interpolated),
+                                       create_graph=True)
     penalty = penalty.reshape(batch_size, -1)
     return penalty.norm(2, dim=-1).sub(1).pow(2).mean()
 
@@ -114,6 +115,10 @@ class Generator(torch.nn.Module):
         self._func = GeneratorFunc(noise_size, hidden_size, mlp_size, num_layers)
         self._readout = torch.nn.Linear(hidden_size, data_size)
 
+        # Final layer has an easier (convex) problem to solve, so increase its learning rate.
+        self._readout.weight.register_hook(lambda grad: 100 * grad)
+        self._readout.bias.register_hook(lambda grad: 100 * grad)
+
     def forward(self, ts, batch_size):
         # ts has shape (seq_len,) and corresponds to the points we want to evaluate the SDE at.
 
@@ -163,6 +168,9 @@ class Discriminator(torch.nn.Module):
         self._func = DiscriminatorFunc(data_size, hidden_size, mlp_size, num_layers)
         self._readout = torch.nn.Linear(hidden_size, 1)
 
+        self._readout.weight.register_hook(lambda grad: 100 * grad)
+        self._readout.bias.register_hook(lambda grad: 100 * grad)
+
     def forward(self, ys_coeffs):
         # ys_coeffs has shape (batch_size, seq_len, 1 + data_size)
         # The +1 corresponds to time. When solving CDEs, It turns out to be most natural to treat time as just another
@@ -210,8 +218,10 @@ def get_data():
     dataset_size = 1000
     t_size = 100
 
-    heston_sde = HestonSDE(mu=1., theta=0.3, kappa=0.5, xi=0.3)
-    y0 = torch.rand(dataset_size, 2) * 0.1
+    heston_sde = HestonSDE(mu=0.05, theta=0.5, kappa=2., xi=0.2)
+    S0 = 0.25 + torch.rand(dataset_size) * 0.05
+    nu0 = 0.95 + torch.rand(dataset_size) * 0.1
+    y0 = torch.stack([S0, nu0], dim=1)
     ts = torch.linspace(0, 10, t_size)
     ys = torchsde.sdeint(heston_sde, y0, ts, dt=1e-2)
 
@@ -235,21 +245,72 @@ def get_data():
 ###################
 # Now do normal GAN training, and plot the results.
 ###################
-def main():
-    data_size = 2
-    initial_noise_size = 16  # How many noise dimensions to sample at the start of the SDE
-    noise_size = 3           # How many dimensions the Brownian motion has
-    hidden_size = 32         # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
-                             #     performance is generally obtained by making this larger than mlp_size.)
-    mlp_size = 16            # How big the layers in the various MLPs are.
-    num_layers = 2           # How many hidden layers to have in the various MLPs.
 
+def train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser):
+    generated_samples = generator(ts, batch_size)
+    # Computing coeffs is actually a no-op because there's no missing data (because this is the generated
+    # data), and the data itself is used as the coefficients for linear interpolation. Still we include it
+    # here for completeness.
+    generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
+    generated_score = discriminator(generated_samples)
+
+    generated_score.backward()
+    generator_optimiser.step()
+    generator_optimiser.zero_grad()
+    discriminator_optimiser.zero_grad()
+
+
+def train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device):
+    with torch.no_grad():
+        generated_samples = generator(ts, batch_size)
+    generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
+    generated_score = discriminator(generated_samples)
+
+    real_samples = real_samples.to(device)
+    real_score = discriminator(real_samples)
+
+    penalty = gp_penalty(generated_samples, real_samples, discriminator)
+    loss = generated_score - real_score
+    (100 * penalty - loss).backward()
+    discriminator_optimiser.step()
+    discriminator_optimiser.zero_grad()
+
+
+def evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device):
+    with torch.no_grad():
+        total_loss = 0
+        for real_samples, in dataloader:
+            real_samples = real_samples.to(device)
+            generated_samples = generator(ts, batch_size)
+            generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
+            generated_score = discriminator(generated_samples)
+
+            real_samples = real_samples.to(device)
+            real_score = discriminator(real_samples)
+
+            loss = generated_score - real_score
+            total_loss += loss.item()
+    return total_loss
+
+
+def main():
+    # Hyperparameters
+    data_size = 2           # How many channels the data has (not including time)
+    initial_noise_size = 8  # How many noise dimensions to sample at the start of the SDE
+    noise_size = 3          # How many dimensions the Brownian motion has
+    hidden_size = 64        # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
+                            # performance is generally obtained by making this larger than mlp_size.)
+    mlp_size = 16           # How big the layers in the various MLPs are.
+    num_layers = 1          # How many hidden layers to have in the various MLPs.
     is_cuda = torch.cuda.is_available()
     batch_size = 500
-    pre_epochs = 50
-    epochs = 500
+    pre_epochs = 100
+    epochs = 1500
     device = 'cuda' if is_cuda else 'cpu'
+    if not is_cuda:
+        print("Warning: CUDA not available; falling back to CPU but this is likely to be slow.")
 
+    # Data
     print("Generating data...")
     ts, ys = get_data()
     print("Generated data.")
@@ -258,8 +319,11 @@ def main():
     dataset = torch.utils.data.TensorDataset(ys_coeffs)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=6, pin_memory=is_cuda)
 
+    # Models
     generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers).to(device)
     discriminator = Discriminator(data_size, hidden_size, mlp_size, num_layers).to(device)
+    averaged_generator = swa_utils.AveragedModel(generator)
+    averaged_discriminator = swa_utils.AveragedModel(discriminator)
 
     # Avoiding NaN loss
     with torch.no_grad():
@@ -268,66 +332,50 @@ def main():
         for parameter in discriminator.parameters():
             parameter *= 0.1
 
+    # Optimisers
     generator_optimiser = torch.optim.Adam(generator.parameters(), lr=1e-4)
     discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=1e-4)
 
+    # Initially train just the discriminator
     print("Pretraining discriminator...")
     trange = tqdm.tqdm(range(pre_epochs))
     for epoch in trange:
-        total_loss = 0
         for real_samples, in dataloader:
-            real_samples = real_samples.to(device)
-            with torch.no_grad():
-                generated_samples = generator(ts, batch_size)
-            real_score = discriminator(real_samples)
-            generated_score = discriminator(generated_samples)
-            penalty = gp_penalty(generated_samples, real_samples, discriminator)
-            loss = generated_score - real_score
-            (penalty - loss).backward()
-            discriminator_optimiser.step()
-            discriminator_optimiser.zero_grad()
-            total_loss += loss.item()
+            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device)
         if (epoch % 10) == 0 or epoch == pre_epochs - 1:
+            total_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
             trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
     print("Pretrained.")
 
+    # Train both generator and discriminator
     print("Training...")
     i = 0
     trange = tqdm.tqdm(range(epochs))
     for epoch in trange:
-        total_loss = 0
         for real_samples, in dataloader:
-            real_samples = real_samples.to(device)
             i += 1
             if (i % 5) == 0:
-                # Train generator
-                generated_samples = generator(ts, batch_size)
-                # Computing coeffs is actually a no-op because there's no missing data (because this is the generated
-                # data), and the data itself is used as the coefficients for linear interpolation. Still we include it
-                # here for completeness.
-                generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
-                generated_score = discriminator(generated_samples)
-                generated_score.backward()
-                generator_optimiser.step()
-                generator_optimiser.zero_grad()
-                discriminator_optimiser.zero_grad()
+                train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
             else:
-                # Train discriminator
-                with torch.no_grad():
-                    generated_samples = generator(ts, batch_size)
-                real_score = discriminator(real_samples)
-                generated_score = discriminator(generated_samples)
-                penalty = gp_penalty(generated_samples, real_samples, discriminator)
-                loss = generated_score - real_score
-                (penalty - loss).backward()
-                discriminator_optimiser.step()
-                discriminator_optimiser.zero_grad()
-                total_loss += loss.item()
+                train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
+                                    device)
+
+        # Stochastic weight averaging typically improves performance quite a lot
+        if epoch > epochs // 5:
+            averaged_generator.update_parameters(generator)
+            averaged_discriminator.update_parameters(discriminator)
 
         if (epoch % 10) == 0 or epoch == epochs - 1:
-            trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
+            total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
+            total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
+                                                averaged_discriminator.module, device)
+            trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
+                         f"Loss (averaged): {total_averaged_loss:.4f}")
+    generator.load_state_dict(averaged_generator.module.state_dict())
+    discriminator.load_state_dict(averaged_discriminator.module.state_dict())
     print("Trained.")
 
+    # Plot results
     print("Plotting...")
     plot_size = 10
     real_samples, = next(iter(dataloader))
