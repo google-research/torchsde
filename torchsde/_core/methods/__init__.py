@@ -12,32 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .euler import Euler
-from .euler_heun import EulerHeun
-from .heun import Heun
-from .log_ode import LogODEMidpoint
-from .midpoint import Midpoint
-from .milstein import MilsteinIto, MilsteinStratonovich
-from .srk import SRK
-from ...settings import METHODS, SDE_TYPES
-
-
-def select(method, sde_type):
-    if method == METHODS.euler:
-        return Euler
-    elif method == METHODS.milstein and sde_type == SDE_TYPES.ito:
-        return MilsteinIto
-    elif method == METHODS.srk:
-        return SRK
-    elif method == METHODS.midpoint:
-        return Midpoint
-    elif method == METHODS.heun:
-        return Heun
-    elif method == METHODS.milstein and sde_type == SDE_TYPES.stratonovich:
-        return MilsteinStratonovich
-    elif method == METHODS.log_ode_midpoint:
-        return LogODEMidpoint
-    elif method == METHODS.euler_heun:
-        return EulerHeun
-    else:
-        raise ValueError(f"Method '{method}' does not match any known method.")
+from .additive.adjoint_sde import AdjointSDEAdditive, AdjointSDEAdditiveLogqp
+from .additive.euler import EulerAdditive
+from .additive.srk import SRKAdditive
+from .diagonal.adjoint_sde import AdjointSDEDiagonal, AdjointSDEDiagonalLogqp
+from .diagonal.euler import EulerDiagonal
+from .diagonal.milstein import MilsteinDiagonal
+from .diagonal.srk import SRKDiagonal
+from .general.euler import EulerGeneral
+from .scalar.adjoint_sde import AdjointSDEScalar, AdjointSDEScalarLogqp
+from .scalar.euler import EulerScalar
+from .scalar.milstein import MilsteinScalar
+from .scalar.srk import SRKScalar
