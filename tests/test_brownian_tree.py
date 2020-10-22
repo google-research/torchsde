@@ -35,7 +35,7 @@ D = 3
 SMALL_BATCH_SIZE = 16
 LARGE_BATCH_SIZE = 16384
 REPS = 3
-ALPHA = 0.001
+ALPHA = 0.00001
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 

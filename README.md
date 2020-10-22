@@ -103,4 +103,4 @@ If you found this codebase useful in your research, please consider citing eithe
 \[3\] Patrick Kidger, James Morrill, James Foster, Terry Lyons, "Neural Controlled Differential Equations for Irregular Time Series". *Neural Information Processing Systems* 2020. [[arXiv]](https://arxiv.org/abs/2005.08926)
 
 ---
-This is a research project, not an official Google product. Expect bugs and sharp edges. Please help by trying it out, reporting bugs, and letting us know what you think!
+This is a research project, not an official Google product. 

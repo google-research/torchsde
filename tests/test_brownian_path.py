@@ -35,7 +35,7 @@ torch.set_default_dtype(torch.float64)
 D = 3
 BATCH_SIZE = 131072
 REPS = 3
-ALPHA = 0.001
+ALPHA = 0.00001
 
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
