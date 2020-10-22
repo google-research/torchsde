@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import brownian_lib
-from ._brownian import BrownianPath, BrownianTree
+from ._brownian import BaseBrownian, BrownianInterval, BrownianPath, BrownianTree
 from ._core.adjoint import sdeint_adjoint
-from ._core.base_sde import SDEIto, SDEStratonovich
+from ._core.base_sde import BaseSDE, SDEIto, SDEStratonovich
 from ._core.sdeint import sdeint
 
+BrownianInterval.__init__.__annotations__ = {}
+BrownianPath.__init__.__annotations__ = {}
+BrownianTree.__init__.__annotations__ = {}
 sdeint.__annotations__ = {}
 sdeint_adjoint.__annotations__ = {}
+
+__version__ = '0.2.0'

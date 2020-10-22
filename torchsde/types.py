@@ -12,25 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# From "RUNGE-KUTTA METHODS FOR THE STRONG APPROXIMATION OF SOLUTIONS OF STOCHASTIC DIFFERENTIAL EQUATIONS".
-# For additive noise structure.
-# (ODE order, SDE strong order) = (2.0, 1.5).
+# We import from `typing` more than what's enough, so that other modules can import from this file and not `typing`.
+from typing import Sequence, Union, Optional, Any, Dict, Tuple, Callable
 
-STAGES = 2
+import torch
 
-C0 = (0, 3 / 4)
-C1 = (1, 0)
+Tensor = torch.Tensor
+Tensors = Sequence[Tensor]
+TensorOrTensors = Union[Tensor, Tensors]
 
-A0 = (
-    (),
-    (3 / 4,),
-)
+Scalar = Union[float, Tensor]
+Vector = Union[Sequence[float], Tensor]
 
-B0 = (
-    (),
-    (3 / 2,),
-)
+Module = torch.nn.Module
+Modules = Sequence[Module]
+ModuleOrModules = Union[Module, Modules]
 
-alpha = (1 / 3, 2 / 3)
-beta1 = (1, 0)
-beta2 = (-1, 1)
+Size = torch.Size
+Sizes = Sequence[Size]

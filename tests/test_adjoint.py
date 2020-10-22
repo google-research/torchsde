@@ -13,143 +13,96 @@
 # limitations under the License.
 
 """Compare gradients computed with adjoint vs analytical solution."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 
 sys.path = sys.path[1:]  # A hack so that we always import the installed library.
 
+import itertools
 import unittest
 
+import pytest
 import torch
+import torchsde
+from torchsde.settings import NOISE_TYPES, METHODS
 
-from tests.basic_sde import BasicSDE1, BasicSDE2, BasicSDE3, BasicSDE4
-from tests.problems import Ex1, Ex2, Ex3, Ex3Additive
-from tests.torch_test import TorchTestCase
-from torchsde import BrownianPath, sdeint_adjoint
+from . import utils
+from . import problems
 
-torch.manual_seed(0)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dtype = torch.get_default_dtype()
 
-d = 10
-m = 3
-batch_size = 128
-t0, t1 = ts = torch.tensor([0.0, 0.5]).to(device)
-dt = 1e-3
-y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
-w0 = torch.zeros(batch_size, d).to(device)
-methods = ('euler', 'milstein', 'srk')
-adaptive_choices = (False, True)
+ito_methods = {'milstein': 'ito', 'srk': 'ito'}
+stratonovich_methods = {'midpoint': 'stratonovich'}
 
 
-class TestAdjoint(TorchTestCase):
+@pytest.mark.parametrize("sde_cls", [problems.Ex1, problems.Ex2, problems.Ex3, problems.Ex4])
+@pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
+@pytest.mark.parametrize('adaptive', (False,))
+def test_adjoint(sde_cls, method, sde_type, adaptive):
+    # Skipping below, since method not supported for corresponding noise types.
+    if sde_cls.noise_type == NOISE_TYPES.general and method in (METHODS.milstein, METHODS.srk):
+        return
 
-    def test_ex1(self):
-        problem = Ex1(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=False)
+    d = 3
+    m = {
+        NOISE_TYPES.scalar: 1,
+        NOISE_TYPES.diagonal: d,
+        NOISE_TYPES.general: 2,
+        NOISE_TYPES.additive: 2
+    }[sde_cls.noise_type]
+    batch_size = 4
+    t0, t1 = ts = torch.tensor([0.0, 0.5], device=device)
+    dt = 1e-3
+    y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
+    sde = sde_cls(d=d, m=m, sde_type=sde_type).to(device)
 
-    def test_ex1_adaptive(self):
-        problem = Ex1(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=True)
+    levy_area_approximation = {
+        'euler': 'none',
+        'milstein': 'none',
+        'srk': 'space-time',
+        'midpoint': 'none'
+    }[method]
+    bm = torchsde.BrownianInterval(
+        t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device,
+        levy_area_approximation=levy_area_approximation
+    )
 
-    def test_ex2(self):
-        problem = Ex2(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=False)
+    def func(inputs, modules):
+        y0, sde = inputs[0], modules[0]
+        ys = torchsde.sdeint_adjoint(sde, y0, ts, bm, dt=dt, method=method, adaptive=adaptive)
+        return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
-    def test_ex2_adaptive(self):
-        problem = Ex2(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=True)
+    # `grad_inputs=True` also works, but we really only care about grad wrt params and want fast tests.
+    utils.gradcheck(func, y0, sde, eps=1e-6, rtol=1e-2, atol=1e-2, grad_params=True)
 
-    def test_ex3(self):
-        problem = Ex3(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=False)
 
-    def test_ex3_adaptive(self):
-        problem = Ex3(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=True)
+@pytest.mark.parametrize("problem", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
+@pytest.mark.parametrize("method", ito_methods.keys())
+@pytest.mark.parametrize('adaptive', (False, True))
+def test_basic(problem, method, adaptive):
+    d = 10
+    batch_size = 128
+    ts = torch.tensor([0.0, 0.5], device=device)
+    dt = 1e-3
+    y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
 
-    def test_ex3_additive(self):
-        problem = Ex3Additive(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=False)
+    problem = problem(d).to(device)
 
-    def test_ex3_additive_adaptive(self):
-        problem = Ex3Additive(d).to(device)
-        for method in methods:
-            self._test_gradient(problem, method=method, adaptive=True)
+    num_before = _count_differentiable_params(problem)
 
-    def test_basic_sde1(self):
-        problem = BasicSDE1(d).to(device)
-        for method in methods:
-            for adaptive in adaptive_choices:
-                self._test_basic(problem, method=method, adaptive=adaptive)
+    problem.zero_grad()
+    _, yt = torchsde.sdeint_adjoint(problem, y0, ts, method=method, dt=dt, adaptive=adaptive)
+    loss = yt.sum(dim=1).mean(dim=0)
+    loss.backward()
 
-    def test_basic_sde2(self):
-        problem = BasicSDE2(d).to(device)
-        for method in methods:
-            for adaptive in adaptive_choices:
-                self._test_basic(problem, method=method, adaptive=adaptive)
-
-    def test_basic_sde3(self):
-        problem = BasicSDE3(d).to(device)
-        for method in methods:
-            for adaptive in adaptive_choices:
-                self._test_basic(problem, method=method, adaptive=adaptive)
-
-    def test_basic_sde4(self):
-        problem = BasicSDE4(d).to(device)
-        for method in methods:
-            for adaptive in adaptive_choices:
-                self._test_basic(problem, method, adaptive=adaptive)
-
-    def _test_gradient(self, problem, method, adaptive, rtol=1e-5, atol=1e-4):
-        if method == 'euler' and adaptive:
-            return
-
-        bm = BrownianPath(t0=t0, w0=w0)
-        with torch.no_grad():
-            grad_outputs = torch.ones(batch_size, d).to(device)
-            alt_grad = problem.analytical_grad(y0, t1, grad_outputs, bm)
-
-        problem.zero_grad()
-        _, yt = sdeint_adjoint(problem, y0, ts, bm=bm, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol)
-        loss = yt.sum(dim=1).mean(dim=0)
-        loss.backward()
-        adj_grad = torch.cat(tuple(p.grad for p in problem.parameters()))
-        self.tensorAssertAllClose(alt_grad, adj_grad)
-
-    def _test_basic(self, problem, method, adaptive, rtol=1e-5, atol=1e-4):
-        if method == 'euler' and adaptive:
-            return
-
-        nbefore = _count_differentiable_params(problem)
-
-        problem.zero_grad()
-        _, yt = sdeint_adjoint(
-            problem, y0, ts, method=method, dt=dt, adaptive=adaptive, rtol=rtol, atol=atol
-        )
-        loss = yt.sum(dim=1).mean(dim=0)
-        loss.backward()
-
-        nafter = _count_differentiable_params(problem)
-        self.assertEqual(nbefore, nafter)
+    num_after = _count_differentiable_params(problem)
+    assert num_before == num_after
 
 
 def _count_differentiable_params(module):
-    cnt = 0
-    for p in module.parameters():
-        if p.requires_grad:
-            cnt += 1
-    return cnt
+    return len([p for p in module.parameters() if p.requires_grad])
 
 
 if __name__ == '__main__':
