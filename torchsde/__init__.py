@@ -23,4 +23,4 @@ BrownianTree.__init__.__annotations__ = {}
 sdeint.__annotations__ = {}
 sdeint_adjoint.__annotations__ = {}
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
