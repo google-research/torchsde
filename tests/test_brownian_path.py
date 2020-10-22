@@ -12,96 +12,85 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test the two `BrownianPath`.
+"""Test `BrownianPath`.
 
 The suite tests both running on CPU and CUDA (if available).
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 
 sys.path = sys.path[1:]  # A hack so that we always import the installed library.
 
+import math
 import numpy as np
 import numpy.random as npr
 import torch
 from scipy.stats import norm, kstest
 
-import itertools
-
 import torchsde
 import pytest
 
-torch.manual_seed(0)
+torch.manual_seed(1147481649)
 torch.set_default_dtype(torch.float64)
 
 D = 3
 BATCH_SIZE = 131072
 REPS = 3
-ALPHA = 0.001
+ALPHA = 0.00001
 
-# In case the C++ implementations don't compile.
-if hasattr(torchsde.brownian_lib, "BrownianPath"):
-    brownian_classes = [torchsde.brownian_lib.BrownianPath, torchsde.BrownianPath]
-else:
-    brownian_classes = [torchsde.BrownianPath]
 devices = [cpu, gpu] = [torch.device('cpu'), torch.device('cuda')]
 
 
-def _setup(brownian_class, device):
-    t0, t1 = torch.tensor([0., 1.]).to(device)
-    w0, w1 = torch.randn([2, BATCH_SIZE, D]).to(device)
-    t = torch.rand([]).to(device)
-    bm = brownian_class(t0=t0, w0=w0)
+def _setup(device):
+    t0, t1 = torch.tensor([0., 1.], device=device)
+    w0, w1 = torch.randn([2, BATCH_SIZE, D], device=device)
+    t = torch.rand([], device=device)
+    bm = torchsde.BrownianPath(t0=t0, w0=w0)
     return t, bm
 
 
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
-def test_basic(brownian_class, device):
+@pytest.mark.parametrize("device", devices)
+def test_basic(device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    t, bm = _setup(brownian_class, device)
+    t, bm = _setup(device)
     sample = bm(t)
     assert sample.size() == (BATCH_SIZE, D)
 
 
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
-def test_determinism(brownian_class, device):
+@pytest.mark.parametrize("device", devices)
+def test_determinism(device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
-    t, bm = _setup(brownian_class, device)
+    t, bm = _setup(device)
     vals = [bm(t) for _ in range(REPS)]
     for val in vals[1:]:
         assert torch.allclose(val, vals[0])
 
 
-@pytest.mark.parametrize("brownian_class, device", itertools.product(brownian_classes, devices))
-def test_normality(brownian_class, device):
+@pytest.mark.parametrize("device", devices)
+def test_normality(device):
     if device == gpu and not torch.cuda.is_available():
         pytest.skip(msg="CUDA not available.")
 
     t0_, t1_ = 0.0, 1.0
-    t0, t1 = torch.tensor([t0_, t1_]).to(device)
     eps = 1e-2
     for _ in range(REPS):
-        w0_, w1_ = 0.0, npr.randn() * np.sqrt(t1_)
-        w0 = torch.tensor(w0_).repeat(BATCH_SIZE).to(device)
-        w1 = torch.tensor(w1_).repeat(BATCH_SIZE).to(device)
+        w0_ = npr.randn() * math.sqrt(t1_)
+        w0 = torch.tensor(w0_, device=device).repeat(BATCH_SIZE)
 
-        bm = brownian_class(t0=t0, w0=w0)  # noqa
-        bm.insert(t=t1, w=w1)
+        bm = torchsde.BrownianPath(t0=t0_, w0=w0)  # noqa
 
-        t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)
-        samples = bm(t_)
-        samples_ = samples.cpu().detach().numpy()
+        w1_ = bm(t1_).cpu().numpy()
 
+        t_ = npr.uniform(low=t0_ + eps, high=t1_ - eps)  # Avoid sampling too close to the boundary.
+        samples_ = bm(t_).cpu().numpy()
+
+        # True expected mean from Brownian bridge.
         mean_ = ((t1_ - t_) * w0_ + (t_ - t0_) * w1_) / (t1_ - t0_)
-        std_ = np.sqrt((t1_ - t_) * (t_ - t0_) / (t1_ - t0_))
-        ref_dist = norm(loc=mean_, scale=std_)
+        std_ = math.sqrt((t1_ - t_) * (t_ - t0_) / (t1_ - t0_))
+        ref_dist = norm(loc=np.zeros_like(mean_), scale=np.ones_like(std_))
 
-        _, pval = kstest(samples_, ref_dist.cdf)
+        _, pval = kstest((samples_ - mean_) / std_, ref_dist.cdf)
         assert pval >= ALPHA

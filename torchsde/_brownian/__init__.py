@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .brownian_path import BrownianPath
-from .brownian_tree import BrownianTree
-
-BrownianPath.__init__.__annotations__ = {}
-BrownianTree.__init__.__annotations__ = {}
+from .brownian_base import BaseBrownian
+from .brownian_interval import BrownianInterval
+from .derived import ReverseBrownian, BrownianPath, BrownianTree
