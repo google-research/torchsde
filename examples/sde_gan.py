@@ -151,6 +151,7 @@ class DiscriminatorFunc(torch.nn.Module):
         super(DiscriminatorFunc, self).__init__()
         self._data_size = data_size
         self._hidden_size = hidden_size
+        # tanh is important for model performance
         self._module = MLP(1 + hidden_size, hidden_size * (1 + data_size), mlp_size, num_layers, tanh=True)
 
     def forward(self, t, h):
@@ -333,8 +334,8 @@ def main():
             parameter *= 0.1
 
     # Optimisers
-    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=1e-4)
-    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=1e-4)
+    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=1e-5)
+    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=1e-5)
 
     # Initially train just the discriminator
     print("Pretraining discriminator...")
