@@ -126,7 +126,7 @@ class Generator(torch.nn.Module):
         # Actually solve the SDE.
         ###################
         x0 = self._initial(torch.randn(batch_size, self._initial_noise_size, device=ts.device))
-        xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1e-1)  # shape (seq_len, batch_size, data_size)
+        xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1e-1)  # shape (seq_len, batch_size, hidden_size)
         xs = xs.transpose(0, 1)  # switch seq_len and batch_size
         vals = self._readout(xs)
 
@@ -179,9 +179,7 @@ class Discriminator(torch.nn.Module):
         # different samples in the batch.
 
         Y = torchcde.LinearInterpolation(ys_coeffs)
-        Y0 = Y.evaluate(0)
-        # This 0 is the start of the region of integration. This doesn't have to align with the times that the data was
-        # measured at. (As per how neural CDEs work.)
+        Y0 = Y.evaluate(Y.interval[0])
 
         h0 = self._initial(Y0)
         # We happen to use midpoint with step_size=1e-1 for consistency with the SDE solve, but that isn't important.
@@ -239,8 +237,9 @@ def get_data():
     ###################
     ys = torch.cat([ts.unsqueeze(0).unsqueeze(-1).expand(dataset_size, t_size, 1),
                     ys.transpose(0, 1)], dim=2)
+    # shape (dataset_size=1000, t_size=100, 1 + data_size=3)
 
-    return ts, ys  # shape (batch_size=10000, seq_len=100, 1 + data_size=3)
+    return ts, ys
 
 
 ###################
@@ -301,9 +300,11 @@ def main():
     noise_size = 3          # How many dimensions the Brownian motion has
     hidden_size = 64        # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
                             # performance is generally obtained by making this larger than mlp_size.)
-    mlp_size = 16           # How big the layers in the various MLPs are.
-    num_layers = 1          # How many hidden layers to have in the various MLPs.
+    mlp_size = 32           # How big the layers in the various MLPs are.
+    num_layers = 2          # How many hidden layers to have in the various MLPs.
     is_cuda = torch.cuda.is_available()
+    ratio = 5
+    lr = 1e-4
     batch_size = 500
     pre_epochs = 100
     epochs = 1500
@@ -314,6 +315,9 @@ def main():
     # Data
     print("Generating data...")
     ts, ys = get_data()
+    std, mean = torch.std_mean(ys, dim=[0, 1])  # Important to normalise data
+    std = std + 1e-5
+    ys = (ys - mean) / std
     print("Generated data.")
     ts = ts.to(device)
     ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
@@ -334,8 +338,8 @@ def main():
             parameter *= 0.1
 
     # Optimisers
-    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=1e-5)
-    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=1e-5)
+    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=lr)
+    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=lr)
 
     # Initially train just the discriminator
     print("Pretraining discriminator...")
@@ -355,7 +359,7 @@ def main():
     for epoch in trange:
         for real_samples, in dataloader:
             i += 1
-            if (i % 5) == 0:
+            if (i % ratio) == 0:
                 train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
             else:
                 train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
@@ -382,6 +386,7 @@ def main():
     real_samples, = next(iter(dataloader))
     real_samples = real_samples[:plot_size]
     real_samples = torchcde.LinearInterpolation(real_samples).evaluate(ts)
+    real_samples = mean + std * real_samples
     # Each have shape (plot_size=10, seq_len=100, 1 + data_size=3)
     # The three channels are time, S, nu. S is the one that's of most interest for this problem, so we're going to plot
     # that.
@@ -390,6 +395,7 @@ def main():
     with torch.no_grad():
         generated_samples = generator(ts, plot_size)
     generated_samples = torchcde.LinearInterpolation(generated_samples).evaluate(ts)
+    generated_samples = mean + std * generated_samples
     generated_samples = generated_samples[..., 1]
 
     first = True
@@ -411,7 +417,8 @@ if __name__ == '__main__':
     main()
 
 ###################
-# And that's an SDE as a GAN. Now, exercise for the reader: turn all of this into a conditional GAN. :)
+# And that's an SDE as a GAN. Now, exercise for the reader: turn all of this into a conditional GAN.
+# As a final warning, getting these working can be pretty finickity! GANs always are... :D
 ###################
 
 ###################
