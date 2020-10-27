@@ -198,20 +198,9 @@ def binterval_like(y: Tensor,
                    size: Optional[Tuple[int, ...]] = None,
                    dtype: Optional[torch.dtype] = None,
                    device: Optional[Union[str, torch.device]] = None,
-                   entropy: Optional[int] = None,
-                   dt: Optional[Scalar] = None,
-                   tol: Scalar = 0.,
-                   pool_size: int = 8,
-                   cache_size: Optional[int] = 45,
-                   halfway_tree: bool = False,
-                   levy_area_approximation: str = LEVY_AREA_APPROXIMATIONS.none,
-                   W: Optional[Tensor] = None,
-                   H: Optional[Tensor] = None):
+                   **kwargs):
     """Returns a BrownianInterval object with the same size, device, and dtype as a given tensor."""
-    size = y.size() if size is None else size
+    size = y.shape if size is None else size
     dtype = y.dtype if dtype is None else dtype
     device = y.device if device is None else device
-    return brownian_interval.BrownianInterval(
-        t0=t0, t1=t1, size=size, dtype=dtype, device=device, entropy=entropy, dt=dt, tol=tol, pool_size=pool_size,
-        cache_size=cache_size, halfway_tree=halfway_tree, levy_area_approximation=levy_area_approximation, W=W, H=H
-    )
+    return brownian_interval.BrownianInterval(t0=t0, t1=t1, size=size, dtype=dtype, device=device, **kwargs)
