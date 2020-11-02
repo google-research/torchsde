@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from . import brownian_base
 from . import brownian_interval
-from ..types import Optional, Scalar, Tensor
+from ..types import Optional, Scalar, Tensor, Tuple, Union
 
 
 class ReverseBrownian(brownian_base.BaseBrownian):
@@ -187,3 +189,17 @@ class BrownianTree(brownian_base.BaseBrownian):
     @property
     def levy_area_approximation(self):
         return self._interval.levy_area_approximation
+
+
+def brownian_interval_like(y: Tensor,
+                           t0: Optional[Scalar] = 0.,
+                           t1: Optional[Scalar] = 1.,
+                           size: Optional[Tuple[int, ...]] = None,
+                           dtype: Optional[torch.dtype] = None,
+                           device: Optional[Union[str, torch.device]] = None,
+                           **kwargs):
+    """Returns a BrownianInterval object with the same size, device, and dtype as a given tensor."""
+    size = y.shape if size is None else size
+    dtype = y.dtype if dtype is None else dtype
+    device = y.device if device is None else device
+    return brownian_interval.BrownianInterval(t0=t0, t1=t1, size=size, dtype=dtype, device=device, **kwargs)

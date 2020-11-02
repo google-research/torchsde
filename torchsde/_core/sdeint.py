@@ -24,7 +24,7 @@ from ..settings import LEVY_AREA_APPROXIMATIONS, METHODS, NOISE_TYPES, SDE_TYPES
 from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Vector
 
 
-def sdeint(sde: base_sde.BaseSDE,
+def sdeint(sde,
            y0: Tensor,
            ts: Vector,
            bm: Optional[BaseBrownian] = None,
