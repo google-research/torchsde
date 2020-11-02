@@ -16,7 +16,6 @@ import torch
 
 from . import brownian_base
 from . import brownian_interval
-from ..settings import LEVY_AREA_APPROXIMATIONS
 from ..types import Optional, Scalar, Tensor, Tuple, Union
 
 
@@ -192,13 +191,13 @@ class BrownianTree(brownian_base.BaseBrownian):
         return self._interval.levy_area_approximation
 
 
-def binterval_like(y: Tensor,
-                   t0: Optional[Scalar] = 0.,
-                   t1: Optional[Scalar] = 1.,
-                   size: Optional[Tuple[int, ...]] = None,
-                   dtype: Optional[torch.dtype] = None,
-                   device: Optional[Union[str, torch.device]] = None,
-                   **kwargs):
+def brownian_interval_like(y: Tensor,
+                           t0: Optional[Scalar] = 0.,
+                           t1: Optional[Scalar] = 1.,
+                           size: Optional[Tuple[int, ...]] = None,
+                           dtype: Optional[torch.dtype] = None,
+                           device: Optional[Union[str, torch.device]] = None,
+                           **kwargs):
     """Returns a BrownianInterval object with the same size, device, and dtype as a given tensor."""
     size = y.shape if size is None else size
     dtype = y.dtype if dtype is None else dtype
