@@ -1,6 +1,6 @@
 ###################
 # Let's have a look at how to train an SDE as a GAN.
-# This follows the paper "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs"
+# This follows the paper "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs".
 ###################
 
 import matplotlib.pyplot as plt
@@ -214,7 +214,7 @@ def get_data():
             S, nu = y[:, 0], y[:, 1]
             return torch.stack([nu.sqrt() * S, self.xi * nu.sqrt()], dim=1)
 
-    dataset_size = 1000
+    dataset_size = 16384
     t_size = 100
 
     heston_sde = HestonSDE(mu=0.05, theta=0.5, kappa=2., xi=0.2)
@@ -294,29 +294,44 @@ def evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device):
 
 
 def main():
-    # Hyperparameters
-    data_size = 2           # How many channels the data has (not including time)
-    initial_noise_size = 8  # How many noise dimensions to sample at the start of the SDE
-    noise_size = 3          # How many dimensions the Brownian motion has
-    hidden_size = 64        # How big the hidden size of the generator SDE and the discriminator CDE are. (Better
-                            # performance is generally obtained by making this larger than mlp_size.)
-    mlp_size = 32           # How big the layers in the various MLPs are.
+    # Architectural hyperparameters.
+    data_size = 2           # How many channels the data has (not including time).
+    initial_noise_size = 8  # How many noise dimensions to sample at the start of the SDE.
+    noise_size = 3          # How many dimensions the Brownian motion has.
+    hidden_size = 32        # How big the hidden size of the generator SDE and the discriminator CDE are.
+    mlp_size = 16           # How big the layers in the various MLPs are.
     num_layers = 2          # How many hidden layers to have in the various MLPs.
+
+    # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
+    ratio = 5               # How many discriminator training steps to take per generator training step.
+    lr = 2e-5               # Learning rate often needs careful tuning to the problem.
+    batch_size = 1024       # Batch size.
+    pre_epochs = 30         # How many epochs to train just the discriminator for at the start.
+    epochs = 600            # How many epochs to train both generator and discriminator for.
+    betas = (0.9, 0.99)     # What beta values to use with the generator's optimiser.
+    weight_decay = 0.001    # How much weight decay to apply to the generator and discriminator.
+    init_mult = 0.1         # Small initialisation sometimes seems to give better training.
+
     is_cuda = torch.cuda.is_available()
-    ratio = 5
-    lr = 1e-4
-    batch_size = 500
-    pre_epochs = 100
-    epochs = 1500
     device = 'cuda' if is_cuda else 'cpu'
     if not is_cuda:
-        print("Warning: CUDA not available; falling back to CPU but this is likely to be slow.")
+        print("Warning: CUDA not available; falling back to CPU but this is likely to be very slow.")
 
     # Data
     print("Generating data...")
     ts, ys = get_data()
-    std, mean = torch.std_mean(ys, dim=[0, 1])  # Important to normalise data
-    std = std + 1e-5
+    # Important to normalise data
+    means = []
+    stds = []
+    for ys_ in ys.unbind(dim=-1):
+        ys_ = ys_.view(-1)
+        ys_ = ys_.masked_select(~torch.isnan(ys_))
+        mean = torch.mean(ys_)
+        std = torch.std(ys_)
+        means.append(mean)
+        stds.append(std)
+    mean = torch.stack(means)
+    std = torch.stack(stds)
     ys = (ys - mean) / std
     print("Generated data.")
     ts = ts.to(device)
@@ -330,16 +345,15 @@ def main():
     averaged_generator = swa_utils.AveragedModel(generator)
     averaged_discriminator = swa_utils.AveragedModel(discriminator)
 
-    # Avoiding NaN loss
     with torch.no_grad():
         for parameter in generator.parameters():
-            parameter *= 0.1
+            parameter *= init_mult
         for parameter in discriminator.parameters():
-            parameter *= 0.1
+            parameter *= init_mult
 
-    # Optimisers
-    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=lr)
-    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=lr)
+    # Optimisers.
+    generator_optimiser = torch.optim.AdamW(generator.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
+    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
 
     # Initially train just the discriminator
     print("Pretraining discriminator...")
@@ -356,6 +370,7 @@ def main():
     print("Training...")
     i = 0
     trange = tqdm.tqdm(range(epochs))
+    swa_epoch_cutoff = epochs // 5
     for epoch in trange:
         for real_samples, in dataloader:
             i += 1
@@ -366,16 +381,19 @@ def main():
                                     device)
 
         # Stochastic weight averaging typically improves performance quite a lot
-        if epoch > epochs // 5:
+        if epoch > swa_epoch_cutoff:
             averaged_generator.update_parameters(generator)
             averaged_discriminator.update_parameters(discriminator)
 
         if (epoch % 10) == 0 or epoch == epochs - 1:
             total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
-            total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
-                                                averaged_discriminator.module, device)
-            trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
-                         f"Loss (averaged): {total_averaged_loss:.4f}")
+            if epoch > swa_epoch_cutoff:
+                total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
+                                                    averaged_discriminator.module, device)
+                trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
+                             f"Loss (averaged): {total_averaged_loss:.4f}")
+            else:
+                trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f}")
     generator.load_state_dict(averaged_generator.module.state_dict())
     discriminator.load_state_dict(averaged_discriminator.module.state_dict())
     print("Trained.")
@@ -393,7 +411,7 @@ def main():
     real_samples = real_samples[..., 1]
 
     with torch.no_grad():
-        generated_samples = generator(ts, plot_size)
+        generated_samples = generator(ts, plot_size).cpu()
     generated_samples = torchcde.LinearInterpolation(generated_samples).evaluate(ts)
     generated_samples = mean + std * generated_samples
     generated_samples = generated_samples[..., 1]
