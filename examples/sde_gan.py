@@ -40,7 +40,7 @@ class MLP(torch.nn.Module):
         return self._model(x)
 
 
-def gp_penalty(generated, real, call):
+def gradient_penalty(generated, real, call):
     assert generated.shape == real.shape
     batch_size = generated.size(0)
 
@@ -120,21 +120,21 @@ class Generator(torch.nn.Module):
         self._readout.bias.register_hook(lambda grad: 100 * grad)
 
     def forward(self, ts, batch_size):
-        # ts has shape (seq_len,) and corresponds to the points we want to evaluate the SDE at.
+        # ts has shape (t_size,) and corresponds to the points we want to evaluate the SDE at.
 
         ###################
         # Actually solve the SDE.
         ###################
         x0 = self._initial(torch.randn(batch_size, self._initial_noise_size, device=ts.device))
-        xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1e-1)  # shape (seq_len, batch_size, hidden_size)
-        xs = xs.transpose(0, 1)  # switch seq_len and batch_size
+        xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1e-1)  # shape (t_size, batch_size, hidden_size)
+        xs = xs.transpose(0, 1)  # switch t_size and batch_size
         vals = self._readout(xs)
 
         ###################
         # Normalise the data to the form that the discriminator expects, in particular including time as a channel.
         ###################
-        seq_len = ts.size(0)
-        ts = ts.unsqueeze(0).unsqueeze(-1).expand(batch_size, seq_len, 1)
+        t_size = ts.size(0)
+        ts = ts.unsqueeze(0).unsqueeze(-1).expand(batch_size, t_size, 1)
         return torch.cat([ts, vals], dim=2)
 
 
@@ -173,7 +173,7 @@ class Discriminator(torch.nn.Module):
         self._readout.bias.register_hook(lambda grad: 100 * grad)
 
     def forward(self, ys_coeffs):
-        # ys_coeffs has shape (batch_size, seq_len, 1 + data_size)
+        # ys_coeffs has shape (batch_size, t_size, 1 + data_size)
         # The +1 corresponds to time. When solving CDEs, It turns out to be most natural to treat time as just another
         # channel: in particular this makes handling irregular data quite easy, when the times may be different between
         # different samples in the batch.
@@ -260,7 +260,8 @@ def train_generator(ts, batch_size, generator, discriminator, generator_optimise
     discriminator_optimiser.zero_grad()
 
 
-def train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device):
+def train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device,
+                        gp_coeff):
     with torch.no_grad():
         generated_samples = generator(ts, batch_size)
     generated_samples = torchcde.linear_interpolation_coeffs(generated_samples)
@@ -269,9 +270,9 @@ def train_discriminator(ts, batch_size, real_samples, generator, discriminator, 
     real_samples = real_samples.to(device)
     real_score = discriminator(real_samples)
 
-    penalty = gp_penalty(generated_samples, real_samples, discriminator)
+    penalty = gradient_penalty(generated_samples, real_samples, discriminator)
     loss = generated_score - real_score
-    (100 * penalty - loss).backward()
+    (gp_coeff * penalty - loss).backward()
     discriminator_optimiser.step()
     discriminator_optimiser.zero_grad()
 
@@ -294,7 +295,7 @@ def evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device):
 
 
 def main():
-    # Architectural hyperparameters.
+    # Architectural hyperparameters. These are quite small for illustrative purposes.
     data_size = 2           # How many channels the data has (not including time).
     initial_noise_size = 8  # How many noise dimensions to sample at the start of the SDE.
     noise_size = 3          # How many dimensions the Brownian motion has.
@@ -304,13 +305,16 @@ def main():
 
     # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
     ratio = 5               # How many discriminator training steps to take per generator training step.
+    gp_coeff = 100          # How much to regularise with gradient penalty
     lr = 2e-5               # Learning rate often needs careful tuning to the problem.
     batch_size = 1024       # Batch size.
-    pre_epochs = 30         # How many epochs to train just the discriminator for at the start.
-    epochs = 600            # How many epochs to train both generator and discriminator for.
+    pre_epochs = 200        # How many epochs to train just the discriminator for at the start.
+    epochs = 2000           # How many epochs to train both generator and discriminator for.
     betas = (0.9, 0.99)     # What beta values to use with the generator's optimiser.
     weight_decay = 0.001    # How much weight decay to apply to the generator and discriminator.
     init_mult = 0.1         # Small initialisation sometimes seems to give better training.
+    
+    print_per_epoch = 50    # How often to print the loss
 
     is_cuda = torch.cuda.is_available()
     device = 'cuda' if is_cuda else 'cpu'
@@ -360,8 +364,9 @@ def main():
     trange = tqdm.tqdm(range(pre_epochs))
     for epoch in trange:
         for real_samples, in dataloader:
-            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device)
-        if (epoch % 10) == 0 or epoch == pre_epochs - 1:
+            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device,
+                                gp_coeff)
+        if (epoch % print_per_epoch) == 0 or epoch == pre_epochs - 1:
             total_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
             trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
     print("Pretrained.")
@@ -378,14 +383,14 @@ def main():
                 train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
             else:
                 train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
-                                    device)
+                                    device, gp_coeff)
 
         # Stochastic weight averaging typically improves performance quite a lot
         if epoch > swa_epoch_cutoff:
             averaged_generator.update_parameters(generator)
             averaged_discriminator.update_parameters(discriminator)
 
-        if (epoch % 10) == 0 or epoch == epochs - 1:
+        if (epoch % print_per_epoch) == 0 or epoch == epochs - 1:
             total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
             if epoch > swa_epoch_cutoff:
                 total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
@@ -405,7 +410,7 @@ def main():
     real_samples = real_samples[:plot_size]
     real_samples = torchcde.LinearInterpolation(real_samples).evaluate(ts)
     real_samples = mean + std * real_samples
-    # Each have shape (plot_size=10, seq_len=100, 1 + data_size=3)
+    # Each have shape (plot_size=10, t_size=100, 1 + data_size=3)
     # The three channels are time, S, nu. S is the one that's of most interest for this problem, so we're going to plot
     # that.
     real_samples = real_samples[..., 1]
