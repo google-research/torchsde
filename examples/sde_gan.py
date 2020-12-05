@@ -120,7 +120,8 @@ class Generator(torch.nn.Module):
         ###################
         # Actually solve the SDE.
         ###################
-        x0 = self._initial(torch.randn(batch_size, self._initial_noise_size, device=ts.device))
+        init_noise = torch.randn(batch_size, self._initial_noise_size, device=ts.device)
+        x0 = self._initial(init_noise)
         # TODO: step size
         xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1.0)  # shape (t_size, batch_size, hidden_size)
         xs = xs.transpose(0, 1)  # switch t_size and batch_size
@@ -224,9 +225,9 @@ def get_data():
 
     ###################
     # Typically important to normalise data. Note that the data is normalised with respect to the statistics of the
-    # initial data, _not_ the whole time series. This really helps the learning process because if the initial condition
-    # is wrong then it's pretty hard to learn the rest of the SDE correctly, so it's good to start off with an initial
-    # condition that's as close to being right as possible.
+    # initial data, _not_ the whole time series. This seems to help the learning process, because if the initial
+    # condition is wrong then it's pretty hard to learn the rest of the SDE correctly, so it's good to start off with an
+    # initial condition that's as close to being right as possible.
     # (You could probably also do something like train to match just the initial condition first, and then train to
     # match the rest of the SDE, but I've not tried that.)
     ###################
@@ -246,6 +247,7 @@ def get_data():
 
 ###################
 # Now do normal GAN training, and plot the results.
+# We need some standard GAN tricks (e.g. stochastic weight averaging) to get this working.
 ###################
 
 def train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser):
@@ -309,7 +311,8 @@ def main():
     pre_epochs = 500        # How many epochs to train just the discriminator for at the start.
     epochs = 10000          # How many epochs to train both generator and discriminator for.
     betas = (0.9, 0.99)     # What beta values to use with the generator's optimiser.
-    init_mult = 0.1         # Decreasing the initial parameter size can help.
+    init_mult1 = 3          # Changing the initial parameter size can help.
+    init_mult2 = 0.5        #
     weight_decay = 0.01     # Weight decay.
 
     # Other hyperparameters
@@ -334,16 +337,23 @@ def main():
     generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers).to(device)
     discriminator = Discriminator(data_size, hidden_size, mlp_size, num_layers).to(device)
     # Weight averaging really helps with GAN training.
+    # (Could probably also substitute this for something like negative momentum.)
     averaged_generator = swa_utils.AveragedModel(generator)
     averaged_discriminator = swa_utils.AveragedModel(discriminator)
 
+    # Picking a good initialisation is _really_ important!
+    # In this case these were picked by making the parameters for the t=0 part of the generator be roughly the right
+    # size that the untrained t=0 distribution has a similar variance to the t=0 data distribution.
+    # Then the func parameters were adjusted so that the t>0 distribution looked like it had about the right variance.
+    # What we're doing here is very crude -- one can definitely imagine smarter ways of doing things.
+    # (e.g. pretraining the t=0 distribution)
     with torch.no_grad():
-        for param in generator.parameters():
-            param *= init_mult
-        for param in discriminator.parameters():
-            param *= init_mult
+        for param in generator._initial.parameters():
+            param *= init_mult1
+        for param in generator._func.parameters():
+            param *= init_mult2
 
-    # Optimisers.
+    # Optimisers. Worth experimenting with what works on your problem.
     generator_optimiser = torch.optim.Adam(generator.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
     discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
 
@@ -363,8 +373,17 @@ def main():
     print("Training...")
     i = 0
     trange = tqdm.tqdm(range(epochs))
-    swa_epoch_cutoff = epochs // 5
+    swa_epoch_start = epochs // 7
+    swa_epoch_update = 4 * epochs // 7
     for epoch in trange:
+        if epoch == swa_epoch_update:
+            generator.load_state_dict(averaged_generator.module.state_dict())
+            discriminator.load_state_dict(averaged_discriminator.module.state_dict())
+            averaged_generator = swa_utils.AveragedModel(generator)
+            averaged_discriminator = swa_utils.AveragedModel(discriminator)
+            # Switch to a simple optimiser now that we're close. Not sure how much this actually matters.
+            generator_optimiser = torch.optim.SGD(generator.parameters(), lr=0.5 * lr, weight_decay=weight_decay)
+            discriminator_optimiser = torch.optim.SGD(discriminator.parameters(), lr=0.5 * lr, weight_decay=weight_decay)
         for real_samples, in dataloader:
             i += 1
             if (i % ratio) == 0:
@@ -374,13 +393,13 @@ def main():
                                     device, gp_coeff)
 
         # Stochastic weight averaging typically improves performance quite a lot
-        if epoch > swa_epoch_cutoff:
+        if epoch > swa_epoch_start:
             averaged_generator.update_parameters(generator)
             averaged_discriminator.update_parameters(discriminator)
 
         if (epoch % print_per_epoch) == 0 or epoch == epochs - 1:
             total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
-            if epoch > swa_epoch_cutoff:
+            if epoch > swa_epoch_start:
                 total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
                                                     averaged_discriminator.module, device)
                 trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
