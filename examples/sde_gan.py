@@ -308,15 +308,15 @@ def main():
     gp_coeff = 10           # How much to regularise with gradient penalty
     lr = 1e-5               # Learning rate often needs careful tuning to the problem.
     batch_size = 1024       # Batch size.
-    pre_epochs = 500        # How many epochs to train just the discriminator for at the start.
-    epochs = 10000          # How many epochs to train both generator and discriminator for.
-    betas = (0.9, 0.99)     # What beta values to use with the generator's optimiser.
+    pre_epochs = 10         # How many epochs to train just the discriminator for at the start.
+    epochs = 3000           # How many epochs to train both generator and discriminator for.
     init_mult1 = 3          # Changing the initial parameter size can help.
     init_mult2 = 0.5        #
     weight_decay = 0.01     # Weight decay.
+    swa_epoch_start = 1500  # When to start using stochastic weight averaging
 
     # Other hyperparameters
-    print_per_epoch = 50    # How often to print the loss
+    print_per_epoch = 10    # How often to print the loss
 
     is_cuda = torch.cuda.is_available()
     device = 'cuda' if is_cuda else 'cpu'
@@ -353,9 +353,9 @@ def main():
         for param in generator._func.parameters():
             param *= init_mult2
 
-    # Optimisers. Worth experimenting with what works on your problem.
-    generator_optimiser = torch.optim.Adam(generator.parameters(), lr=lr, betas=betas, weight_decay=weight_decay)
-    discriminator_optimiser = torch.optim.RMSprop(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
+    # Optimisers. Simple SGD is a good choice here.
+    generator_optimiser = torch.optim.SGD(generator.parameters(), lr=lr, weight_decay=weight_decay)
+    discriminator_optimiser = torch.optim.SGD(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
 
     # Initially train just the discriminator
     print("Pretraining discriminator...")
@@ -373,17 +373,7 @@ def main():
     print("Training...")
     i = 0
     trange = tqdm.tqdm(range(epochs))
-    swa_epoch_start = epochs // 7
-    swa_epoch_update = 4 * epochs // 7
     for epoch in trange:
-        if epoch == swa_epoch_update:
-            generator.load_state_dict(averaged_generator.module.state_dict())
-            discriminator.load_state_dict(averaged_discriminator.module.state_dict())
-            averaged_generator = swa_utils.AveragedModel(generator)
-            averaged_discriminator = swa_utils.AveragedModel(discriminator)
-            # Switch to a simple optimiser now that we're close. Not sure how much this actually matters.
-            generator_optimiser = torch.optim.SGD(generator.parameters(), lr=0.5 * lr, weight_decay=weight_decay)
-            discriminator_optimiser = torch.optim.SGD(discriminator.parameters(), lr=0.5 * lr, weight_decay=weight_decay)
         for real_samples, in dataloader:
             i += 1
             if (i % ratio) == 0:
