@@ -306,14 +306,14 @@ def main():
     # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
     ratio = 5               # How many discriminator training steps to take per generator training step.
     gp_coeff = 10           # How much to regularise with gradient penalty
-    lr = 1e-5               # Learning rate often needs careful tuning to the problem.
+    lr = 1e-7               # Learning rate often needs careful tuning to the problem.
     batch_size = 1024       # Batch size.
-    pre_epochs = 10         # How many epochs to train just the discriminator for at the start.
-    epochs = 3000           # How many epochs to train both generator and discriminator for.
+    pre_epochs = 50         # How many epochs to train just the discriminator for at the start.
+    epochs = 6000           # How many epochs to train both generator and discriminator for.
     init_mult1 = 3          # Changing the initial parameter size can help.
     init_mult2 = 0.5        #
     weight_decay = 0.01     # Weight decay.
-    swa_epoch_start = 1500  # When to start using stochastic weight averaging
+    swa_epoch_start = 500   # When to start using stochastic weight averaging
 
     # Other hyperparameters
     print_per_epoch = 10    # How often to print the loss
