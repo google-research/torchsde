@@ -122,7 +122,6 @@ class Generator(torch.nn.Module):
         ###################
         init_noise = torch.randn(batch_size, self._initial_noise_size, device=ts.device)
         x0 = self._initial(init_noise)
-        # TODO: step size
         xs = torchsde.sdeint(self._func, x0, ts, method='midpoint', dt=1.0)  # shape (t_size, batch_size, hidden_size)
         xs = xs.transpose(0, 1)  # switch t_size and batch_size
         ys = self._readout(xs)
@@ -178,9 +177,7 @@ class Discriminator(torch.nn.Module):
         Y = torchcde.LinearInterpolation(ys_coeffs)
         Y0 = Y.evaluate(Y.interval[0])
 
-        # TODO: step size
         h0 = self._initial(Y0)
-        # We happen to use midpoint with step_size=1e-1 for consistency with the SDE solve, but that isn't important.
         hs = torchcde.cdeint(Y, self._func, h0, Y.interval, adjoint=False, method='midpoint',
                              options=dict(step_size=1.0))  # shape (batch_size, 2, hidden_size)
         score = self._readout(hs[:, -1])
