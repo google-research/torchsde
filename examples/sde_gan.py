@@ -260,13 +260,11 @@ def train_generator(ts, batch_size, generator, discriminator, generator_optimise
     discriminator_optimiser.zero_grad()
 
 
-def train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device,
-                        gp_coeff):
+def train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, gp_coeff):
     with torch.no_grad():
         generated_samples = generator(ts, batch_size)
     generated_score = discriminator(generated_samples)
 
-    real_samples = real_samples.to(device)
     real_score = discriminator(real_samples)
 
     penalty = gradient_penalty(generated_samples, real_samples, discriminator)
@@ -276,7 +274,7 @@ def train_discriminator(ts, batch_size, real_samples, generator, discriminator, 
     discriminator_optimiser.zero_grad()
 
 
-def evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device):
+def evaluate_loss(ts, batch_size, dataloader, generator, discriminator):
     with torch.no_grad():
         total_samples = 0
         total_loss = 0
@@ -284,7 +282,6 @@ def evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device):
             generated_samples = generator(ts, batch_size)
             generated_score = discriminator(generated_samples)
 
-            real_samples = real_samples.to(device)
             real_score = discriminator(real_samples)
 
             loss = generated_score - real_score
@@ -329,15 +326,15 @@ def main():
     print("Generated data.")
     data_size = ys.size(-1) - 1  # How many channels the data has (not including time, hence the minus one).
     ts = ts.to(device)
+    ys = ys.to(device)  # Dataset is small enough to fit entirely on the GPU
     ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
     dataset = torch.utils.data.TensorDataset(ys_coeffs)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=6, pin_memory=is_cuda)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Models
     generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers).to(device)
     discriminator = Discriminator(data_size, hidden_size, mlp_size, num_layers).to(device)
     # Weight averaging really helps with GAN training.
-    # (Could probably also substitute this for something like negative momentum.)
     averaged_generator = swa_utils.AveragedModel(generator)
     averaged_discriminator = swa_utils.AveragedModel(discriminator)
 
@@ -362,10 +359,10 @@ def main():
     trange = tqdm.tqdm(range(pre_epochs))
     for epoch in trange:
         for real_samples, in dataloader:
-            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser, device,
+            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
                                 gp_coeff)
         if (epoch % print_per_epoch) == 0 or epoch == pre_epochs - 1:
-            total_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
+            total_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator)
             trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
     print("Pretrained.")
 
@@ -380,7 +377,7 @@ def main():
                 train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
             else:
                 train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
-                                    device, gp_coeff)
+                                    gp_coeff)
 
         # Stochastic weight averaging typically improves performance quite a lot
         if epoch > swa_epoch_start:
@@ -388,10 +385,10 @@ def main():
             averaged_discriminator.update_parameters(discriminator)
 
         if (epoch % print_per_epoch) == 0 or epoch == epochs - 1:
-            total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator, device)
+            total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator)
             if epoch > swa_epoch_start:
                 total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
-                                                    averaged_discriminator.module, device)
+                                                    averaged_discriminator.module)
                 trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
                              f"Loss (averaged): {total_averaged_loss:.4f}")
             else:
@@ -439,8 +436,8 @@ if __name__ == '__main__':
 ###################
 # Appendix: discriminators for a neural SDE
 #
-# This is a little long, but should all be quite straightforward. By the end of this you should have a really
-# comprehensive knowledge of how these things fit together.
+# This is a little long, but should all be quite straightforward. By the end of this you should have a comprehensive
+# knowledge of how these things fit together.
 #
 # Let Y be the real/generated sample, and let H be the hidden state of the discriminator.
 # For real data, then Y is some interpolation of an (irregular) time series. (As with neural CDEs, if you're familiar -
@@ -518,6 +515,4 @@ if __name__ == '__main__':
 # Right, let's wrap up this wall of text. Here, we use option (**), (a2). This is arguably the simplest option, and
 # is chosen as we'd like to keep the code readable in this example. To solve the CDEs we use the CDE solvers available
 # through torchcde: https://github.com/patrick-kidger/torchcde.
-# (Note that in the code for the "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs" paper, we actually used
-# option (*), (b).)
 ###################
