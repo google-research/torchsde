@@ -63,9 +63,9 @@ class AdjointSDE(base_sde.BaseSDE):
             }.get(sde.noise_type),
             SDE_TYPES.stratonovich: self.f_and_g_prod_uncorrected
         }.get(sde.sde_type)
-        self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-        }.get(sde.noise_type, self.gdg_prod_default)
+        self.g_prod_and_gdg_prod = {
+            NOISE_TYPES.diagonal: self.g_prod_and_gdg_prod_diagonal,
+        }.get(sde.noise_type, self.g_prod_and_gdg_prod_default)
 
     ########################################
     #            Helper functions          #
@@ -321,17 +321,19 @@ class AdjointSDE(base_sde.BaseSDE):
     #               gdg_prod               #
     ########################################
 
-    def gdg_prod_default(self, t, y, v):  # For Ito/Stratonovich general/additive/scalar.
+    def g_prod_and_gdg_prod_default(self, t, y, v1, v2):  # For Ito/Stratonovich general/additive/scalar.
         raise NotImplementedError
 
-    def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v)
+    def g_prod_and_gdg_prod_diagonal(self, t, y_aug, v1, v2):  # For Ito/Stratonovich diagonal.
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v2)
         with torch.enable_grad():
             g = self._base_sde.g(-t, y)
+            g_prod = self._base_sde.prod(g, v1)
+
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=v * g,
+                grad_outputs=v2 * g,
                 allow_unused=True,
                 retain_graph=True,
                 create_graph=requires_grad
@@ -346,7 +348,7 @@ class AdjointSDE(base_sde.BaseSDE):
             prod_partials_adj_y_and_params = misc.vjp(
                 outputs=g,
                 inputs=[y] + self._params,
-                grad_outputs=adj_y * v * dgdy,
+                grad_outputs=adj_y * v2 * dgdy,
                 allow_unused=True,
                 retain_graph=True,
                 create_graph=requires_grad
@@ -354,7 +356,7 @@ class AdjointSDE(base_sde.BaseSDE):
             avg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=(adj_y * v * g).detach(),
+                grad_outputs=(adj_y * v2 * g).detach(),
                 allow_unused=True,
                 create_graph=True
             )
@@ -362,7 +364,8 @@ class AdjointSDE(base_sde.BaseSDE):
                 outputs=avg_dg_vjp.sum(),
                 inputs=[y] + self._params,
                 allow_unused=True,
+                retain_graph=True,
                 create_graph=requires_grad
             )
             vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
-        return misc.flatten((vg_dg_vjp, *vjp_y_and_params))
+            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, *vjp_y_and_params))

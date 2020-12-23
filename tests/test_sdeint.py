@@ -79,7 +79,7 @@ def _use_bm__levy_area_approximation():
 @pytest.mark.parametrize('sde_cls', [problems.Ex1, problems.Ex2, problems.Ex4, problems.Ex4])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
-@pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
+@pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'milstein_grad_free', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('logqp', [True, False])
 @pytest.mark.parametrize('device', devices)
@@ -89,6 +89,13 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     (b) produces tensors of the right shape
     (c) accepts every method
     """
+
+    if method == 'milstein_grad_free':
+        method = 'milstein'
+        options = dict(grad_free=True)
+    else:
+        options = dict()
+
     should_fail = False
     if sde_type == 'ito':
         if method not in ('euler', 'srk', 'milstein'):
@@ -122,11 +129,11 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     else:
         bm = None
 
-    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options)
 
 
 @pytest.mark.parametrize("sde_cls", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
-@pytest.mark.parametrize('method', ['euler', 'milstein', 'srk'])
+@pytest.mark.parametrize('method', ['euler', 'milstein', 'milstein_grad_free', 'srk'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('device', devices)
 def test_sdeint_dependencies(sde_cls, method, adaptive, device):
@@ -134,14 +141,20 @@ def test_sdeint_dependencies(sde_cls, method, adaptive, device):
     the states/params and when some states/params don't require gradients.
     """
 
+    if method == 'milstein_grad_free':
+        method = 'milstein'
+        options = dict(grad_free=True)
+    else:
+        options = dict()
+
     sde = sde_cls(d=d).to(device)
     bm = None
     logqp = False
     should_fail = False
-    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options)
 
 
-def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
+def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options):
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
     if adaptive and method == 'euler' and sde.noise_type != 'additive':
@@ -153,7 +166,8 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     with torch.no_grad():
         try:
             with ctx:
-                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, logqp=logqp)
+                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, logqp=logqp,
+                                      options=options)
         except ValueError:
             if should_fail:
                 return
@@ -169,8 +183,8 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     # Using `h` as drift.
     with torch.no_grad():
         with ctx:
-            ans = torchsde.sdeint(
-                sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'}, logqp=logqp)
+            ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'},
+                                  logqp=logqp, options=options)
     if logqp:
         ans, log_ratio = ans
         assert log_ratio.shape == (T - 1, batch_size)

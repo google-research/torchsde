@@ -174,6 +174,7 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
                 raise ValueError(f"{name} must be of shape (batch, state_channels), but got {shape}.")
             batch_sizes.append(shape[0])
             state_sizes.append(shape[1])
+            noise_sizes.append(shape[1])
         else:
             if len(shape) != 3:
                 raise ValueError(f"{name} must be of shape (batch, state_channels, noise_channels), but got {shape}.")
