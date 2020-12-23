@@ -291,7 +291,7 @@ class AdjointSDE(base_sde.BaseSDE):
     def f_and_g_prod_uncorrected(self, t, y_aug, v):  # For Ito additive and Stratonovich.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g_prod = self._base_sde.f_and_g_prod(-t, y)
+            f, g_prod = self._base_sde.f_and_g_prod(-t, y, v)
 
             f_out = self._f_uncorrected(f, y, adj_y, requires_grad)
             g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
