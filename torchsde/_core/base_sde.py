@@ -56,10 +56,10 @@ class ForwardSDE(BaseSDE):
         self.prod = {
             NOISE_TYPES.diagonal: self.prod_diagonal
         }.get(sde.noise_type, self.prod_default)
-        self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-            NOISE_TYPES.additive: self._return_zero,
-        }.get(sde.noise_type, self.gdg_prod_default)
+        self.g_prod_and_gdg_prod = {
+            NOISE_TYPES.diagonal: self.g_prod_and_gdg_prod_diagonal,
+            NOISE_TYPES.additive: self.g_prod_and_gdg_prod_additive,
+        }.get(sde.noise_type, self.g_prod_and_gdg_prod_default)
         self.dg_ga_jvp_column_sum = {
             NOISE_TYPES.general: (
                 self.dg_ga_jvp_column_sum_v2 if fast_dg_ga_jvp_column_sum else self.dg_ga_jvp_column_sum_v1
@@ -70,13 +70,13 @@ class ForwardSDE(BaseSDE):
     #                  f                   #
     ########################################
     def f_default(self, t, y):
-        raise RuntimeError("Method `f` has not provided, but is required.")
+        raise RuntimeError("Method `f` has not been provided, but is required for this method.")
 
     ########################################
     #                  g                   #
     ########################################
     def g_default(self, t, y):
-        raise RuntimeError("Method `g` has not provided, but is required.")
+        raise RuntimeError("Method `g` has not been provided, but is required for this method.")
 
     ########################################
     #               f_and_g                #
@@ -111,11 +111,11 @@ class ForwardSDE(BaseSDE):
         return f, self.prod(g, v)
 
     ########################################
-    #               gdg_prod               #
+    #          g_prod_and_gdg_prod         #
     ########################################
 
-    # Computes: sum_{j, l} g_{j, l} d g_{j, l} d x_i v_l.
-    def gdg_prod_default(self, t, y, v):
+    # Computes: g_prod and sum_{j, l} g_{j, l} d g_{j, l} d x_i v2_l.
+    def g_prod_and_gdg_prod_default(self, t, y, v1, v2):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
@@ -123,13 +123,14 @@ class ForwardSDE(BaseSDE):
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=g * v.unsqueeze(-2),
+                grad_outputs=g * v2.unsqueeze(-2),
+                retain_graph=True,
                 create_graph=requires_grad,
                 allow_unused=True
             )
-        return vg_dg_vjp
+        return self.prod(g, v1), vg_dg_vjp
 
-    def gdg_prod_diagonal(self, t, y, v):
+    def g_prod_and_gdg_prod_diagonal(self, t, y, v1, v2):
         requires_grad = torch.is_grad_enabled()
         with torch.enable_grad():
             y = y if y.requires_grad else y.detach().requires_grad_(True)
@@ -137,11 +138,15 @@ class ForwardSDE(BaseSDE):
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=g * v,
+                grad_outputs=g * v2,
+                retain_graph=True,
                 create_graph=requires_grad,
                 allow_unused=True
             )
-        return vg_dg_vjp
+        return self.prod(g, v1), vg_dg_vjp
+
+    def g_prod_and_gdg_prod_additive(self, t, y, v1, v2):
+        return self.g_prod(t, y, v1), 0.
 
     ########################################
     #              dg_ga_jvp               #
