@@ -54,13 +54,12 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
 
-        f = self.sde.f(t0, y0)
-        g_prod_I_k = self.sde.g_prod(t0, y0, I_k)
+        f, g_prod_I_k = self.sde.f_and_g_prod(t0, y0, I_k)
 
         if self.options[METHOD_OPTIONS.grad_free]:
             g = self.sde.g(t0, y0)
             g = g.squeeze(2) if g.dim() == 3 else g
-            g_prod_v = self.sde.g_prod(t0, y0, v)
+            g_prod_v = self.sde.prod(g, v)
             sqrt_dt = dt.sqrt()
             y0_prime = y0 + self.y_prime_f_factor(dt, f) + g * sqrt_dt
             g_prod_v_prime = self.sde.g_prod(t0, y0_prime, v)
