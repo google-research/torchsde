@@ -104,14 +104,10 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
     if names is None:
         names_to_change = {}
     else:
-        names_to_change = {key: names[key] for key in ("drift", "diffusion", "prior_drift") if key in names}
+        names_to_change = {key: names[key] for key in ("drift", "diffusion", "prior_drift", "drift_and_diffusion",
+                                                       "drift_and_diffusion_prod") if key in names}
     if len(names_to_change) > 0:
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
-
-    required_funcs = ("f", "g", "h") if logqp else ("f", "g")
-    missing_funcs = [func for func in required_funcs if not hasattr(sde, func)]
-    if len(missing_funcs) > 0:
-        raise ValueError(f"sde is required to have the methods {required_funcs}. Missing functions: {missing_funcs}")
 
     if not hasattr(sde, "noise_type"):
         raise ValueError(f"sde does not have the attribute noise_type.")
@@ -124,6 +120,11 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
 
     if sde.sde_type not in SDE_TYPES:
         raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde.sde_type}.")
+
+    if not torch.is_tensor(y0):
+        raise ValueError("`y0` must be a torch.Tensor.")
+    if y0.dim() != 2:
+        raise ValueError("`y0` must be a 2-dimensional tensor of shape (batch, channels).")
 
     # --- Backwards compatibility: v0.1.1. ---
     if logqp:
@@ -145,63 +146,94 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
     if method not in METHODS:
         raise ValueError(f"Expected method in {METHODS}, but found {method}.")
 
-    if not torch.is_tensor(y0):
-        raise ValueError(f"`y0` must be a torch.Tensor.")
-
     if not torch.is_tensor(ts):
         if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
             raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
         ts = torch.tensor(ts, dtype=y0.dtype, device=y0.device)
 
-    drift_shape = sde.f(ts[0], y0).size()
-    if drift_shape != y0.size():
-        raise ValueError(f"Drift must return a Tensor of the same shape as `y0`. "
-                         f"Got drift shape {drift_shape}, but y0 shape {y0.size()}.")
+    batch_sizes = []
+    state_sizes = []
+    noise_sizes = []
+    batch_sizes.append(y0.size(0))
+    state_sizes.append(y0.size(1))
+    if bm is not None:
+        if len(bm.shape) != 2:
+            raise ValueError("`bm` must be of shape (batch, noise_channels).")
+        batch_sizes.append(bm.shape[0])
+        noise_sizes.append(bm.shape[1])
 
-    diffusion_shape = sde.g(ts[0], y0).size()
-    noise_channels = diffusion_shape[-1]
-    if sde.noise_type in (NOISE_TYPES.additive, NOISE_TYPES.general, NOISE_TYPES.scalar):
-        batch_dimensions = diffusion_shape[:-2]
-        drift_shape, diffusion_shape = tuple(drift_shape), tuple(diffusion_shape)
-        if len(drift_shape) == 0:
-            raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
-        if len(diffusion_shape) < 2:
-            raise ValueError(f"Diffusion must have shape (..., state_channels, noise_channels), "
-                             f"but got shape {diffusion_shape}.")
-        if drift_shape != diffusion_shape[:-1]:
-            raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape {drift_shape}, "
-                             f"meaning {drift_shape[:-1]} batch dimensions and {drift_shape[-1]} channel "
-                             f"dimensions, but diffusion shape {diffusion_shape}, meaning "
-                             f"{diffusion_shape[:-2]} batch dimensions, {diffusion_shape[-2]} channel "
-                             f"dimensions and {diffusion_shape[-1]} noise dimension.")
-        if diffusion_shape[:-2] != batch_dimensions:
-            raise ValueError("Every Tensor returned by the diffusion must have the same number and size of batch "
-                             "dimensions.")
-        if diffusion_shape[-1] != noise_channels:
-            raise ValueError("Every Tensor returned by the diffusion must have the same number of noise channels.")
-        if sde.noise_type == NOISE_TYPES.scalar:
-            if noise_channels != 1:
-                raise ValueError(f"Scalar noise must have only one channel; "
-                                 f"the diffusion has {noise_channels} noise channels.")
-    else:  # sde.noise_type == NOISE_TYPES.diagonal
-        batch_dimensions = diffusion_shape[:-1]
-        drift_shape, diffusion_shape = tuple(drift_shape), tuple(diffusion_shape)
-        if len(drift_shape) == 0:
-            raise ValueError("Drift must be of shape (..., state_channels), but got shape ().")
-        if len(diffusion_shape) == 0:
-            raise ValueError(f"Diffusion must have shape (..., state_channels), but got shape ().")
-        if drift_shape != diffusion_shape:
-            raise ValueError(f"Drift and diffusion shapes do not match. Got drift shape {drift_shape}, "
-                             f"meaning {drift_shape[:-1]} batch dimensions and {drift_shape[-1]} channel "
-                             f"dimensions, but diffusion shape {diffusion_shape}, meaning "
-                             f"{diffusion_shape[:-1]} batch dimensions, {diffusion_shape[-1]} channel "
-                             f"dimensions and {diffusion_shape[-1]} noise dimension.")
-        if diffusion_shape[:-1] != batch_dimensions:
-            raise ValueError("Every Tensor return by the diffusion must have the same number and size of batch "
-                             "dimensions.")
-        if diffusion_shape[-1] != noise_channels:
-            raise ValueError("Every Tensor return by the diffusion must have the same number of noise "
-                             "channels.")
+    def _check_2d(name, shape):
+        if len(shape) != 2:
+            raise ValueError(f"{name} must be of shape (batch, state_channels), but got {shape}.")
+        batch_sizes.append(shape[0])
+        state_sizes.append(shape[1])
+
+    def _check_2d_or_3d(name, shape):
+        if sde.noise_type == NOISE_TYPES.diagonal:
+            if len(shape) != 2:
+                raise ValueError(f"{name} must be of shape (batch, state_channels), but got {shape}.")
+            batch_sizes.append(shape[0])
+            state_sizes.append(shape[1])
+        else:
+            if len(shape) != 3:
+                raise ValueError(f"{name} must be of shape (batch, state_channels, noise_channels), but got {shape}.")
+            batch_sizes.append(shape[0])
+            state_sizes.append(shape[1])
+            noise_sizes.append(shape[2])
+
+    has_f = False
+    has_g = False
+    if hasattr(sde, 'f'):
+        has_f = True
+        f_drift_shape = tuple(sde.f(ts[0], y0).size())
+        _check_2d('Drift', f_drift_shape)
+    if hasattr(sde, 'g'):
+        has_g = True
+        g_diffusion_shape = tuple(sde.g(ts[0], y0).size())
+        _check_2d_or_3d('Diffusion', g_diffusion_shape)
+    if hasattr(sde, 'f_and_g'):
+        has_f = True
+        has_g = True
+        _f, _g = sde.f_and_g(ts[0], y0)
+        f_drift_shape = tuple(_f.size())
+        g_diffusion_shape = tuple(_g.size())
+        _check_2d('Drift', f_drift_shape)
+        _check_2d_or_3d('Diffusion', g_diffusion_shape)
+    if hasattr(sde, 'g_prod'):
+        has_g = True
+        g_prod_shape = tuple(sde.g_prod(ts[0], y0).size())
+        _check_2d('Diffusion-vector product', g_prod_shape)
+    if hasattr(sde, 'f_and_g_prod'):
+        has_f = True
+        has_g = True
+        _f, _g_prod = sde.f_and_g_prod(ts[0], y0)
+        f_drift_shape = tuple(_f.size())
+        g_prod_shape = tuple(_g_prod.size())
+        _check_2d('Drift', f_drift_shape)
+        _check_2d('Diffusion-vector product', g_prod_shape)
+
+    if not has_f:
+        raise ValueError("sde must define at least one of `f`, `f_and_g`, or `f_and_g_prod`. (Or possibly more "
+                         "depending on the method chosen.)")
+    if not has_g:
+        raise ValueError("sde must define at least one of `g`, `f_and_g`, `g_prod` or `f_and_g_prod`. (Or possibly "
+                         "more depending on the method chosen.)")
+
+    for batch_size in batch_sizes[1:]:
+        if batch_size != batch_sizes[0]:
+            raise ValueError("Batch sizes not consistent.")
+    for state_size in state_sizes[1:]:
+        if state_size != state_sizes[0]:
+            raise ValueError("State sizes not consistent.")
+    for noise_size in noise_sizes[1:]:
+        if noise_size != noise_sizes[0]:
+            raise ValueError("Noise sizes not consistent.")
+
+    if sde.noise_type == NOISE_TYPES.scalar:
+        if noise_sizes[0] != 1:
+            raise ValueError(f"Scalar noise must have only one channel; the diffusion has {noise_sizes[0]} noise "
+                             f"channels.")
+
     sde = base_sde.ForwardSDE(sde)
 
     if bm is None:
@@ -211,7 +243,7 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.foster
         else:
             levy_area_approximation = LEVY_AREA_APPROXIMATIONS.none
-        bm = BrownianInterval(t0=ts[0], t1=ts[-1], size=(*batch_dimensions, noise_channels), dtype=y0.dtype,
+        bm = BrownianInterval(t0=ts[0], t1=ts[-1], size=(batch_sizes[0], noise_sizes[0]), dtype=y0.dtype,
                               device=y0.device, levy_area_approximation=levy_area_approximation)
 
     return sde, y0, ts, bm, method

@@ -44,14 +44,18 @@ class ForwardSDE(BaseSDE):
     def __init__(self, sde, fast_dg_ga_jvp_column_sum=False):
         super(ForwardSDE, self).__init__(sde_type=sde.sde_type, noise_type=sde.noise_type)
         self._base_sde = sde
-        self.f = sde.f
-        self.g = sde.g
 
         # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
         # by making sure it's a one-time cost.
-        self.g_prod = {
-            NOISE_TYPES.diagonal: self.g_prod_diagonal,
-        }.get(sde.noise_type, self.g_prod_default)
+
+        self.f = getattr(sde, 'f', self.f_default)
+        self.g = getattr(sde, 'g', self.g_default)
+        self.f_and_g = getattr(sde, 'f_and_g', self.f_and_g_default)
+        self.f_and_g_prod = getattr(sde, 'f_and_g_prod', self.f_and_g_prod_default)
+        self.g_prod = getattr(sde, 'g_prod', self.g_prod_default)
+        self.prod = {
+            NOISE_TYPES.diagonal: self.prod_diagonal
+        }.get(sde.noise_type, self.prod_default)
         self.gdg_prod = {
             NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
             NOISE_TYPES.additive: self._return_zero,
@@ -63,14 +67,48 @@ class ForwardSDE(BaseSDE):
         }.get(sde.noise_type, self._return_zero)
 
     ########################################
+    #                  f                   #
+    ########################################
+    def f_default(self, t, y):
+        raise RuntimeError("Method `f` has not provided, but is required.")
+
+    ########################################
+    #                  g                   #
+    ########################################
+    def g_default(self, t, y):
+        raise RuntimeError("Method `g` has not provided, but is required.")
+
+    ########################################
+    #               f_and_g                #
+    ########################################
+
+    def f_and_g_default(self, t, y):
+        return self.f(t, y), self.g(t, y)
+
+    ########################################
+    #                prod                  #
+    ########################################
+
+    def prod_diagonal(self, g, v):
+        return g * v
+
+    def prod_default(self, g, v):
+        return misc.batch_mvp(g, v)
+
+    ########################################
     #                g_prod                #
     ########################################
 
-    def g_prod_diagonal(self, t, y, v):
-        return self.g(t, y) * v
-
     def g_prod_default(self, t, y, v):
-        return misc.batch_mvp(self.g(t, y), v)
+        return self.prod(self.g(t, y), v)
+
+    ########################################
+    #            f_and_g_prod              #
+    ########################################
+
+    def f_and_g_prod_default(self, t, y, v):
+        f, g = self.f_and_g(t, y)
+        return f, self.prod(g, v)
 
     ########################################
     #               gdg_prod               #
@@ -159,18 +197,16 @@ class ForwardSDE(BaseSDE):
 
 class RenameMethodsSDE(BaseSDE):
 
-    def __init__(self, sde, drift='f', diffusion='g', prior_drift='h'):
+    def __init__(self, sde, drift='f', diffusion='g', prior_drift='h', diffusion_prod='g_prod',
+                 drift_and_diffusion='f_and_g', drift_and_diffusion_prod='f_and_g_prod'):
         super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
         self._base_sde = sde
-        self.f = getattr(sde, drift)
-        self.g = getattr(sde, diffusion)
-
-        # Prevents raising an error when logqp is disabled and `sde` doesn't have an attribute for `h`.
-        # Functions that raise exceptions cannot be simply rewritten as lambda functions; therefore using `def`.
-        def default_h(*args, **kwargs):
-            raise AttributeError(f"'{type(self)}' object has no attribute '{prior_drift}'")
-
-        self.h = getattr(sde, prior_drift, default_h)
+        for name, value in zip(('f', 'g', 'h', 'g_prod', 'f_and_g', 'f_and_g_prod'),
+                               (drift, diffusion, prior_drift, diffusion_prod, drift_and_diffusion, drift_and_diffusion_prod)):
+            try:
+                setattr(self, name, getattr(sde, value))
+            except AttributeError:
+                pass
 
 
 class SDEIto(BaseSDE):
@@ -193,17 +229,24 @@ class SDELogqp(BaseSDE):
         self._base_sde = sde
 
         # Make this redirection a one-time cost.
-        self._base_f = sde.f
-        self._base_g = sde.g
-        self._base_h = sde.h
+        try:
+            self._base_f = sde.f
+            self._base_g = sde.g
+            self._base_h = sde.h
+        except AttributeError as e:
+            # TODO: relax this requirement, and use f_and_g, f_and_g_prod, f_and_g_and_h and f_and_g_prod_and_h if
+            #  they're available.
+            raise AttributeError("If using logqp then drift, diffusion and prior drift must all be specified.") from e
 
         # Make this method selection a one-time cost.
         if sde.noise_type == NOISE_TYPES.diagonal:
             self.f = self.f_diagonal
             self.g = self.g_diagonal
+            self.f_and_g = self.f_and_g_diagonal
         else:
             self.f = self.f_general
             self.g = self.g_general
+            self.f_and_g = self.f_and_g_general
 
     def f_diagonal(self, t, y: Tensor):
         y = y[:, :-1]
@@ -218,6 +261,14 @@ class SDELogqp(BaseSDE):
         g_logqp = y.new_zeros(size=(y.size(0), 1))
         return torch.cat([g, g_logqp], dim=1)
 
+    def f_and_g_diagonal(self, t, y: Tensor):
+        y = y[:, :-1]
+        f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
+        u = misc.stable_division(f - h, g)
+        f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
+        g_logqp = y.new_zeros(size=(y.size(0), 1))
+        return torch.cat([f, f_logqp], dim=1), torch.cat([g, g_logqp], dim=1)
+
     def f_general(self, t, y: Tensor):
         y = y[:, :-1]
         f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
@@ -230,4 +281,12 @@ class SDELogqp(BaseSDE):
         g = self._base_sde.g(t, y)
         g_logqp = y.new_zeros(size=(g.size(0), 1, g.size(-1)))
         return torch.cat([g, g_logqp], dim=1)
+
+    def f_and_g_general(self, t, y: Tensor):
+        y = y[:, :-1]
+        f, g, h = self._base_f(t, y), self._base_g(t, y), self._base_h(t, y)
+        u = misc.batch_mvp(g.pinverse(), f - h)  # (batch_size, brownian_size).
+        f_logqp = .5 * (u ** 2).sum(dim=1, keepdim=True)
+        g_logqp = y.new_zeros(size=(g.size(0), 1, g.size(-1)))
+        return torch.cat([f, f_logqp], dim=1), torch.cat([g, g_logqp], dim=1)
 # ----------------------------------------
