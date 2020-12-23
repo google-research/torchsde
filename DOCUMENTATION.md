@@ -32,10 +32,10 @@ Several keyword arguments are also accepted, see [below](#keyword-arguments-of-s
 The output tensor `ys` will have shape `(t_size, batch_size, state_size)`, and corresponds to a sample from the SDE.
 
 ### Possible noise types
-- `scalar`: The diffusion `g` has output size `(batch_size, state_size, 1)`. The Brownian motion is 1-dimensional.
-- `additive`: The diffusion `g` is assumed to be constant w.r.t. `y` and has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is `browian_size`-dimensional.
-- `diagonal`: The diffusion `g` is element-wise and has output size `(batch_size, state_size)`. The Brownian motion is `state_size`-dimensional.
-- `general`: The diffusion `g` has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is `brownian_size`-dimensional.
+- `scalar`: The diffusion `g` has output size `(batch_size, state_size, 1)`. The Brownian motion is a batch of 1-dimensional Brownian motions.
+- `additive`: The diffusion `g` is assumed to be constant w.r.t. `y` and has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is a batch of `browian_size`-dimensional Brownian motions.
+- `diagonal`: The diffusion `g` is element-wise and has output size `(batch_size, state_size)`. The Brownian motion is a batch of `state_size`-dimensional Brownian motions.
+- `general`: The diffusion `g` has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is a batch of `brownian_size`-dimensional Brownian motions.
 
 ### Keyword arguments for `sdeint`
 - `bm`: A `BrownianInterval` object, see [below](#brownian-motion). Optionally include to control the Brownian motion.
@@ -64,6 +64,12 @@ The available solvers depends on the SDE type and the noise type.
 Note that Milstein and SRK don't support general noise.
 
 Additionally, [gradient-free Milstein](https://infoscience.epfl.ch/record/143450/files/sde_tutorial.pdf) can be used by selecting Milstein, and then also passing in the keyword argument `sdeint(..., options=dict(grad_free=True))`.
+
+
+### Providing special methods
+If your drift/diffusion have special structure, for example the drift and diffusion share some computations, then it may be more efficient to evaluate them together rather than alone. As such, if the following methods are present on `sde`, then they will be used if possible: `g_prod(t, y, v)`, `f_and_g(t, y)`, `f_and_g_prod(t, y, v)`. Here `g_prod` is expected to compute the batch matrix-vector product between the diffusion and the vector `v`. `f_and_*` should return a 2-tuple of `f(t, y)` and `g(t, y)`/`g_prod(t, y, v)` as appropriate.
+
+Depending on the integration method used it may suffice to provide only some of these methods (`f` and `g` are not mandatory).
 
 ## Adjoints
 
