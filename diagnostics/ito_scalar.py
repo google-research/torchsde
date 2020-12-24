@@ -18,7 +18,7 @@ import torch
 
 from tests.problems import Ex2
 from torchsde import BrownianInterval
-from torchsde.settings import LEVY_AREA_APPROXIMATIONS, NOISE_TYPES
+from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from . import inspection
 from . import utils
 

@@ -16,7 +16,7 @@ import os
 
 import torch
 
-from tests.basic_sde import AdditiveSDE
+from tests.problems import Ex3
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS
 from . import inspection
@@ -28,7 +28,7 @@ def main():
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
-    sde = AdditiveSDE(d=d, m=m).to(device)
+    sde = Ex3(d=d, m=m).to(device)
     methods = ('euler', 'srk')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'ito_additive')
 
