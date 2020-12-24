@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import os
+import sys
 
 import torch
 import tqdm
@@ -22,6 +22,9 @@ from torchsde import BaseBrownian, BaseSDE, sdeint
 from torchsde.settings import SDE_TYPES
 from torchsde.types import Tensor, Vector, Scalar, Tuple, Optional, Callable
 from . import utils
+
+
+sys.setrecursionlimit(5000)
 
 
 def inspect_samples(y0: Tensor,
