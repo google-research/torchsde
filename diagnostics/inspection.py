@@ -31,10 +31,10 @@ def inspect_samples(y0: Tensor,
                     bm: BaseBrownian,
                     img_dir: str,
                     methods: Tuple[str, ...],
-                    options: Optional[Tuple] = None,
+                    options: Tuple,
+                    labels: Tuple[str, ...],
                     vis_dim=0,
-                    dt_true: Optional[float] = 2 ** -14,
-                    labels: Optional[Tuple[str, ...]] = None):
+                    dt_true: Optional[float] = 2 ** -14):
     if options is None:
         options = (None,) * len(methods)
     if labels is None:
@@ -74,9 +74,9 @@ def inspect_orders(y0: Tensor,
                    bm: BaseBrownian,
                    img_dir: str,
                    methods: Tuple[str, ...],
-                   options: Optional[Tuple] = None,
+                   options: Tuple,
+                   labels: Tuple[str, ...],
                    dt_true: Optional[float] = 2 ** -14,
-                   labels: Optional[Tuple[str, ...]] = None,
                    test_func: Optional[Callable] = lambda x: (x ** 2).flatten(start_dim=1).sum(dim=1)):
     if options is None:
         options = (None,) * len(methods)
