@@ -38,14 +38,14 @@ class Ex1(BaseSDE):
         super(Ex1, self).__init__(sde_type=sde_type, noise_type=Ex1.noise_type)
 
         self.f_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d)
+            nn.Linear(8, d)
         )
         self.g_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d),
+            nn.Linear(8, d),
             nn.Sigmoid()
         )
 
@@ -68,14 +68,14 @@ class Ex2(BaseSDE):
         super(Ex2, self).__init__(sde_type=sde_type, noise_type=Ex2.noise_type)
 
         self.f_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d)
+            nn.Linear(8, d)
         )
         self.g_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d),
+            nn.Linear(8, d),
             nn.Sigmoid()
         )
 
@@ -100,14 +100,14 @@ class Ex3(BaseSDE):
         self.m = m
 
         self.f_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d)
+            nn.Linear(8, d)
         )
         self.g_net = nn.Sequential(
-            nn.Linear(1, 3),
+            nn.Linear(1, 8),
             nn.Softplus(),
-            nn.Linear(3, d * m),
+            nn.Linear(8, d * m),
             nn.Sigmoid()
         )
 
@@ -131,14 +131,14 @@ class Ex4(BaseSDE):
         self.m = m
 
         self.f_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d)
+            nn.Linear(8, d)
         )
         self.g_net = nn.Sequential(
-            nn.Linear(d + 1, 3),
+            nn.Linear(d + 1, 8),
             nn.Softplus(),
-            nn.Linear(3, d * m),
+            nn.Linear(8, d * m),
             nn.Sigmoid()
         )
 
