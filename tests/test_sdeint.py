@@ -29,13 +29,13 @@ devices = ['cpu']
 if torch.cuda.is_available():
     devices.append('cuda')
 
-batch_size = 16
+batch_size = 4
 d = 3
 m = 2
 t0 = 0.0
 t1 = 0.3
 T = 5
-dt = 1e-2
+dt = 0.05
 dtype = torch.get_default_dtype()
 
 
@@ -76,7 +76,7 @@ def _use_bm__levy_area_approximation():
     yield True, 'foster'
 
 
-@pytest.mark.parametrize('sde_cls', [problems.Ex1, problems.Ex2, problems.Ex4, problems.Ex4])
+@pytest.mark.parametrize('sde_cls', [problems.Ex1, problems.Ex2, problems.Ex3, problems.Neural4])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
 @pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'milstein_grad_free', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])

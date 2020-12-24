@@ -16,7 +16,7 @@ import os
 
 import torch
 
-from tests.problems import Ex3
+from tests.problems import Neural3
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES
 from . import inspection
@@ -28,7 +28,7 @@ def main(device):
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
-    sde = Ex3(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+    sde = Neural3(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Milstein and log-ODE should in theory both superfluously compute zeros here.
     # We include them anyway to check that they do what they claim to do.
     methods = ('euler_heun', 'heun', 'midpoint', 'milstein', 'milstein', 'log_ode')
