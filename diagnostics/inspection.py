@@ -40,30 +40,29 @@ def inspect_samples(y0: Tensor,
     if labels is None:
         labels = methods
 
-    sde = copy.deepcopy(sde).requires_grad_(False)
+    with torch.no_grad():
+        solns = [
+            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)
+            for method, options_ in zip(methods, options)
+        ]
 
-    solns = [
-        sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)
-        for method, options_ in zip(methods, options)
-    ]
+        method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
+        true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)
 
-    method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
-    true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)
+        labels += ('true',)
+        solns += [true]
 
-    labels += ('true',)
-    solns += [true]
+        # (T, batch_size, d) -> (T, batch_size) -> (batch_size, T).
+        solns = [soln[..., vis_dim].t() for soln in solns]
 
-    # (T, batch_size, d) -> (T, batch_size) -> (batch_size, T).
-    solns = [soln[..., vis_dim].t() for soln in solns]
-
-    for i, samples in enumerate(zip(*solns)):
-        utils.swiss_knife_plotter(
-            img_path=os.path.join(img_dir, f'{i}'),
-            plots=[
-                {'x': ts, 'y': sample, 'label': label, 'marker': 'x'}
-                for sample, label in zip(samples, labels)
-            ]
-        )
+        for i, samples in enumerate(zip(*solns)):
+            utils.swiss_knife_plotter(
+                img_path=os.path.join(img_dir, f'{i}'),
+                plots=[
+                    {'x': ts, 'y': sample, 'label': label, 'marker': 'x'}
+                    for sample, label in zip(samples, labels)
+                ]
+            )
 
 
 def inspect_orders(y0: Tensor,
@@ -83,56 +82,56 @@ def inspect_orders(y0: Tensor,
     if labels is None:
         labels = methods
 
-    sde = copy.deepcopy(sde).requires_grad_(False)
-    ts = torch.tensor([t0, t1], device=y0.device)
+    with torch.no_grad():
+        ts = torch.tensor([t0, t1], device=y0.device)
 
-    solns = [
-        [
-            sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
-            for method, options_ in zip(methods, options)
+        solns = [
+            [
+                sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)[-1]
+                for method, options_ in zip(methods, options)
+            ]
+            for dt in tqdm.tqdm(dts)
         ]
-        for dt in tqdm.tqdm(dts)
-    ]
 
-    if hasattr(sde, 'analytical_sample'):
-        true = sde.analytical_sample(y0, ts, bm)[-1]
-    else:
-        method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
-        true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
+        if hasattr(sde, 'analytical_sample'):
+            true = sde.analytical_sample(y0, ts, bm)[-1]
+        else:
+            method_for_true = 'euler' if sde.sde_type == SDE_TYPES.ito else 'midpoint'
+            true = sdeint(sde, y0, ts, bm, method=method_for_true, dt=dt_true)[-1]
 
-    mses = []
-    maes = []
-    for dt, solns_ in zip(dts, solns):
-        mses_for_dt = [utils.mse(soln, true) for soln in solns_]
-        mses.append(mses_for_dt)
+        mses = []
+        maes = []
+        for dt, solns_ in zip(dts, solns):
+            mses_for_dt = [utils.mse(soln, true) for soln in solns_]
+            mses.append(mses_for_dt)
 
-        maes_for_dt = [utils.mae(soln, true, test_func) for soln in solns_]
-        maes.append(maes_for_dt)
+            maes_for_dt = [utils.mae(soln, true, test_func) for soln in solns_]
+            maes.append(maes_for_dt)
 
-    strong_order_slopes = [
-        utils.linregress_slope(utils.log(dts), .5 * utils.log(mses_for_method))
-        for mses_for_method in zip(*mses)
-    ]
+        strong_order_slopes = [
+            utils.linregress_slope(utils.log(dts), .5 * utils.log(mses_for_method))
+            for mses_for_method in zip(*mses)
+        ]
 
-    weak_order_slopes = [
-        utils.linregress_slope(utils.log(dts), utils.log(maes_for_method))
-        for maes_for_method in zip(*maes)
-    ]
+        weak_order_slopes = [
+            utils.linregress_slope(utils.log(dts), utils.log(maes_for_method))
+            for maes_for_method in zip(*maes)
+        ]
 
-    utils.swiss_knife_plotter(
-        img_path=os.path.join(img_dir, 'strong_order'),
-        plots=[
-            {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
-            for mses_for_method, label, slope in zip(zip(*mses), labels, strong_order_slopes)
-        ],
-        options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
-    )
+        utils.swiss_knife_plotter(
+            img_path=os.path.join(img_dir, 'strong_order'),
+            plots=[
+                {'x': dts, 'y': mses_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
+                for mses_for_method, label, slope in zip(zip(*mses), labels, strong_order_slopes)
+            ],
+            options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
+        )
 
-    utils.swiss_knife_plotter(
-        img_path=os.path.join(img_dir, 'weak_order'),
-        plots=[
-            {'x': dts, 'y': mres_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
-            for mres_for_method, label, slope in zip(zip(*maes), labels, weak_order_slopes)
-        ],
-        options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
-    )
+        utils.swiss_knife_plotter(
+            img_path=os.path.join(img_dir, 'weak_order'),
+            plots=[
+                {'x': dts, 'y': mres_for_method, 'label': f'{label}(k={slope:.4f})', 'marker': 'x'}
+                for mres_for_method, label, slope in zip(zip(*maes), labels, weak_order_slopes)
+            ],
+            options={'xscale': 'log', 'yscale': 'log', 'cycle_line_style': True}
+        )
