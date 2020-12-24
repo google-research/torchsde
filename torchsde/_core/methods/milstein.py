@@ -65,7 +65,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
             g_prime = self.sde.g(t0, y0_prime)
             gdg_prod = self.sde.prod(g_prime - g, v) / (2 * sqrt_dt)
         else:
-            g_prod_I_k, gdg_prod = self.sde.g_prod_and_gdg_prod(t0, y0, I_k, v)
+            g_prod_I_k, gdg_prod = self.sde.g_prod_and_gdg_prod(t0, y0, I_k, 0.5 * v)
 
         y1 = y0 + f * dt + g_prod_I_k + gdg_prod
 
