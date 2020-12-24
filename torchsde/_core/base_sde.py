@@ -48,10 +48,16 @@ class ForwardSDE(BaseSDE):
         # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
         # by making sure it's a one-time cost.
 
+        if hasattr(sde, 'f_and_g_prod'):
+            self.f_and_g_prod = sde.f_and_g_prod
+        elif hasattr(sde, 'f') and hasattr(sde, 'g_prod'):
+            self.f_and_g_prod = self.f_and_g_prod_default1
+        else:
+            self.f_and_g_prod = self.f_and_g_prod_default2
+
         self.f = getattr(sde, 'f', self.f_default)
         self.g = getattr(sde, 'g', self.g_default)
         self.f_and_g = getattr(sde, 'f_and_g', self.f_and_g_default)
-        self.f_and_g_prod = getattr(sde, 'f_and_g_prod', self.f_and_g_prod_default)
         self.g_prod = getattr(sde, 'g_prod', self.g_prod_default)
         self.prod = {
             NOISE_TYPES.diagonal: self.prod_diagonal
@@ -103,10 +109,13 @@ class ForwardSDE(BaseSDE):
         return self.prod(self.g(t, y), v)
 
     ########################################
-    #            f_and_g_prod              #
+    #             f_and_g_prod             #
     ########################################
 
-    def f_and_g_prod_default(self, t, y, v):
+    def f_and_g_prod_default1(self, t, y, v):
+        return self.f(t, y), self.g_prod(t, y, v)
+
+    def f_and_g_prod_default2(self, t, y, v):
         f, g = self.f_and_g(t, y)
         return f, self.prod(g, v)
 
