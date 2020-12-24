@@ -76,11 +76,35 @@ def _use_bm__levy_area_approximation():
     yield True, 'foster'
 
 
+@pytest.mark.parametrize('sde_type,method', [('ito', 'euler'), ('stratonovich', 'midpoint')])
+def test_specialised_functions(sde_type, method):
+    vector = torch.randn(m)
+    fg = problems.FGSDE(sde_type, vector)
+    f_and_g = problems.FAndGSDE(sde_type, vector)
+    g_prod = problems.GProdSDE(sde_type, vector)
+    f_and_g_prod = problems.FAndGProdSDE(sde_type, vector)
+    f_and_g_with_g_prod1 = problems.FAndGGProdSDE1(sde_type, vector)
+    f_and_g_with_g_prod2 = problems.FAndGGProdSDE2(sde_type, vector)
+
+    y0 = torch.randn(batch_size, d)
+
+    outs = []
+    for sde in (fg, f_and_g, g_prod, f_and_g_prod, f_and_g_with_g_prod1, f_and_g_with_g_prod2):
+        bm = torchsde.BrownianInterval(t0, t1, (batch_size, m), entropy=45678)
+        outs.append(torchsde.sdeint(sde, y0, [t0, t1], dt=dt, bm=bm)[1])
+    for o in outs[1:]:
+        # Equality of floating points, because we expect them to do everything exactly the same.
+        assert o.shape == outs[0].shape
+        assert (o == outs[0]).all()
+
+
 @pytest.mark.parametrize('sde_cls', [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive,
                                      problems.NeuralGeneral])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
-@pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'milstein_grad_free', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
+@pytest.mark.parametrize('method',
+                         ['blah', 'euler', 'milstein', 'milstein_grad_free', 'srk', 'euler_heun', 'heun', 'midpoint',
+                          'log_ode'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('logqp', [True, False])
 @pytest.mark.parametrize('device', devices)

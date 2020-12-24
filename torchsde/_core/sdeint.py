@@ -202,12 +202,20 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
         _check_2d_or_3d('Diffusion', g_diffusion_shape)
     if hasattr(sde, 'g_prod'):
         has_g = True
-        g_prod_shape = tuple(sde.g_prod(ts[0], y0).size())
+        if len(noise_sizes) == 0:
+            raise ValueError("Cannot infer noise size (i.e. number of Brownian motion channels). Either pass `bm` "
+                             "explicitly, or specify one of the `g`, `f_and_g` functions.`")
+        v = torch.randn(batch_sizes[0], noise_sizes[0], dtype=y0.dtype, device=y0.device)
+        g_prod_shape = tuple(sde.g_prod(ts[0], y0, v).size())
         _check_2d('Diffusion-vector product', g_prod_shape)
     if hasattr(sde, 'f_and_g_prod'):
         has_f = True
         has_g = True
-        _f, _g_prod = sde.f_and_g_prod(ts[0], y0)
+        if len(noise_sizes) == 0:
+            raise ValueError("Cannot infer noise size (i.e. number of Brownian motion channels). Either pass `bm` "
+                             "explicitly, or specify one of the `g`, `f_and_g` functions.`")
+        v = torch.randn(batch_sizes[0], noise_sizes[0], dtype=y0.dtype, device=y0.device)
+        _f, _g_prod = sde.f_and_g_prod(ts[0], y0, v)
         f_drift_shape = tuple(_f.size())
         g_prod_shape = tuple(_g_prod.size())
         _check_2d('Drift', f_drift_shape)
