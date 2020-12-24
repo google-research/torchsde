@@ -85,7 +85,7 @@ class Ex2(BaseSDE):
 
     def g(self, t, y):
         ty = torch.cat([t.expand(y.size(0), 1), y], dim=1)
-        return self.g_net(ty).view(y.size(0), self.d, 1)
+        return self.g_net(ty).unsqueeze(-1)
 
     def h(self, t, y):
         return torch.zeros_like(y)
