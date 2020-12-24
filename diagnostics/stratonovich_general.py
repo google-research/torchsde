@@ -16,7 +16,7 @@ import os
 
 import torch
 
-from tests.problems import Ex4
+from tests.problems import Neural4
 from torchsde import BrownianInterval
 from torchsde.settings import LEVY_AREA_APPROXIMATIONS, SDE_TYPES
 from . import inspection
@@ -28,7 +28,7 @@ def main(device):
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
-    sde = Ex4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
+    sde = Neural4(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Don't include Milstein as it doesn't work for general noise.
     methods = ('euler_heun', 'heun', 'midpoint', 'log_ode')
     options = (None, None, None, None)
