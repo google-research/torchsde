@@ -76,7 +76,8 @@ def _use_bm__levy_area_approximation():
     yield True, 'foster'
 
 
-@pytest.mark.parametrize('sde_cls', [problems.Ex1, problems.Ex2, problems.Ex3, problems.Neural4])
+@pytest.mark.parametrize('sde_cls', [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive,
+                                     problems.NeuralGeneral])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
 @pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])

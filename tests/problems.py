@@ -16,7 +16,7 @@
 
 Each example is of a particular noise type.
 
-Ex1, Ex2, Ex3 from
+ExDiagonal, ExScalar, ExAdditive from
 Rackauckas, Christopher, and Qing Nie. "Adaptive methods for stochastic
 differential equations via natural embeddings and rejection sampling with memory."
 Discrete and continuous dynamical systems. Series B 22.7 (2017): 2731.
@@ -36,11 +36,11 @@ from torchsde import BaseSDE, SDEIto
 from torchsde.settings import NOISE_TYPES, SDE_TYPES
 
 
-class Ex1(BaseSDE):
+class ExDiagonal(BaseSDE):
     noise_type = NOISE_TYPES.diagonal
 
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex1, self).__init__(sde_type=sde_type, noise_type=Ex1.noise_type)
+        super(ExDiagonal, self).__init__(sde_type=sde_type, noise_type=ExDiagonal.noise_type)
         self._nfe = 0
 
         # Use non-exploding initialization.
@@ -72,11 +72,11 @@ class Ex1(BaseSDE):
         return self._nfe
 
 
-class Ex2(BaseSDE):
+class ExScalar(BaseSDE):
     noise_type = NOISE_TYPES.scalar
 
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex2, self).__init__(sde_type=sde_type, noise_type=Ex2.noise_type)
+        super(ExScalar, self).__init__(sde_type=sde_type, noise_type=ExScalar.noise_type)
         self._nfe = 0
         self.p = nn.Parameter(torch.sigmoid(torch.randn(d)), requires_grad=True)
 
@@ -103,11 +103,11 @@ class Ex2(BaseSDE):
         return self._nfe
 
 
-class Ex3(BaseSDE):
+class ExAdditive(BaseSDE):
     noise_type = NOISE_TYPES.additive
 
     def __init__(self, d, m, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Ex3, self).__init__(sde_type=sde_type, noise_type=Ex3.noise_type)
+        super(ExAdditive, self).__init__(sde_type=sde_type, noise_type=ExAdditive.noise_type)
         self._nfe = 0
         self.m = m
 
@@ -132,11 +132,11 @@ class Ex3(BaseSDE):
         return self._nfe
 
 
-class Neural1(BaseSDE):
+class NeuralDiagonal(BaseSDE):
     noise_type = NOISE_TYPES.diagonal
 
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Neural1, self).__init__(sde_type=sde_type, noise_type=Neural1.noise_type)
+        super(NeuralDiagonal, self).__init__(sde_type=sde_type, noise_type=NeuralDiagonal.noise_type)
 
         self.f_net = nn.Sequential(
             nn.Linear(d + 1, 8),
@@ -162,11 +162,11 @@ class Neural1(BaseSDE):
         return torch.zeros_like(y)
 
 
-class Neural2(BaseSDE):
+class NeuralScalar(BaseSDE):
     noise_type = NOISE_TYPES.scalar
 
     def __init__(self, d, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Neural2, self).__init__(sde_type=sde_type, noise_type=Neural2.noise_type)
+        super(NeuralScalar, self).__init__(sde_type=sde_type, noise_type=NeuralScalar.noise_type)
 
         self.f_net = nn.Sequential(
             nn.Linear(d + 1, 8),
@@ -192,11 +192,11 @@ class Neural2(BaseSDE):
         return torch.zeros_like(y)
 
 
-class Neural3(BaseSDE):
+class NeuralAdditive(BaseSDE):
     noise_type = NOISE_TYPES.additive
 
     def __init__(self, d, m, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Neural3, self).__init__(sde_type=sde_type, noise_type=Neural3.noise_type)
+        super(NeuralAdditive, self).__init__(sde_type=sde_type, noise_type=NeuralAdditive.noise_type)
         self.d = d
         self.m = m
 
@@ -223,11 +223,11 @@ class Neural3(BaseSDE):
         return torch.zeros_like(y)
 
 
-class Neural4(BaseSDE):
+class NeuralGeneral(BaseSDE):
     noise_type = NOISE_TYPES.general
 
     def __init__(self, d, m, sde_type=SDE_TYPES.ito, **kwargs):
-        super(Neural4, self).__init__(sde_type=sde_type, noise_type=Neural4.noise_type)
+        super(NeuralGeneral, self).__init__(sde_type=sde_type, noise_type=NeuralGeneral.noise_type)
         self.d = d
         self.m = m
 
