@@ -37,7 +37,7 @@ ito_methods = {'milstein': 'ito', 'srk': 'ito'}
 stratonovich_methods = {'midpoint': 'stratonovich'}
 
 
-@pytest.mark.parametrize("sde_cls", [problems.Ex1, problems.Ex2, problems.Ex3, problems.Neural4])
+@pytest.mark.parametrize("sde_cls", [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive, problems.NeuralGeneral])
 @pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
 @pytest.mark.parametrize('adaptive', (False,))
 def test_adjoint(sde_cls, method, sde_type, adaptive):
