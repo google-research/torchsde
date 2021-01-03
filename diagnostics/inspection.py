@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import os
+import sys
 
 import torch
 import tqdm
@@ -24,6 +24,10 @@ from torchsde.types import Tensor, Vector, Scalar, Tuple, Optional, Callable
 from . import utils
 
 
+sys.setrecursionlimit(5000)
+
+
+@torch.no_grad()
 def inspect_samples(y0: Tensor,
                     ts: Vector,
                     dt: Scalar,
@@ -32,15 +36,13 @@ def inspect_samples(y0: Tensor,
                     img_dir: str,
                     methods: Tuple[str, ...],
                     options: Optional[Tuple] = None,
+                    labels: Optional[Tuple[str, ...]] = None,
                     vis_dim=0,
-                    dt_true: Optional[float] = 2 ** -14,
-                    labels: Optional[Tuple[str, ...]] = None):
+                    dt_true: Optional[float] = 2 ** -14):
     if options is None:
         options = (None,) * len(methods)
     if labels is None:
         labels = methods
-
-    sde = copy.deepcopy(sde).requires_grad_(False)
 
     solns = [
         sdeint(sde, y0, ts, bm, method=method, dt=dt, options=options_)
@@ -66,6 +68,7 @@ def inspect_samples(y0: Tensor,
         )
 
 
+@torch.no_grad()
 def inspect_orders(y0: Tensor,
                    t0: Scalar,
                    t1: Scalar,
@@ -75,15 +78,14 @@ def inspect_orders(y0: Tensor,
                    img_dir: str,
                    methods: Tuple[str, ...],
                    options: Optional[Tuple] = None,
-                   dt_true: Optional[float] = 2 ** -14,
                    labels: Optional[Tuple[str, ...]] = None,
+                   dt_true: Optional[float] = 2 ** -14,
                    test_func: Optional[Callable] = lambda x: (x ** 2).flatten(start_dim=1).sum(dim=1)):
     if options is None:
         options = (None,) * len(methods)
     if labels is None:
         labels = methods
 
-    sde = copy.deepcopy(sde).requires_grad_(False)
     ts = torch.tensor([t0, t1], device=y0.device)
 
     solns = [
