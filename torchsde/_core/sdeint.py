@@ -249,4 +249,4 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
         return ys, log_ratio_increments
     # ----------------------------------------
 
-    return solver.integrate(ts)
+    return ys
