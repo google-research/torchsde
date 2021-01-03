@@ -16,12 +16,12 @@
 
 Each example is of a particular noise type.
 
-ExDiagonal, ExScalar, ExAdditive from
+ExDiagonal, ExScalar, ExAdditive are examples 1-3 from
 Rackauckas, Christopher, and Qing Nie. "Adaptive methods for stochastic
 differential equations via natural embeddings and rejection sampling with memory."
 Discrete and continuous dynamical systems. Series B 22.7 (2017): 2731.
 
-Neural1-4 all use simple neural networks.
+Neural* all use simple neural networks.
 
 BasicSDE1-4 are problems where the drift and diffusion may not depend on
 trainable parameters.
