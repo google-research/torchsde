@@ -76,11 +76,35 @@ def _use_bm__levy_area_approximation():
     yield True, 'foster'
 
 
+@pytest.mark.parametrize('sde_type,method', [('ito', 'euler'), ('stratonovich', 'midpoint')])
+def test_specialised_functions(sde_type, method):
+    vector = torch.randn(m)
+    fg = problems.FGSDE(sde_type, vector)
+    f_and_g = problems.FAndGSDE(sde_type, vector)
+    g_prod = problems.GProdSDE(sde_type, vector)
+    f_and_g_prod = problems.FAndGProdSDE(sde_type, vector)
+    f_and_g_with_g_prod1 = problems.FAndGGProdSDE1(sde_type, vector)
+    f_and_g_with_g_prod2 = problems.FAndGGProdSDE2(sde_type, vector)
+
+    y0 = torch.randn(batch_size, d)
+
+    outs = []
+    for sde in (fg, f_and_g, g_prod, f_and_g_prod, f_and_g_with_g_prod1, f_and_g_with_g_prod2):
+        bm = torchsde.BrownianInterval(t0, t1, (batch_size, m), entropy=45678)
+        outs.append(torchsde.sdeint(sde, y0, [t0, t1], dt=dt, bm=bm)[1])
+    for o in outs[1:]:
+        # Equality of floating points, because we expect them to do everything exactly the same.
+        assert o.shape == outs[0].shape
+        assert (o == outs[0]).all()
+
+
 @pytest.mark.parametrize('sde_cls', [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive,
                                      problems.NeuralGeneral])
 @pytest.mark.parametrize('use_bm,levy_area_approximation', _use_bm__levy_area_approximation())
 @pytest.mark.parametrize('sde_type', ['ito', 'stratonovich'])
-@pytest.mark.parametrize('method', ['blah', 'euler', 'milstein', 'srk', 'euler_heun', 'heun', 'midpoint', 'log_ode'])
+@pytest.mark.parametrize('method',
+                         ['blah', 'euler', 'milstein', 'milstein_grad_free', 'srk', 'euler_heun', 'heun', 'midpoint',
+                          'log_ode'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('logqp', [True, False])
 @pytest.mark.parametrize('device', devices)
@@ -90,6 +114,13 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     (b) produces tensors of the right shape
     (c) accepts every method
     """
+
+    if method == 'milstein_grad_free':
+        method = 'milstein'
+        options = dict(grad_free=True)
+    else:
+        options = dict()
+
     should_fail = False
     if sde_type == 'ito':
         if method not in ('euler', 'srk', 'milstein'):
@@ -123,11 +154,11 @@ def test_sdeint_run_shape_method(sde_cls, use_bm, levy_area_approximation, sde_t
     else:
         bm = None
 
-    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options)
 
 
 @pytest.mark.parametrize("sde_cls", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
-@pytest.mark.parametrize('method', ['euler', 'milstein', 'srk'])
+@pytest.mark.parametrize('method', ['euler', 'milstein', 'milstein_grad_free', 'srk'])
 @pytest.mark.parametrize('adaptive', [False, True])
 @pytest.mark.parametrize('device', devices)
 def test_sdeint_dependencies(sde_cls, method, adaptive, device):
@@ -135,14 +166,20 @@ def test_sdeint_dependencies(sde_cls, method, adaptive, device):
     the states/params and when some states/params don't require gradients.
     """
 
+    if method == 'milstein_grad_free':
+        method = 'milstein'
+        options = dict(grad_free=True)
+    else:
+        options = dict()
+
     sde = sde_cls(d=d).to(device)
     bm = None
     logqp = False
     should_fail = False
-    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail)
+    _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options)
 
 
-def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
+def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options):
     y0 = torch.ones(batch_size, d, device=device)
     ts = torch.linspace(t0, t1, steps=T, device=device)
     if adaptive and method == 'euler' and sde.noise_type != 'additive':
@@ -154,7 +191,8 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     with torch.no_grad():
         try:
             with ctx:
-                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, logqp=logqp)
+                ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, logqp=logqp,
+                                      options=options)
         except ValueError:
             if should_fail:
                 return
@@ -170,8 +208,8 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail):
     # Using `h` as drift.
     with torch.no_grad():
         with ctx:
-            ans = torchsde.sdeint(
-                sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'}, logqp=logqp)
+            ans = torchsde.sdeint(sde, y0, ts, bm, method=method, dt=dt, adaptive=adaptive, names={'drift': 'h'},
+                                  logqp=logqp, options=options)
     if logqp:
         ans, log_ratio = ans
         assert log_ratio.shape == (T - 1, batch_size)
