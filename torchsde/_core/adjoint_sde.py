@@ -54,9 +54,22 @@ class AdjointSDE(base_sde.BaseSDE):
             }.get(sde.noise_type),
             SDE_TYPES.stratonovich: self.f_uncorrected
         }.get(sde.sde_type)
-        self.gdg_prod = {
-            NOISE_TYPES.diagonal: self.gdg_prod_diagonal,
-        }.get(sde.noise_type, self.gdg_prod_default)
+        self.f_and_g_prod = {
+            SDE_TYPES.ito: {
+                NOISE_TYPES.diagonal: self.f_and_g_prod_corrected_diagonal,
+                NOISE_TYPES.additive: self.f_and_g_prod_uncorrected,
+                NOISE_TYPES.scalar: self.f_and_g_prod_corrected_default,
+                NOISE_TYPES.general: self.f_and_g_prod_corrected_default
+            }.get(sde.noise_type),
+            SDE_TYPES.stratonovich: self.f_and_g_prod_uncorrected
+        }.get(sde.sde_type)
+        self.g_prod_and_gdg_prod = {
+            NOISE_TYPES.diagonal: self.g_prod_and_gdg_prod_diagonal,
+        }.get(sde.noise_type, self.g_prod_and_gdg_prod_default)
+
+    ########################################
+    #            Helper functions          #
+    ########################################
 
     def _get_state(self, t, y_aug, v=None):
         """Unpacks y_aug, whilst enforcing the necessary checks so that we can calculate derivatives wrt state."""
@@ -92,6 +105,125 @@ class AdjointSDE(base_sde.BaseSDE):
             y = y.detach().requires_grad_(True)
         return y, adj_y, requires_grad
 
+    def _f_uncorrected(self, f, y, adj_y, requires_grad):
+        vjp_y_and_params = misc.vjp(
+            outputs=f,
+            inputs=[y] + self._params,
+            grad_outputs=adj_y,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        if not requires_grad:
+            # We had to build a computational graph to be able to compute the above vjp.
+            # However, if we don't require_grad then we don't need to backprop through this function, so we should
+            # delete the computational graph to avoid a memory leak. (Which for example would keep the local
+            # variable `y` in memory: f->grad_fn->...->AccumulatedGrad->y.)
+            f = f.detach()
+        return misc.flatten((-f, *vjp_y_and_params))
+
+    def _f_corrected_default(self, f, g, y, adj_y, requires_grad):
+        g_columns = [g_column.squeeze(dim=-1) for g_column in g.split(1, dim=-1)]
+        dg_g_jvp = sum([
+            misc.jvp(
+                outputs=g_column,
+                inputs=y,
+                grad_inputs=g_column,
+                allow_unused=True,
+                create_graph=True
+            )[0] for g_column in g_columns
+        ])
+        # Double Stratonovich correction.
+        f = f - dg_g_jvp
+        vjp_y_and_params = misc.vjp(
+            outputs=f,
+            inputs=[y] + self._params,
+            grad_outputs=adj_y,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        # Convert the adjoint Stratonovich SDE to Itô form.
+        extra_vjp_y_and_params = []
+        for g_column in g_columns:
+            a_dg_vjp, = misc.vjp(
+                outputs=g_column,
+                inputs=y,
+                grad_outputs=adj_y,
+                allow_unused=True,
+                retain_graph=True,
+                create_graph=requires_grad
+            )
+            extra_vjp_y_and_params_column = misc.vjp(
+                outputs=g_column,
+                inputs=[y] + self._params,
+                grad_outputs=a_dg_vjp,
+                allow_unused=True,
+                retain_graph=True,
+                create_graph=requires_grad
+            )
+            extra_vjp_y_and_params.append(extra_vjp_y_and_params_column)
+        vjp_y_and_params = misc.seq_add(vjp_y_and_params, *extra_vjp_y_and_params)
+        if not requires_grad:
+            # See corresponding note in _f_uncorrected.
+            f = f.detach()
+        return misc.flatten((-f, *vjp_y_and_params))
+
+    def _f_corrected_diagonal(self, f, g, y, adj_y, requires_grad):
+        g_dg_vjp, = misc.vjp(
+            outputs=g,
+            inputs=y,
+            grad_outputs=g,
+            allow_unused=True,
+            create_graph=True
+        )
+        # Double Stratonovich correction.
+        f = f - g_dg_vjp
+        vjp_y_and_params = misc.vjp(
+            outputs=f,
+            inputs=[y] + self._params,
+            grad_outputs=adj_y,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        # Convert the adjoint Stratonovich SDE to Itô form.
+        a_dg_vjp, = misc.vjp(
+            outputs=g,
+            inputs=y,
+            grad_outputs=adj_y,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        extra_vjp_y_and_params = misc.vjp(
+            outputs=g,
+            inputs=[y] + self._params,
+            grad_outputs=a_dg_vjp,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        vjp_y_and_params = misc.seq_add(vjp_y_and_params, extra_vjp_y_and_params)
+        if not requires_grad:
+            # See corresponding note in _f_uncorrected.
+            f = f.detach()
+        return misc.flatten((-f, *vjp_y_and_params))
+
+    def _g_prod(self, g_prod, y, adj_y, requires_grad):
+        vjp_y_and_params = misc.vjp(
+            outputs=g_prod,
+            inputs=[y] + self._params,
+            grad_outputs=adj_y,
+            allow_unused=True,
+            retain_graph=True,
+            create_graph=requires_grad
+        )
+        if not requires_grad:
+            # See corresponding note in f_uncorrected.
+            g_prod = g_prod.detach()
+        return misc.flatten((-g_prod, *vjp_y_and_params))
+
     ########################################
     #                  f                   #
     ########################################
@@ -100,110 +232,19 @@ class AdjointSDE(base_sde.BaseSDE):
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
             f = self._base_sde.f(-t, y)
-            vjp_y_and_params = misc.vjp(
-                outputs=f,
-                inputs=[y] + self._params,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                create_graph=requires_grad
-            )
-            if not requires_grad:
-                # We had to build a computational graph to be able to compute the above vjp.
-                # However, if we don't require_grad then we don't need to backprop through this function, so we should
-                # delete the computational graph to avoid a memory leak. (Which for example would keep the local
-                # variable `y` in memory: f->grad_fn->...->AccumulatedGrad->y.)
-                f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+            return self._f_uncorrected(f, y, adj_y, requires_grad)
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            g_columns = [g_column.squeeze(dim=-1) for g_column in self._base_sde.g(-t, y).split(1, dim=-1)]
-            dg_g_jvp = sum([
-                misc.jvp(
-                    outputs=g_column,
-                    inputs=y,
-                    grad_inputs=g_column,
-                    allow_unused=True,
-                    create_graph=True
-                )[0] for g_column in g_columns
-            ])
-            # Double Stratonovich correction.
-            f = self._base_sde.f(-t, y) - dg_g_jvp
-            vjp_y_and_params = misc.vjp(
-                outputs=f,
-                inputs=[y] + self._params,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                retain_graph=True,
-                create_graph=requires_grad
-            )
-            # Convert the adjoint Stratonovich SDE to Itô form.
-            extra_vjp_y_and_params = []
-            for g_column in g_columns:
-                a_dg_vjp, = misc.vjp(
-                    outputs=g_column,
-                    inputs=y,
-                    grad_outputs=adj_y,
-                    allow_unused=True,
-                    retain_graph=True,
-                    create_graph=requires_grad
-                )
-                extra_vjp_y_and_params_column = misc.vjp(
-                    outputs=g_column,
-                    inputs=[y] + self._params,
-                    grad_outputs=a_dg_vjp,
-                    allow_unused=True,
-                    create_graph=requires_grad
-                )
-                extra_vjp_y_and_params.append(extra_vjp_y_and_params_column)
-            vjp_y_and_params = misc.seq_add(vjp_y_and_params, *extra_vjp_y_and_params)
-            if not requires_grad:
-                f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+            f, g = self._base_sde.f_and_g(-t, y)
+            return self._f_corrected_default(f, g, y, adj_y, requires_grad)
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            g = self._base_sde.g(-t, y)
-            g_dg_vjp, = misc.vjp(
-                outputs=g,
-                inputs=y,
-                grad_outputs=g,
-                allow_unused=True,
-                create_graph=True
-            )
-            # Double Stratonovich correction.
-            f = self._base_sde.f(-t, y) - g_dg_vjp
-            vjp_y_and_params = misc.vjp(
-                outputs=f,
-                inputs=[y] + self._params,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                retain_graph=True,
-                create_graph=requires_grad
-            )
-            # Convert the adjoint Stratonovich SDE to Itô form.
-            a_dg_vjp, = misc.vjp(
-                outputs=g,
-                inputs=y,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                retain_graph=True,
-                create_graph=requires_grad
-            )
-            extra_vjp_y_and_params = misc.vjp(
-                outputs=g,
-                inputs=[y] + self._params,
-                grad_outputs=a_dg_vjp,
-                allow_unused=True,
-                create_graph=requires_grad
-            )
-            vjp_y_and_params = misc.seq_add(vjp_y_and_params, extra_vjp_y_and_params)
-            if not requires_grad:
-                # See corresponding note in f_uncorrected.
-                f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+            f, g = self._base_sde.f_and_g(-t, y)
+            return self._f_corrected_diagonal(f, g, y, adj_y, requires_grad)
 
     ########################################
     #                  g                   #
@@ -217,6 +258,23 @@ class AdjointSDE(base_sde.BaseSDE):
         raise RuntimeError("Adjoint `g` not defined. Please report a bug to torchsde.")
 
     ########################################
+    #               f_and_g                #
+    ########################################
+
+    def f_and_g(self, t, y):
+        # Like g above, this is inefficient to compute.
+        raise RuntimeError("Adjoint `f_and_g` not defined. Please report a bug to torchsde.")
+
+    ########################################
+    #                prod                  #
+    ########################################
+
+    def prod(self, g, v):
+        # We could define this just fine, but we don't expect to ever be able to compute the input `g`, so we should
+        # never get here.
+        raise RuntimeError("Adjoint `prod` not defined. Please report a bug to torchsde.")
+
+    ########################################
     #                g_prod                #
     ########################################
 
@@ -224,33 +282,58 @@ class AdjointSDE(base_sde.BaseSDE):
         y, adj_y, requires_grad = self._get_state(t, y_aug, v)
         with torch.enable_grad():
             g_prod = self._base_sde.g_prod(-t, y, v)
-            vjp_y_and_params = misc.vjp(
-                outputs=g_prod,
-                inputs=[y] + self._params,
-                grad_outputs=adj_y,
-                allow_unused=True,
-                create_graph=requires_grad
-            )
-            if not requires_grad:
-                # See corresponding note in f_uncorrected.
-                g_prod = g_prod.detach()
-        return misc.flatten((-g_prod, *vjp_y_and_params))
+            return self._g_prod(g_prod, y, adj_y, requires_grad)
+
+    ########################################
+    #            f_and_g_prod              #
+    ########################################
+
+    def f_and_g_prod_uncorrected(self, t, y_aug, v):  # For Ito additive and Stratonovich.
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        with torch.enable_grad():
+            f, g_prod = self._base_sde.f_and_g_prod(-t, y, v)
+
+            f_out = self._f_uncorrected(f, y, adj_y, requires_grad)
+            g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
+            return f_out, g_prod_out
+
+    def f_and_g_prod_corrected_default(self, t, y_aug, v):  # For Ito general/scalar.
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        with torch.enable_grad():
+            f, g = self._base_sde.f_and_g(-t, y)
+            g_prod = self._base_sde.prod(g, v)
+
+            f_out = self._f_corrected_default(f, g, y, adj_y, requires_grad)
+            g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
+            return f_out, g_prod_out
+
+    def f_and_g_prod_corrected_diagonal(self, t, y_aug, v):  # For Ito diagonal.
+        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        with torch.enable_grad():
+            f, g = self._base_sde.f_and_g(-t, y)
+            g_prod = self._base_sde.prod(g, v)
+
+            f_out = self._f_corrected_diagonal(f, g, y, adj_y, requires_grad)
+            g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
+            return f_out, g_prod_out
 
     ########################################
     #               gdg_prod               #
     ########################################
 
-    def gdg_prod_default(self, t, y, v):  # For Ito/Stratonovich general/additive/scalar.
+    def g_prod_and_gdg_prod_default(self, t, y, v1, v2):  # For Ito/Stratonovich general/additive/scalar.
         raise NotImplementedError
 
-    def gdg_prod_diagonal(self, t, y_aug, v):  # For Ito/Stratonovich diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v)
+    def g_prod_and_gdg_prod_diagonal(self, t, y_aug, v1, v2):  # For Ito/Stratonovich diagonal.
+        y, adj_y, requires_grad = self._get_state(t, y_aug, v2)
         with torch.enable_grad():
             g = self._base_sde.g(-t, y)
+            g_prod = self._base_sde.prod(g, v1)
+
             vg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=v * g,
+                grad_outputs=v2 * g,
                 allow_unused=True,
                 retain_graph=True,
                 create_graph=requires_grad
@@ -265,7 +348,7 @@ class AdjointSDE(base_sde.BaseSDE):
             prod_partials_adj_y_and_params = misc.vjp(
                 outputs=g,
                 inputs=[y] + self._params,
-                grad_outputs=adj_y * v * dgdy,
+                grad_outputs=adj_y * v2 * dgdy,
                 allow_unused=True,
                 retain_graph=True,
                 create_graph=requires_grad
@@ -273,7 +356,7 @@ class AdjointSDE(base_sde.BaseSDE):
             avg_dg_vjp, = misc.vjp(
                 outputs=g,
                 inputs=y,
-                grad_outputs=(adj_y * v * g).detach(),
+                grad_outputs=(adj_y * v2 * g).detach(),
                 allow_unused=True,
                 create_graph=True
             )
@@ -281,7 +364,8 @@ class AdjointSDE(base_sde.BaseSDE):
                 outputs=avg_dg_vjp.sum(),
                 inputs=[y] + self._params,
                 allow_unused=True,
+                retain_graph=True,
                 create_graph=requires_grad
             )
             vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
-        return misc.flatten((vg_dg_vjp, *vjp_y_and_params))
+            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, *vjp_y_and_params))

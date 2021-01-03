@@ -351,3 +351,90 @@ class CustomNamesSDELogqp(SDEIto):
 
     def w(self, t, y):
         return y * t
+
+
+class FGSDE(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(FGSDE, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f(self, t, y):
+        return -y
+
+    def g(self, t, y):
+        return y.unsqueeze(-1).sigmoid() * self.vector
+
+
+class FAndGSDE(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(FAndGSDE, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f_and_g(self, t, y):
+        return -y, y.unsqueeze(-1).sigmoid() * self.vector
+
+
+class GProdSDE(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(GProdSDE, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f(self, t, y):
+        return -y
+
+    def g_prod(self, t, y, v):
+        return (y.unsqueeze(-1).sigmoid() * self.vector).bmm(v.unsqueeze(-1)).squeeze(-1)
+
+
+class FAndGProdSDE(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(FAndGProdSDE, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f_and_g_prod(self, t, y, v):
+        return -y, (y.unsqueeze(-1).sigmoid() * self.vector).bmm(v.unsqueeze(-1)).squeeze(-1)
+
+
+class FAndGGProdSDE1(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(FAndGGProdSDE1, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f_and_g(self, t, y):
+        return -y, y.unsqueeze(-1).sigmoid() * self.vector
+
+    def g_prod(self, t, y, v):
+        return (y.unsqueeze(-1).sigmoid() * self.vector).bmm(v.unsqueeze(-1)).squeeze(-1)
+
+
+class FAndGGProdSDE2(torch.nn.Module):
+    noise_type = 'general'
+
+    def __init__(self, sde_type, vector):
+        super(FAndGGProdSDE2, self).__init__()
+        self.sde_type = sde_type
+        self.register_buffer('vector', vector)
+
+    def f(self, t, y):
+        return -y
+
+    def f_and_g(self, t, y):
+        return -y, y.unsqueeze(-1).sigmoid() * self.vector
+
+    def g_prod(self, t, y, v):
+        return (y.unsqueeze(-1).sigmoid() * self.vector).bmm(v.unsqueeze(-1)).squeeze(-1)

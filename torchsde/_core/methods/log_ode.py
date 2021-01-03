@@ -40,16 +40,14 @@ class LogODEMidpoint(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k, A = self.bm(t0, t1, return_A=True)
 
-        f = self.sde.f(t0, y0)
-        g_prod = self.sde.g_prod(t0, y0, I_k)
+        f, g_prod = self.sde.f_and_g_prod(t0, y0, I_k)
 
         half_dt = 0.5 * dt
 
         t_prime = t0 + half_dt
         y_prime = y0 + half_dt * f + .5 * g_prod
 
-        f_prime = self.sde.f(t_prime, y_prime)
-        g_prod_prime = self.sde.g_prod(t_prime, y_prime, I_k)
+        f_prime, g_prod_prime = self.sde.f_and_g_prod(t_prime, y_prime, I_k)
         dg_ga_prime = self.sde.dg_ga_jvp_column_sum(t_prime, y_prime, A)
 
         y1 = y0 + dt * f_prime + g_prod_prime + dg_ga_prime
