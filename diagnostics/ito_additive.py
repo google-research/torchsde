@@ -23,7 +23,11 @@ from . import inspection
 from . import utils
 
 
-def main(device):
+def main():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.set_default_dtype(torch.float64)
+    utils.manual_seed()
+
     small_batch_size, large_batch_size, d, m = 16, 16384, 3, 5
     t0, t1, steps, dt = 0., 2., 10, 1e-1
     ts = torch.linspace(t0, t1, steps=steps, device=device)
@@ -50,8 +54,4 @@ def main(device):
 
 
 if __name__ == '__main__':
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    torch.set_default_dtype(torch.float64)
-    utils.manual_seed()
-
-    main(device)
+    main()
