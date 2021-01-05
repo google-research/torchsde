@@ -114,6 +114,14 @@ class AdjointSDE(base_sde.BaseSDE):
             retain_graph=True,
             create_graph=requires_grad
         )
+        if not requires_grad:
+            # We had to build a computational graph to be able to compute the above vjp.
+            # However, if we don't require_grad then we don't need to backprop through this function, so we should
+            # delete the computational graph to avoid a memory leak. (Which for example would keep the local
+            # variable `y` in memory: f->grad_fn->...->AccumulatedGrad->y.)
+
+            # Note: `requires_grad` might not be equal to what `torch.is_grad_enabled` returns here.
+            f = f.detach()
         return misc.flatten((-f, *vjp_y_and_params))
 
     def _f_corrected_default(self, f, g, y, adj_y, requires_grad):
@@ -158,6 +166,9 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             extra_vjp_y_and_params.append(extra_vjp_y_and_params_column)
         vjp_y_and_params = misc.seq_add(vjp_y_and_params, *extra_vjp_y_and_params)
+        if not requires_grad:
+            # See corresponding note in _f_uncorrected.
+            f = f.detach()
         return misc.flatten((-f, *vjp_y_and_params))
 
     def _f_corrected_diagonal(self, f, g, y, adj_y, requires_grad):
@@ -196,6 +207,9 @@ class AdjointSDE(base_sde.BaseSDE):
             create_graph=requires_grad
         )
         vjp_y_and_params = misc.seq_add(vjp_y_and_params, extra_vjp_y_and_params)
+        if not requires_grad:
+            # See corresponding note in _f_uncorrected.
+            f = f.detach()
         return misc.flatten((-f, *vjp_y_and_params))
 
     def _g_prod(self, g_prod, y, adj_y, requires_grad):
@@ -207,6 +221,9 @@ class AdjointSDE(base_sde.BaseSDE):
             retain_graph=True,
             create_graph=requires_grad
         )
+        if not requires_grad:
+            # See corresponding note in _f_uncorrected.
+            g_prod = g_prod.detach()
         return misc.flatten((-g_prod, *vjp_y_and_params))
 
     ########################################
