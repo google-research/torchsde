@@ -176,12 +176,16 @@ def sdeint_adjoint(sde: nn.Module,
             or `sde` is missing required methods.
 
     Note:
-        Double-backward is supported, and will use the adjoint method to compute
-        the gradient of the adjoint. (i.e. rather than backpropagating through
-        the numerical solver used for the adjoint.) The same `adjoint_method`,
-        `adjoint_adaptive`, `adjoint_rtol, `adjoint_atol`, `adjoint_options`
-        will be used for the second-order adjoint as is used for the first-order
-        adjoint.
+        The backward pass is much more efficient with Stratonovich SDEs than
+        with Ito SDEs.
+
+    Note:
+        Double-backward is supported for Stratonovich SDEs. Doing so will use
+        the adjoint method to compute the gradient of the adjoint. (i.e. rather
+        than backpropagating through the numerical solver used for the
+        adjoint.) The same `adjoint_method`, `adjoint_adaptive`, `adjoint_rtol,
+        `adjoint_atol`, `adjoint_options` will be used for the second-order
+        adjoint as is used for the first-order adjoint.
     """
     misc.handle_unused_kwargs(unused_kwargs, msg="`sdeint_adjoint`")
     del unused_kwargs
