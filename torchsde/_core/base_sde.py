@@ -52,7 +52,7 @@ class ForwardSDE(BaseSDE):
             self.f_and_g_prod = sde.f_and_g_prod
         elif hasattr(sde, 'f') and hasattr(sde, 'g_prod'):
             self.f_and_g_prod = self.f_and_g_prod_default1
-        else:
+        else:  # (f_and_g,) or (f, g,).
             self.f_and_g_prod = self.f_and_g_prod_default2
 
         self.f = getattr(sde, 'f', self.f_default)
@@ -216,7 +216,8 @@ class RenameMethodsSDE(BaseSDE):
         super(RenameMethodsSDE, self).__init__(noise_type=sde.noise_type, sde_type=sde.sde_type)
         self._base_sde = sde
         for name, value in zip(('f', 'g', 'h', 'g_prod', 'f_and_g', 'f_and_g_prod'),
-                               (drift, diffusion, prior_drift, diffusion_prod, drift_and_diffusion, drift_and_diffusion_prod)):
+                               (drift, diffusion, prior_drift, diffusion_prod, drift_and_diffusion,
+                                drift_and_diffusion_prod)):
             try:
                 setattr(self, name, getattr(sde, value))
             except AttributeError:
