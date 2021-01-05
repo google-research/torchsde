@@ -15,6 +15,7 @@
 import torch
 
 from . import misc
+from ..types import TensorOrTensors
 
 
 def update_step_size(error_estimate, prev_step_size, safety=0.9, facmin=0.2, facmax=1.4, prev_error_ratio=None):
@@ -38,12 +39,12 @@ def update_step_size(error_estimate, prev_step_size, safety=0.9, facmin=0.2, fac
     return new_step_size, prev_error_ratio
 
 
-def compute_error(y11, y12, rtol, atol, eps=1e-7):
+def compute_error(y11: TensorOrTensors, y12: TensorOrTensors, rtol, atol, eps=1e-7):
     """Computer error estimate.
 
     Args:
-        y11: A tuple/list of tensors obtained with a full update.
-        y12: A tuple/list of tensors obtained with two half updates.
+        y11: A tensor or a sequence of tensors obtained with a full update.
+        y12: A tensor or a sequence of tensors obtained with two half updates.
         rtol: Relative tolerance.
         atol: Absolute tolerance.
         eps: A small constant to avoid division by zero.
@@ -51,6 +52,10 @@ def compute_error(y11, y12, rtol, atol, eps=1e-7):
     Returns:
         A float for the aggregated error estimate.
     """
+    if torch.is_tensor(y11):
+        y11 = (y11,)
+    if torch.is_tensor(y12):
+        y12 = (y12,)
     tol = [
         (rtol * torch.max(torch.abs(y11_), torch.abs(y12_)) + atol).clamp_min(eps)
         for y11_, y12_ in zip(y11, y12)
