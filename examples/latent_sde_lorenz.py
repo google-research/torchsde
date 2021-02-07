@@ -1,4 +1,4 @@
-# Copyright 2020 Google LLC
+# Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,9 @@
 Reproduce the toy example in Section 7.2 of https://arxiv.org/pdf/2001.01328.pdf
 
 To run this file, first run the following to install extra requirements:
-
 pip install fire
 
 To run, execute:
-
 python -m examples.latent_sde_lorenz
 """
 import logging
@@ -189,8 +187,8 @@ class LatentSDE(nn.Module):
         return torchsde.sdeint(self, x0, ts, names={'drift': 'h'}, dt=1e-3, bm=bm)
 
 
-def make_dataset(batch_size, noise_std, dump_dir, device):
-    data_path = os.path.join(dump_dir, 'lorenz_data.pth')
+def make_dataset(batch_size, noise_std, train_dir, device):
+    data_path = os.path.join(train_dir, 'lorenz_data.pth')
     if os.path.exists(data_path):
         data_dict = torch.load(data_path)
         xs, ts = data_dict['xs'], data_dict['ts']
@@ -259,12 +257,12 @@ def main(
         pause_every=50,
         noise_std=0.01,
         adjoint=False,
-        dump_dir='./dump/lorenz/',
+        train_dir='./dump/lorenz/',
         method="euler",
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    xs, ts = make_dataset(batch_size=batch_size, noise_std=noise_std, dump_dir=dump_dir, device=device)
+    xs, ts = make_dataset(batch_size=batch_size, noise_std=noise_std, train_dir=train_dir, device=device)
     latent_sde = LatentSDE(data_size=3, context_size=context_size, hidden_size=hidden_size).to(device)
     optimizer = optim.Adam(params=latent_sde.parameters(), lr=lr_init)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_gamma)
@@ -288,7 +286,7 @@ def main(
                 f'global_step: {global_step:06d}, lr: {lr_now:.5f}, '
                 f'log_pxs: {log_pxs:.4f}, log_ratio: {log_ratio:.4f} loss: {loss:.4f}, kl_coeff: {kl_scheduler.val:.4f}'
             )
-            img_path = os.path.join(dump_dir, f'global_step_{global_step:06d}.pdf')
+            img_path = os.path.join(train_dir, f'global_step_{global_step:06d}.pdf')
             vis(xs, ts, latent_sde, bm_vis, img_path)
 
 

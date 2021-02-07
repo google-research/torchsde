@@ -21,15 +21,13 @@ Trains a simple model on MNIST and samples from both the reverse ODE and
 SDE formulation.
 
 To run this file, first run the following to install extra requirements:
-
 pip install kornia
 pip install einops
 pip install torchdiffeq
 pip install fire
 
 To run, execute:
-
-python -m examples.cont_ddmp
+python -m examples.cont_ddpm
 """
 import abc
 import logging
@@ -279,17 +277,18 @@ def make_loader(
 
 
 def main(
+        train_dir="./dump/cont_ddpm/",
         epochs=100,
         lr=1e-4,
         batch_size=128,
         pause_every=1000,
-        train_dir="./dump/cont_ddpm/",
         tau=1.,
         logit_transform=True,
 ):
     """Train and sample once in a while.
 
     Args:
+        train_dir: Path to a folder to dump things.
         epochs: Number of training epochs.
         lr: Learning rate for Adam.
         batch_size: Batch size for training.
@@ -300,7 +299,7 @@ def main(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Data.
-    train_loader = make_loader(train_batch_size=batch_size)
+    train_loader = make_loader(root=os.path.join(train_dir, 'data'), train_batch_size=batch_size)
 
     # Model + optimizer.
     denoiser = unet.Unet(

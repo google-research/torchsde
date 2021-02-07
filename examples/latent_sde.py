@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Latent SDE fit to a single time series with uncertainty quantification."""
 import argparse
 import logging
 import math
@@ -24,7 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
-from torch import nn, optim, distributions
+from torch import distributions, nn, optim
 
 import torchsde
 
