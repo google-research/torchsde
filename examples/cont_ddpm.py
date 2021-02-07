@@ -25,6 +25,7 @@ To run this file, first run the following to install extra requirements:
 pip install kornia
 pip install einops
 pip install torchdiffeq
+pip install fire
 
 To run, execute:
 
