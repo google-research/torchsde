@@ -68,7 +68,7 @@ The program outputs figures to the path specified by `<TRAIN_DIR>`.
 Training should stabilize after 500 iterations with the default hyperparameters.
 
 ### Neural SDEs as GANs
-[`examples/sde_gan.py`](examples/sde_gan.py) learns an SDE as a GAN, as in [\[2\]](https://openreview.net/forum?id=padYzanQNbg). The example trains an SDE as the generator of a GAN, whilst using a [neural CDE](https://github.com/patrick-kidger/NeuralCDE) [\[3\]](https://arxiv.org/abs/2005.08926) as the discriminator. This example can be run via
+[`examples/sde_gan.py`](examples/sde_gan.py) learns an SDE as a GAN, as in [\[2\]](https://arxiv.org/abs/2102.03657). The example trains an SDE as the generator of a GAN, whilst using a [neural CDE](https://github.com/patrick-kidger/NeuralCDE) [\[3\]](https://arxiv.org/abs/2005.08926) as the discriminator. This example can be run via
 
 ```shell script
 python -m examples.sde_gan
@@ -90,7 +90,7 @@ If you found this codebase useful in your research, please consider citing eithe
 @article{kidger2020neuralsde,
   title={Neural {SDE}s {M}ade {E}asy: {SDE}s are {I}nfinite-{D}imensional {GAN}s},
   author={Kidger, Patrick and Foster, James and Li, Xuechen and Oberhauser, Harald and Lyons, Terry},
-  journal={OpenReview},
+  journal={arXiv:2102.03657},
   year={2020}
 }
 ```
@@ -98,7 +98,7 @@ If you found this codebase useful in your research, please consider citing eithe
 ## References
 \[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations". *International Conference on Artificial Intelligence and Statistics.* 2020. [[arXiv]](https://arxiv.org/pdf/2001.01328.pdf)
 
-\[2\] Patrick Kidger, James Foster, Xuechen Li, Harald Oberhauser, Terry Lyons. "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs". *OpenReview* 2020 [[OpenReview]](https://openreview.net/forum?id=padYzanQNbg)
+\[2\] Patrick Kidger, James Foster, Xuechen Li, Harald Oberhauser, Terry Lyons. "Neural SDEs as Infinite-Dimensional GANs". *Machine Learning and the Physical Sciences, NeurIPS* 2020 [[arXiv]](https://arxiv.org/abs/2102.03657)
 
 \[3\] Patrick Kidger, James Morrill, James Foster, Terry Lyons, "Neural Controlled Differential Equations for Irregular Time Series". *Neural Information Processing Systems* 2020. [[arXiv]](https://arxiv.org/abs/2005.08926)
 

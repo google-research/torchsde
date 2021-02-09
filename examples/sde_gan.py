@@ -1,7 +1,8 @@
 ###################
 # Let's have a look at how to train an SDE as a GAN.
-# This follows the paper "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs".
+# This follows the paper "Neural SDEs as Infinite-Dimensional GANs".
 ###################
+
 
 import matplotlib.pyplot as plt
 import torch
@@ -136,7 +137,8 @@ class Generator(torch.nn.Module):
 
 ###################
 # Next the discriminator. Here, we're going to use a neural controlled differential equation (neural CDE) as the
-# discriminator, just as in the "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs" paper.
+# discriminator, just as in the "Neural SDEs as Infinite-Dimensional GANs" paper. (You could use other things as well,
+# but this is a natural choice.)
 #
 # There's actually a few different (roughly equivalent) ways of making the discriminator work. The curious reader is
 # strongly encouraged to have a read of the comment at the bottom of this file for an in-depth explanation.
@@ -187,7 +189,7 @@ class Discriminator(torch.nn.Module):
 ###################
 # Generate some data. For this example we generate some synthetic data from a time-dependent Ornstein-Uhlenbeck SDE.
 ###################
-def get_data():
+def get_data(batch_size, device):
     class OrnsteinUhlenbeckSDE(torch.nn.Module):
         sde_type = 'ito'
         noise_type = 'scalar'
@@ -207,9 +209,9 @@ def get_data():
     dataset_size = 8192
     t_size = 64
 
-    ou_sde = OrnsteinUhlenbeckSDE(mu=0.02, theta=0.1, sigma=0.4)
-    y0 = torch.rand(dataset_size).unsqueeze(-1) * 2 - 1
-    ts = torch.linspace(0, t_size - 1, t_size)
+    ou_sde = OrnsteinUhlenbeckSDE(mu=0.02, theta=0.1, sigma=0.4).to(device)
+    y0 = torch.rand(dataset_size, device=device).unsqueeze(-1) * 2 - 1
+    ts = torch.linspace(0, t_size - 1, t_size, device=device)
     ys = torchsde.sdeint(ou_sde, y0, ts, dt=1e-1)
 
     ###################
@@ -239,12 +241,82 @@ def get_data():
                     ys.transpose(0, 1)], dim=2)
     # shape (dataset_size=1000, t_size=100, 1 + data_size=3)
 
-    return ts, ys
+    ###################
+    # Package up
+    ###################
+    data_size = ys.size(-1) - 1  # How many channels the data has (not including time, hence the minus one).
+    ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
+    dataset = torch.utils.data.TensorDataset(ys_coeffs)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    return ts, data_size, dataloader
+
+
+###################
+# We'll plot some results at the end.
+###################
+def plot(ts, generator, dataloader, num_plot_samples, plot_locs):
+    # Get samples
+    real_samples, = next(iter(dataloader))
+    assert num_plot_samples <= real_samples.size(0)
+    real_samples = torchcde.LinearInterpolation(real_samples).evaluate(ts)
+    real_samples = real_samples[..., 1]
+
+    with torch.no_grad():
+        generated_samples = generator(ts, real_samples.size(0)).cpu()
+    generated_samples = torchcde.LinearInterpolation(generated_samples).evaluate(ts)
+    generated_samples = generated_samples[..., 1]
+
+    # Plot histograms
+    for prop in plot_locs:
+        time = int(prop * (real_samples.size(1) - 1))
+        real_samples_time = real_samples[:, time]
+        generated_samples_time = generated_samples[:, time]
+        _, bins, _ = plt.hist(real_samples_time.cpu().numpy(), bins=32, alpha=0.7, label='Real', color='dodgerblue',
+                              density=True)
+        bin_width = bins[1] - bins[0]
+        num_bins = int((generated_samples_time.max() - generated_samples_time.min()).item() // bin_width)
+        plt.hist(generated_samples_time.cpu().numpy(), bins=num_bins, alpha=0.7, label='Generated', color='crimson',
+                 density=True)
+        plt.legend()
+        plt.xlabel('Value')
+        plt.ylabel('Density')
+        plt.title(f'Marginal distribution at time {time}.')
+        plt.tight_layout()
+        plt.show()
+
+    real_samples = real_samples[:num_plot_samples]
+    generated_samples = generated_samples[:num_plot_samples]
+
+    # Plot samples
+    real_first = True
+    generated_first = True
+    for real_sample_ in real_samples:
+        kwargs = {'label': 'Real'} if real_first else {}
+        plt.plot(ts.cpu(), real_sample_.cpu(), color='dodgerblue', linewidth=0.5, alpha=0.7, **kwargs)
+        real_first = False
+    for generated_sample_ in generated_samples:
+        kwargs = {'label': 'Generated'} if generated_first else {}
+        plt.plot(ts.cpu(), generated_sample_.cpu(), color='crimson', linewidth=0.5, alpha=0.7, **kwargs)
+        generated_first = False
+    plt.legend()
+    plt.title(f"{num_plot_samples} samples from both real and generated distributions.")
+    plt.tight_layout()
+    plt.show()
 
 
 ###################
 # Now do normal GAN training, and plot the results.
-# We need some standard GAN tricks (e.g. stochastic weight averaging) to get this working.
+#
+# GANs are famously tricky and SDEs trained as GANs are no exception. Hopefully you can learn from our experience and
+# get these working faster than we did -- we found that several tricks were necessary to get this working in a
+# reasonable fashion:
+# - Stochastic weight averaging (average out the oscillations in GAN training).
+# - Weight decay (reduce the oscillations in GAN training).
+# - Final tanh nonlinearities in the architectures of the vector fields, as above. (To avoid the model blowing up.)
+# - Adadelta (interestingly seems to be a lot better than either SGD or Adam)
+# - Choosing a good learning rate (always important)
+# - Scaling the weights at initialisation to be roughly the right size (chosen through empirical trial-and-error)
 ###################
 
 def train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser):
@@ -300,17 +372,18 @@ def main():
     # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
     ratio = 5               # How many discriminator training steps to take per generator training step.
     gp_coeff = 10           # How much to regularise with gradient penalty
-    lr = 1e-7               # Learning rate often needs careful tuning to the problem.
+    lr = 1e-3               # Learning rate often needs careful tuning to the problem.
     batch_size = 1024       # Batch size.
-    pre_epochs = 50         # How many epochs to train just the discriminator for at the start.
-    epochs = 6000           # How many epochs to train both generator and discriminator for.
+    steps = 6000            # How many steps to train both generator and discriminator for.
     init_mult1 = 3          # Changing the initial parameter size can help.
     init_mult2 = 0.5        #
-    weight_decay = 0.01     # Weight decay.
-    swa_epoch_start = 500   # When to start using stochastic weight averaging
+    weight_decay = 0.01     # Weight decay
+    swa_step_start = 500    # When to start using stochastic weight averaging
 
     # Other hyperparameters
-    print_per_epoch = 10    # How often to print the loss
+    steps_per_print = 10    # How often to print the loss
+    num_plot_samples = 50   # How many samples to use on the plots at the end.
+    plot_locs = [0.1, 0.3, 0.5, 0.7, 0.9]  # Plot some marginal distributions at this proportion of the way along.
 
     is_cuda = torch.cuda.is_available()
     device = 'cuda' if is_cuda else 'cpu'
@@ -318,15 +391,8 @@ def main():
         print("Warning: CUDA not available; falling back to CPU but this is likely to be very slow.")
 
     # Data
-    print("Generating data...")
-    ts, ys = get_data()
-    print("Generated data.")
-    data_size = ys.size(-1) - 1  # How many channels the data has (not including time, hence the minus one).
-    ts = ts.to(device)
-    ys = ys.to(device)  # Dataset is small enough to fit entirely on the GPU
-    ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
-    dataset = torch.utils.data.TensorDataset(ys_coeffs)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    ts, data_size, train_dataloader = get_data(batch_size=batch_size, device=device)
+    infinite_train_dataloader = (elem for it in iter(lambda: train_dataloader, None) for elem in it)
 
     # Models
     generator = Generator(data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers).to(device)
@@ -347,87 +413,46 @@ def main():
         for param in generator._func.parameters():
             param *= init_mult2
 
-    # Optimisers. Simple SGD is a good choice here.
-    generator_optimiser = torch.optim.SGD(generator.parameters(), lr=lr, weight_decay=weight_decay)
-    discriminator_optimiser = torch.optim.SGD(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
-
-    # Initially train just the discriminator
-    print("Pretraining discriminator...")
-    trange = tqdm.tqdm(range(pre_epochs))
-    for epoch in trange:
-        for real_samples, in dataloader:
-            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
-                                gp_coeff)
-        if (epoch % print_per_epoch) == 0 or epoch == pre_epochs - 1:
-            total_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator)
-            trange.write(f"Epoch: {epoch:3} Loss: {total_loss:.4f}")
-    print("Pretrained.")
+    # Optimisers. Adadelta turns out to be a much better choice than SGD or Adam, interestingly.
+    generator_optimiser = torch.optim.Adadelta(generator.parameters(), lr=lr, weight_decay=weight_decay)
+    discriminator_optimiser = torch.optim.Adadelta(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
 
     # Train both generator and discriminator
-    print("Training...")
-    i = 0
-    trange = tqdm.tqdm(range(epochs))
-    for epoch in trange:
-        for real_samples, in dataloader:
-            i += 1
-            if (i % ratio) == 0:
-                train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
-            else:
-                train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
-                                    gp_coeff)
+    trange = tqdm.tqdm(range(steps))
+    for step in trange:
+        train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
+        for _ in range(ratio):
+            real_samples, = next(infinite_train_dataloader)
+            train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
+                                gp_coeff)
 
         # Stochastic weight averaging typically improves performance quite a lot
-        if epoch > swa_epoch_start:
+        if step > swa_step_start:
             averaged_generator.update_parameters(generator)
             averaged_discriminator.update_parameters(discriminator)
 
-        if (epoch % print_per_epoch) == 0 or epoch == epochs - 1:
-            total_unaveraged_loss = evaluate_loss(ts, batch_size, dataloader, generator, discriminator)
-            if epoch > swa_epoch_start:
-                total_averaged_loss = evaluate_loss(ts, batch_size, dataloader, averaged_generator.module,
+        if (step % steps_per_print) == 0 or step == steps - 1:
+            total_unaveraged_loss = evaluate_loss(ts, batch_size, train_dataloader, generator, discriminator)
+            if step > swa_step_start:
+                total_averaged_loss = evaluate_loss(ts, batch_size, train_dataloader, averaged_generator.module,
                                                     averaged_discriminator.module)
-                trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
+                trange.write(f"Step: {step:3} Loss (unaveraged): {total_unaveraged_loss:.4f} "
                              f"Loss (averaged): {total_averaged_loss:.4f}")
             else:
-                trange.write(f"Epoch: {epoch:3} Loss (unaveraged): {total_unaveraged_loss:.4f}")
+                trange.write(f"Step: {step:3} Loss (unaveraged): {total_unaveraged_loss:.4f}")
     generator.load_state_dict(averaged_generator.module.state_dict())
     discriminator.load_state_dict(averaged_discriminator.module.state_dict())
-    print("Trained.")
 
-    # Plot results
-    print("Plotting...")
-    plot_size = 10
-    real_samples, = next(iter(dataloader))
-    real_samples = real_samples[:plot_size]
-    real_samples = torchcde.LinearInterpolation(real_samples).evaluate(ts)
-    real_samples = real_samples[..., 1]
+    _, _, test_dataloader = get_data(batch_size=batch_size, device=device)
 
-    with torch.no_grad():
-        generated_samples = generator(ts, plot_size).cpu()
-    generated_samples = torchcde.LinearInterpolation(generated_samples).evaluate(ts)
-    generated_samples = generated_samples[..., 1]
-
-    first = True
-    for real_sample in real_samples:
-        kwargs = {'label': 'Real'} if first else {}
-        first = False
-        plt.plot(ts.cpu(), real_sample.cpu(), color='blue', **kwargs)
-    first = True
-    for generated_sample in generated_samples:
-        kwargs = {'label': 'Generated'} if first else {}
-        first = False
-        plt.plot(ts.cpu(), generated_sample.cpu(), color='red', **kwargs)
-    plt.legend()
-    plt.show()
-    print("Done.")
+    plot(ts, generator, test_dataloader, num_plot_samples, plot_locs)
 
 
 if __name__ == '__main__':
     main()
 
 ###################
-# And that's an SDE as a GAN. Now, exercise for the reader: turn all of this into a conditional GAN.
-# As a final warning, getting these working can be pretty finickity! GANs always are... :D
+# And that's (one way of doing) an SDE as a GAN. Have fun.
 ###################
 
 ###################
@@ -447,7 +472,7 @@ if __name__ == '__main__':
 # (a1) Solve dH(t) = f(t, H(t)) dt + g(t, H(t)) dY(t),
 # (a2) Solve dH(t) = (f, g)(t, H(t)) d(t, Y(t))
 # (b) Solve dH(t) = f(t, H(t), Y(t)) dt.
-# Option (a1) is what is stated in the "Neural SDEs Made Easy: SDEs are Infinite-Dimensional GANs" paper.
+# Option (a1) is what is stated in the paper "Neural SDE as Infinite-Dimensional GANs".
 # Option (a2) is theoretically the same as (a1), but the drift and diffusion have been merged into a single function,
 # and the sample Y has been augmented with time. This can sometimes be a more helpful way to think about things.
 # Option (b) is a special case of the first two, by Appendix C of arXiv:2005.08926.
