@@ -131,6 +131,7 @@ class LatentSDE(nn.Module):
             nn.Softplus(),
             nn.Linear(hidden_size, data_size),
         )
+        # This needs to be an element-wise function for the SDE to satisfy diagonal noise.
         self.g_nets = nn.ModuleList(
             [
                 nn.Sequential(
@@ -187,15 +188,19 @@ class LatentSDE(nn.Module):
         return torchsde.sdeint(self, x0, ts, names={'drift': 'h'}, dt=1e-3, bm=bm)
 
 
-def make_dataset(batch_size, noise_std, train_dir, device):
+def make_dataset(t0, t1, batch_size, noise_std, train_dir, device):
     data_path = os.path.join(train_dir, 'lorenz_data.pth')
     if os.path.exists(data_path):
         data_dict = torch.load(data_path)
         xs, ts = data_dict['xs'], data_dict['ts']
         logging.warning(f'Loaded toy data at: {data_path}')
+        if xs.shape[1] != batch_size:
+            raise ValueError("Batch size has changed; please delete and regenerate the data.")
+        if ts[0] != t0 or ts[-1] != t1:
+            raise ValueError("Times interval [t0, t1] has changed; please delete and regenerate the data.")
     else:
         _y0 = torch.randn(batch_size, 3, device=device)
-        ts = torch.linspace(0., 1., steps=50, device=device)
+        ts = torch.linspace(t0, t1, steps=100, device=device)
         xs = StochasticLorenz().sample(_y0, ts, noise_std, normalize=True)
 
         os.makedirs(os.path.dirname(data_path), exist_ok=True)
@@ -247,11 +252,13 @@ def vis(xs, ts, latent_sde, bm_vis, img_path, num_samples=10):
 
 
 def main(
-        batch_size=128,
+        batch_size=1024,
         context_size=64,
         hidden_size=128,
         lr_init=1e-2,
-        lr_gamma=0.999,
+        t0=0.,
+        t1=2.,
+        lr_gamma=0.997,
         num_iters=5000,
         kl_anneal_iters=500,
         pause_every=50,
@@ -262,14 +269,15 @@ def main(
 ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    xs, ts = make_dataset(batch_size=batch_size, noise_std=noise_std, train_dir=train_dir, device=device)
+    xs, ts = make_dataset(t0=t0, t1=t1, batch_size=batch_size, noise_std=noise_std, train_dir=train_dir, device=device)
     latent_sde = LatentSDE(data_size=3, context_size=context_size, hidden_size=hidden_size).to(device)
     optimizer = optim.Adam(params=latent_sde.parameters(), lr=lr_init)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_gamma)
     kl_scheduler = LinearScheduler(iters=kl_anneal_iters)
 
     # Fix the same Brownian motion for visualization.
-    bm_vis = torchsde.BrownianInterval(size=(batch_size, 3,), device=device, levy_area_approximation="space-time")
+    bm_vis = torchsde.BrownianInterval(
+        t0=t0, t1=t1, size=(batch_size, 3,), device=device, levy_area_approximation="space-time")
 
     for global_step in tqdm.tqdm(range(1, num_iters + 1)):
         latent_sde.zero_grad()
