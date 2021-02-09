@@ -30,8 +30,7 @@ class EulerHeun(base_solver.BaseSDESolver):
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
-        f = self.sde.f(t0, y0)
-        g_prod = self.sde.g_prod(t0, y0, I_k)
+        f, g_prod = self.sde.f_and_g_prod(t0, y0, I_k)
 
         y_prime = y0 + g_prod
 

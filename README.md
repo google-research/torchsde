@@ -36,9 +36,11 @@ class SDE(torch.nn.Module):
         self.sigma = torch.nn.Linear(state_size, 
                                      state_size * brownian_size)
 
+    # Drift
     def f(self, t, y):
         return self.mu(y)  # shape (batch_size, state_size)
 
+    # Diffusion
     def g(self, t, y):
         return self.sigma(y).view(batch_size, 
                                   state_size, 

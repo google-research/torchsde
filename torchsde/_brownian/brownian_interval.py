@@ -378,8 +378,8 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
                  )
 
     def __init__(self,
-                 t0: Scalar,
-                 t1: Scalar,
+                 t0: Optional[Scalar] = 0.,
+                 t1: Optional[Scalar] = 1.,
                  size: Optional[Tuple[int, ...]] = None,
                  dtype: Optional[torch.dtype] = None,
                  device: Optional[Union[str, torch.device]] = None,

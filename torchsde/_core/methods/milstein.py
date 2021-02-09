@@ -54,21 +54,21 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
 
-        f = self.sde.f(t0, y0)
-        g_prod_I_k = self.sde.g_prod(t0, y0, I_k)
-
         if self.options[METHOD_OPTIONS.grad_free]:
-            g = self.sde.g(t0, y0)
-            g = g.squeeze(2) if g.dim() == 3 else g
-            g_prod_v = self.sde.g_prod(t0, y0, v)
+            f, g = self.sde.f_and_g(t0, y0)
+            g_ = g.squeeze(2) if g.dim() == 3 else g  # scalar noise vs diagonal noise
             sqrt_dt = dt.sqrt()
-            y0_prime = y0 + self.y_prime_f_factor(dt, f) + g * sqrt_dt
-            g_prod_v_prime = self.sde.g_prod(t0, y0_prime, v)
-            gdg_prod = (g_prod_v_prime - g_prod_v) / sqrt_dt
+            # TODO: This y_prime_f_factor looks unnecessary: whether it's there or not we get the correct Taylor
+            #  expansion. I've (Patrick) not been able to find a reference making clear why it's sometimes included.
+            y0_prime = y0 + self.y_prime_f_factor(dt, f) + g_ * sqrt_dt
+            g_prime = self.sde.g(t0, y0_prime)
+            g_prod_I_k = self.sde.prod(g, I_k)
+            gdg_prod = self.sde.prod(g_prime - g, v) / (2 * sqrt_dt)
         else:
-            gdg_prod = self.sde.gdg_prod(t0, y0, v)
+            f = self.sde.f(t0, y0)
+            g_prod_I_k, gdg_prod = self.sde.g_prod_and_gdg_prod(t0, y0, I_k, 0.5 * v)
 
-        y1 = y0 + f * dt + g_prod_I_k + .5 * gdg_prod
+        y1 = y0 + f * dt + g_prod_I_k + gdg_prod
 
         return y1
 
