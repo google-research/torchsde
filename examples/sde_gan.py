@@ -1,9 +1,29 @@
-###################
-# Let's have a look at how to train an SDE as a GAN.
-# This follows the paper "Neural SDEs as Infinite-Dimensional GANs".
-###################
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
+"""Train an SDE as a GAN, on data from a time-dependent Ornstein--Uhlenbeck process.
 
+Reproduces the toy example in Section 4.1 of "Neural SDEs as Infinite-Dimensional GANs":
+https://arxiv.org/pdf/2102.03657.pdf
+
+To run this file, first run the following to install extra requirements:
+pip install fire
+
+To run, execute:
+python -m examples.sde_gan
+"""
+import fire
 import matplotlib.pyplot as plt
 import torch
 import torch.optim.swa_utils as swa_utils
@@ -29,7 +49,7 @@ class MLP(torch.nn.Module):
             model.append(torch.nn.Linear(mlp_size, mlp_size))
             ###################
             # Note the use of softplus activations: these are used for theoretical reasons regarding the smoothness of
-            # the vector fields of our SDE. It's unclear how much it matters in practice, though.
+            # the vector fields of our SDE. It's unclear how much it matters in practice.
             ###################
             model.append(torch.nn.Softplus())
         model.append(torch.nn.Linear(mlp_size, out_size))
@@ -65,8 +85,8 @@ def gradient_penalty(generated, real, call):
 
 ###################
 # We begin by defining the generator SDE.
-# The choice of Ito vs Stratonovich, and the choice of different noise types, isn't super important here. We happen to
-# be using Stratonovich with general noise.
+# The choice of Ito vs Stratonovich, and the choice of different noise types, isn't very important. We happen to be
+# using Stratonovich with general noise.
 ###################
 class GeneratorFunc(torch.nn.Module):
     sde_type = 'stratonovich'
@@ -102,7 +122,7 @@ class GeneratorFunc(torch.nn.Module):
 
 
 ###################
-# Now we wrap it up into something that computes the SDE
+# Now we wrap it up into something that computes the SDE.
 ###################
 class Generator(torch.nn.Module):
     def __init__(self, data_size, initial_noise_size, noise_size, hidden_size, mlp_size, num_layers):
@@ -141,7 +161,7 @@ class Generator(torch.nn.Module):
 # but this is a natural choice.)
 #
 # There's actually a few different (roughly equivalent) ways of making the discriminator work. The curious reader is
-# strongly encouraged to have a read of the comment at the bottom of this file for an in-depth explanation.
+# encouraged to have a read of the comment at the bottom of this file for an in-depth explanation.
 ###################
 class DiscriminatorFunc(torch.nn.Module):
     def __init__(self, data_size, hidden_size, mlp_size, num_layers):
@@ -165,10 +185,6 @@ class Discriminator(torch.nn.Module):
         self._initial = MLP(1 + data_size, hidden_size, mlp_size, num_layers, tanh=False)
         self._func = DiscriminatorFunc(data_size, hidden_size, mlp_size, num_layers)
         self._readout = torch.nn.Linear(hidden_size, 1)
-
-        # Final layer has an easier problem to solve, so increase its learning rate.
-        self._readout.weight.register_hook(lambda grad: 100 * grad)
-        self._readout.bias.register_hook(lambda grad: 100 * grad)
 
     def forward(self, ys_coeffs):
         # ys_coeffs has shape (batch_size, t_size, 1 + data_size)
@@ -224,11 +240,8 @@ def get_data(batch_size, device):
 
     ###################
     # Typically important to normalise data. Note that the data is normalised with respect to the statistics of the
-    # initial data, _not_ the whole time series. This seems to help the learning process, because if the initial
-    # condition is wrong then it's pretty hard to learn the rest of the SDE correctly, so it's good to start off with an
-    # initial condition that's as close to being right as possible.
-    # (You could probably also do something like train to match just the initial condition first, and then train to
-    # match the rest of the SDE, but I've not tried that.)
+    # initial data, _not_ the whole time series. This seems to help the learning process, presumably because if the
+    # initial condition is wrong then it's pretty hard to learn the rest of the SDE correctly.
     ###################
     y0_flat = ys[0].view(-1)
     y0_not_nan = y0_flat.masked_select(~torch.isnan(y0_flat))
@@ -242,7 +255,7 @@ def get_data(batch_size, device):
     # shape (dataset_size=1000, t_size=100, 1 + data_size=3)
 
     ###################
-    # Package up
+    # Package up.
     ###################
     data_size = ys.size(-1) - 1  # How many channels the data has (not including time, hence the minus one).
     ys_coeffs = torchcde.linear_interpolation_coeffs(ys)  # as per neural CDEs.
@@ -309,14 +322,14 @@ def plot(ts, generator, dataloader, num_plot_samples, plot_locs):
 # Now do normal GAN training, and plot the results.
 #
 # GANs are famously tricky and SDEs trained as GANs are no exception. Hopefully you can learn from our experience and
-# get these working faster than we did -- we found that several tricks were necessary to get this working in a
+# get these working faster than we did -- we found that several tricks were often necessary to get this working in a
 # reasonable fashion:
 # - Stochastic weight averaging (average out the oscillations in GAN training).
 # - Weight decay (reduce the oscillations in GAN training).
 # - Final tanh nonlinearities in the architectures of the vector fields, as above. (To avoid the model blowing up.)
-# - Adadelta (interestingly seems to be a lot better than either SGD or Adam)
-# - Choosing a good learning rate (always important)
-# - Scaling the weights at initialisation to be roughly the right size (chosen through empirical trial-and-error)
+# - Adadelta (interestingly seems to be a lot better than either SGD or Adam).
+# - Choosing a good learning rate (always important).
+# - Scaling the weights at initialisation to be roughly the right size (chosen through empirical trial-and-error).
 ###################
 
 def train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser):
@@ -361,30 +374,30 @@ def evaluate_loss(ts, batch_size, dataloader, generator, discriminator):
     return total_loss / total_samples
 
 
-def main():
-    # Architectural hyperparameters. These are quite small for illustrative purposes.
-    initial_noise_size = 5  # How many noise dimensions to sample at the start of the SDE.
-    noise_size = 3          # How many dimensions the Brownian motion has.
-    hidden_size = 32        # How big the hidden size of the generator SDE and the discriminator CDE are.
-    mlp_size = 16           # How big the layers in the various MLPs are.
-    num_layers = 1          # How many hidden layers to have in the various MLPs.
+def main(
+        # Architectural hyperparameters. These are quite small for illustrative purposes.
+        initial_noise_size=5,  # How many noise dimensions to sample at the start of the SDE.
+        noise_size=3,          # How many dimensions the Brownian motion has.
+        hidden_size=32,        # How big the hidden size of the generator SDE and the discriminator CDE are.
+        mlp_size=16,           # How big the layers in the various MLPs are.
+        num_layers=1,          # How many hidden layers to have in the various MLPs.
 
-    # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
-    ratio = 5               # How many discriminator training steps to take per generator training step.
-    gp_coeff = 10           # How much to regularise with gradient penalty
-    lr = 1e-3               # Learning rate often needs careful tuning to the problem.
-    batch_size = 1024       # Batch size.
-    steps = 6000            # How many steps to train both generator and discriminator for.
-    init_mult1 = 3          # Changing the initial parameter size can help.
-    init_mult2 = 0.5        #
-    weight_decay = 0.01     # Weight decay
-    swa_step_start = 500    # When to start using stochastic weight averaging
+        # Training hyperparameters. Be prepared to tune these very carefully, as with any GAN.
+        ratio=5,             # How many discriminator training steps to take per generator training step.
+        gp_coeff=10,         # How much to regularise with gradient penalty.
+        lr=1e-3,             # Learning rate often needs careful tuning to the problem.
+        batch_size=1024,     # Batch size.
+        steps=6000,          # How many steps to train both generator and discriminator for.
+        init_mult1=3,        # Changing the initial parameter size can help.
+        init_mult2=0.5,      #
+        weight_decay=0.01,   # Weight decay.
+        swa_step_start=500,  # When to start using stochastic weight averaging.
 
-    # Other hyperparameters
-    steps_per_print = 10    # How often to print the loss
-    num_plot_samples = 50   # How many samples to use on the plots at the end.
-    plot_locs = [0.1, 0.3, 0.5, 0.7, 0.9]  # Plot some marginal distributions at this proportion of the way along.
-
+        # Evaluation and plotting hyperparameters
+        steps_per_print=10,                   # How often to print the loss.
+        num_plot_samples=50,                  # How many samples to use on the plots at the end.
+        plot_locs=(0.1, 0.3, 0.5, 0.7, 0.9),  # Plot some marginal distributions at this proportion of the way along.
+):
     is_cuda = torch.cuda.is_available()
     device = 'cuda' if is_cuda else 'cpu'
     if not is_cuda:
@@ -401,7 +414,7 @@ def main():
     averaged_generator = swa_utils.AveragedModel(generator)
     averaged_discriminator = swa_utils.AveragedModel(discriminator)
 
-    # Picking a good initialisation is _really_ important!
+    # Picking a good initialisation is important!
     # In this case these were picked by making the parameters for the t=0 part of the generator be roughly the right
     # size that the untrained t=0 distribution has a similar variance to the t=0 data distribution.
     # Then the func parameters were adjusted so that the t>0 distribution looked like it had about the right variance.
@@ -417,7 +430,7 @@ def main():
     generator_optimiser = torch.optim.Adadelta(generator.parameters(), lr=lr, weight_decay=weight_decay)
     discriminator_optimiser = torch.optim.Adadelta(discriminator.parameters(), lr=lr, weight_decay=weight_decay)
 
-    # Train both generator and discriminator
+    # Train both generator and discriminator.
     trange = tqdm.tqdm(range(steps))
     for step in trange:
         train_generator(ts, batch_size, generator, discriminator, generator_optimiser, discriminator_optimiser)
@@ -426,7 +439,7 @@ def main():
             train_discriminator(ts, batch_size, real_samples, generator, discriminator, discriminator_optimiser,
                                 gp_coeff)
 
-        # Stochastic weight averaging typically improves performance quite a lot
+        # Stochastic weight averaging typically improves performance.
         if step > swa_step_start:
             averaged_generator.update_parameters(generator)
             averaged_discriminator.update_parameters(discriminator)
@@ -449,7 +462,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    fire.Fire(main)
 
 ###################
 # And that's (one way of doing) an SDE as a GAN. Have fun.

@@ -93,7 +93,7 @@ If you found this codebase useful in your research, please consider citing eithe
   title={Neural {SDE}s {M}ade {E}asy: {SDE}s are {I}nfinite-{D}imensional {GAN}s},
   author={Kidger, Patrick and Foster, James and Li, Xuechen and Oberhauser, Harald and Lyons, Terry},
   journal={arXiv:2102.03657},
-  year={2020}
+  year={2021}
 }
 ```
 
