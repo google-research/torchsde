@@ -17,7 +17,7 @@ import copy
 import torch
 from torch import nn
 
-from torchsde.types import Callable, TensorOrTensors, ModuleOrModules, Optional
+from torchsde.types import Callable, ModuleOrModules, Optional, TensorOrTensors
 
 
 # These tolerances don't need to be this large. For gradients to match up in the Ito case, we typically need large
@@ -107,13 +107,13 @@ def gradcheck(func: Callable,
         for param in params:
             flat_param = param.reshape(-1)
             for i in range(len(flat_param)):
-                flat_param[i] += eps  # In-place.
+                flat_param[i].data.add_(eps)
                 plus_eps = func(inputs, modules).detach()
-                flat_param[i] -= eps
+                flat_param[i].data.sub_(eps)
 
-                flat_param[i] -= eps
+                flat_param[i].data.sub_(eps)
                 minus_eps = func(inputs, modules).detach()
-                flat_param[i] += eps
+                flat_param[i].data.add_(eps)
 
                 numerical_grad.append((plus_eps - minus_eps) / (2 * eps))
                 del plus_eps, minus_eps
