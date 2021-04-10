@@ -27,7 +27,7 @@ class ReversibleMidpoint(base_solver.BaseSDESolver):
         self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(ReversibleMidpoint, self).__init__(sde=sde, **kwargs)
 
-    def _init_extra(self, t0, y0):
+    def _init_extra_solver_state(self, t0, y0):
         return self.sde.f_and_g(t0, y0)
 
     def step(self, t0, t1, y0, extra0):
@@ -59,22 +59,31 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
             raise ValueError(f"{METHODS.adjoint_reversible_midpoint} can only be used for adjoint_method.")
         self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(AdjointReversibleMidpoint, self).__init__(sde=sde, **kwargs)
+        self.forward_sde = sde.base_sde
 
-    def _init_extra(self, t0, y0):
+    def _init_extra_solver_state(self, t0, y0):
+        # We expect to always be given the extra state from the forward pass.
         raise RuntimeError("Please report a bug to torchsde.")
 
     def step(self, t0, t1, y0, extra0):
         f0, g0 = extra0
         dt = t1 - t0
         dW = self.bm(t0, t1)
+        g_prod0 = self.forward_sde.prod(g0, dW)
+
+        y0, adj_y0, requires_grad = self.sde._get_state(t0, y0)
+
+        with torch.enable_grad():
+            adj_f0 = self.sde._f_uncorrected(f0, y0, adj_y0, requires_grad)
+            adj_g0 = self.sde._g_prod(g_prod0, y0, adj_y0, requires_grad)
 
         half_dt = 0.5 * dt
         t_prime = t0 + half_dt
-        y_prime = y0 + half_dt * f0 + 0.5 * self.sde.prod(g0, dW)
+        y_prime = y0 + half_dt * f0 + 0.5 * g_prod0
 
-        f_prime, g_prime = self.sde.f_and_g(t_prime, y_prime)
+        f_prime, g_prime = self.forward_sde.f_and_g(t_prime, y_prime)
 
-        y1 = y0 + dt * f_prime + self.sde.prod(g_prime, dW)
+        y1 = y0 + dt * f_prime + self.forward_sde.prod(g_prime, dW)
         f1 = 2 * f_prime - f0
         g1 = 2 * g_prime - g0
 

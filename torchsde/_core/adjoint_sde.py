@@ -38,7 +38,7 @@ class AdjointSDE(base_sde.BaseSDE):
         }.get(sde.noise_type)
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
 
-        self._base_sde = sde
+        self.base_sde = sde
         self._params = params
         self._shapes = shapes
 
@@ -233,19 +233,19 @@ class AdjointSDE(base_sde.BaseSDE):
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f = self._base_sde.f(-t, y)
+            f = self.base_sde.f(-t, y)
             return self._f_uncorrected(f, y, adj_y, requires_grad)
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g = self._base_sde.f_and_g(-t, y)
+            f, g = self.base_sde.f_and_g(-t, y)
             return self._f_corrected_default(f, g, y, adj_y, requires_grad)
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g = self._base_sde.f_and_g(-t, y)
+            f, g = self.base_sde.f_and_g(-t, y)
             return self._f_corrected_diagonal(f, g, y, adj_y, requires_grad)
 
     ########################################
@@ -283,7 +283,7 @@ class AdjointSDE(base_sde.BaseSDE):
     def g_prod(self, t, y_aug, v):
         y, adj_y, requires_grad = self._get_state(t, y_aug, v)
         with torch.enable_grad():
-            g_prod = self._base_sde.g_prod(-t, y, v)
+            g_prod = self.base_sde.g_prod(-t, y, v)
             return self._g_prod(g_prod, y, adj_y, requires_grad)
 
     ########################################
@@ -293,7 +293,7 @@ class AdjointSDE(base_sde.BaseSDE):
     def f_and_g_prod_uncorrected(self, t, y_aug, v):  # For Ito additive and Stratonovich.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g_prod = self._base_sde.f_and_g_prod(-t, y, v)
+            f, g_prod = self.base_sde.f_and_g_prod(-t, y, v)
 
             f_out = self._f_uncorrected(f, y, adj_y, requires_grad)
             g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
@@ -302,8 +302,8 @@ class AdjointSDE(base_sde.BaseSDE):
     def f_and_g_prod_corrected_default(self, t, y_aug, v):  # For Ito general/scalar.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g = self._base_sde.f_and_g(-t, y)
-            g_prod = self._base_sde.prod(g, v)
+            f, g = self.base_sde.f_and_g(-t, y)
+            g_prod = self.base_sde.prod(g, v)
 
             f_out = self._f_corrected_default(f, g, y, adj_y, requires_grad)
             g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
@@ -312,8 +312,8 @@ class AdjointSDE(base_sde.BaseSDE):
     def f_and_g_prod_corrected_diagonal(self, t, y_aug, v):  # For Ito diagonal.
         y, adj_y, requires_grad = self._get_state(t, y_aug)
         with torch.enable_grad():
-            f, g = self._base_sde.f_and_g(-t, y)
-            g_prod = self._base_sde.prod(g, v)
+            f, g = self.base_sde.f_and_g(-t, y)
+            g_prod = self.base_sde.prod(g, v)
 
             f_out = self._f_corrected_diagonal(f, g, y, adj_y, requires_grad)
             g_prod_out = self._g_prod(g_prod, y, adj_y, requires_grad)
@@ -329,8 +329,8 @@ class AdjointSDE(base_sde.BaseSDE):
     def g_prod_and_gdg_prod_diagonal(self, t, y_aug, v1, v2):  # For Ito/Stratonovich diagonal.
         y, adj_y, requires_grad = self._get_state(t, y_aug, v2)
         with torch.enable_grad():
-            g = self._base_sde.g(-t, y)
-            g_prod = self._base_sde.prod(g, v1)
+            g = self.base_sde.g(-t, y)
+            g_prod = self.base_sde.prod(g, v1)
 
             vg_dg_vjp, = misc.vjp(
                 outputs=g,

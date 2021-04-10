@@ -20,7 +20,6 @@ import torch
 from . import adaptive_stepping
 from . import better_abc
 from . import interp
-from . import misc
 from .base_sde import BaseSDE
 from .._brownian import BaseBrownian
 from ..settings import NOISE_TYPES
@@ -46,7 +45,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                  atol: Scalar,
                  dt_min: Scalar,
                  options: Dict,
-                 extra0: Optional[Tuple[Tensor, ...]],
+                 extra_solver_state: Optional[Tuple[Tensor, ...]],
                  **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
         if sde.sde_type != self.sde_type:
@@ -69,19 +68,19 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         self.atol = atol
         self.dt_min = dt_min
         self.options = options
-        self.extra0 = extra0
+        self.extra_solver_state = extra_solver_state
 
     def __repr__(self):
         return f"{self.__class__.__name__} of strong order: {self.strong_order}, and weak order: {self.weak_order}"
 
-    def _init_extra(self, t0, y0) -> Tuple[Tensor, ...]:
+    def _init_extra_solver_state(self, t0, y0) -> Tuple[Tensor, ...]:
         return ()
 
-    def init_extra(self, t0, y0) -> Tuple[Tensor, ...]:
-        if self.extra0 is None:
-            return self._init_extra(t0, y0)
+    def init_extra_solver_state(self, t0, y0) -> Tuple[Tensor, ...]:
+        if self.extra_solver_state is None:
+            return self._init_extra_solver_state(t0, y0)
         else:
-            return self.extra0
+            return self.extra_solver_state
 
     @abc.abstractmethod
     def step(self, t0: Scalar, t1: Scalar, y0: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
@@ -108,9 +107,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
         Returns:
             ys, where ys is a Tensor of size (T, batch_size, d).
+            extra_solver_state, which is a tuple of Tensors of shape (T, ...), where ... is arbitrary and
+                solver-dependent.
         """
-        if not misc.is_strictly_increasing(ts):
-            raise ValueError("Evaluation times `ts` must be strictly increasing.")
         y0, dt, adaptive, rtol, atol, dt_min = self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min
 
         step_size = dt
@@ -118,10 +117,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         prev_t = curr_t = ts[0]
         prev_y = curr_y = y0
 
-        curr_extra = self.init_extra(ts[0], y0)
+        curr_extra = self.init_extra_solver_state(ts[0], y0)
 
         ys = [y0]
-        extras = [[extra_i] for extra_i in curr_extra]
         prev_error_ratio = None
 
         for out_t in ts[1:]:
@@ -154,11 +152,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                         prev_t, prev_y = curr_t, curr_y
                         curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                 else:
-                    prev_t, prev_y = curr_t, curr_y
+                    prev_t, prev_y, prev_extra = curr_t, curr_y, curr_extra
                     curr_y, curr_extra = self.step(curr_t, next_t, curr_y, curr_extra)
                     curr_t = next_t
             ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
-            for extras_i, curr_extra_i in zip(extras, curr_extra):
-                extras_i.append(curr_extra_i)
 
-        return torch.stack(ys, dim=0), tuple(torch.stack(extras_i, dim=0) for extras_i in extras)
+        return torch.stack(ys, dim=0), curr_extra
