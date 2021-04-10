@@ -66,25 +66,38 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
         raise RuntimeError("Please report a bug to torchsde.")
 
     def step(self, t0, t1, y0, extra0):
-        f0, g0 = extra0
+        f0, forward_g0 = extra0
         dt = t1 - t0
         dW = self.bm(t0, t1)
-        g_prod0 = self.forward_sde.prod(g0, dW)
+        forward_g_prod0 = self.forward_sde.prod(forward_g0, dW)
 
-        y0, adj_y0, requires_grad = self.sde._get_state(t0, y0)
+        forward_y0, adj_y0, requires_grad = self.sde._get_state(t0, y0)
 
         with torch.enable_grad():
-            adj_f0 = self.sde._f_uncorrected(f0, y0, adj_y0, requires_grad)
-            adj_g0 = self.sde._g_prod(g_prod0, y0, adj_y0, requires_grad)
+            vjp_y_and_params = misc.vjp(
+                # Have to re-evaluate the diffusion of the forward SDE, so that we can calculate its gradient.
+                outputs=self.forward_sde.g_prod(t0, y0, dW),
+                inputs=[forward_y0] + self.sde._params,
+                grad_outputs=adj_y0,
+                allow_unused=True,
+                retain_graph=True,
+                create_graph=requires_grad
+            )
+            g_prod0 = misc.flatten((-forward_g_prod0, *vjp_y_and_params))
 
         half_dt = 0.5 * dt
         t_prime = t0 + half_dt
         y_prime = y0 + half_dt * f0 + 0.5 * g_prod0
 
-        f_prime, g_prime = self.forward_sde.f_and_g(t_prime, y_prime)
+        forward_y_prime, adj_y_prime, _ = self.sde._get_state(t_prime, y_prime)
+        with torch.enable_grad():
+            forward_f_prime, forward_g_prime = self.forward_sde.f_and_g(t_prime, forward_y_prime)
+            forward_g_prod_prime = self.forward_sde.prod(forward_g_prime, dW)
+            f_prime = self.sde._f_uncorrected(forward_f_prime, forward_y_prime, adj_y_prime, requires_grad)
+            g_prod_prime = self.sde._g_prod(forward_g_prod_prime, forward_y_prime, adj_y_prime, requires_grad)
 
-        y1 = y0 + dt * f_prime + self.forward_sde.prod(g_prime, dW)
+        y1 = y0 + dt * f_prime + g_prod_prime
         f1 = 2 * f_prime - f0
-        g1 = 2 * g_prime - g0
+        forward_g1 = 2 * forward_g_prime - forward_g0
 
-        return y1, (f1, g1)
+        return y1, (f1, forward_g1)
