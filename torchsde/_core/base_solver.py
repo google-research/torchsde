@@ -100,7 +100,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def integrate(self, ts: Tensor) -> Tuple[Tensor, Tuple[Tensor]]:
+    def integrate(self, ts: Tensor) -> Tuple[Tensor, Tuple[Tensor, ...]]:
         """Integrate along trajectory.
 
         Args:

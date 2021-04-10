@@ -14,6 +14,7 @@
 
 import torch
 from torch import nn
+import warnings
 
 from . import base_sde
 from . import misc
@@ -38,7 +39,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,  # noqa
-                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, y0, len_extras,
+                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, len_extras, y0,
                 *extras_and_adjoint_params):
         ctx.sde = sde
         ctx.dt = dt
@@ -49,7 +50,6 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         ctx.adjoint_atol = adjoint_atol
         ctx.dt_min = dt_min
         ctx.adjoint_options = adjoint_options
-        ctx.len_extras = len_extras
 
         extra0, adjoint_params = _separate_extra_adjoint_params(len_extras, extras_and_adjoint_params)
 
@@ -67,6 +67,13 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             options=options,
             extra0=extra0
         )
+        if method == METHODS.reversible_midpoint and adjoint_method == METHODS.adjoint_reversible_midpoint:
+            # At the moment this is the only pair of solvers that know how to communicate via `extras`.
+            ctx.len_extras = len(extras)
+        else:
+            # Else just remove the `extras` information.
+            ctx.len_extras = 0
+            extras = ()
         ctx.save_for_backward(ys, ts, *extras, *adjoint_params)
         return ys
 
@@ -113,8 +120,8 @@ class _SdeintAdjointMethod(torch.autograd.Function):
                                                    dt_min,
                                                    adjoint_options,
                                                    adjoint_options,
-                                                   aug_state,
                                                    len_extras,
+                                                   aug_state,
                                                    *extras_and_adjoint_params)
             aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
             aug_state[0] = ys[i - 1]
@@ -227,10 +234,13 @@ def sdeint_adjoint(sde: nn.Module,
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
+    if method == METHODS.reversible_midpoint and adjoint_method != METHODS.adjoint_reversible_midpoint:
+        warnings.warn(f"method={repr(METHODS.reversible_midpoint)}, but "
+                      f"adjoint_method!={repr(METHODS.adjoint_reversible_midpoint)}, which is probably a mistake.")
 
     ys = _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
-        adjoint_atol, dt_min, options, adjoint_options, y0, len_extras, *adjoint_params
+        adjoint_atol, dt_min, options, adjoint_options, len_extras, y0, *adjoint_params
     )
 
     # --- Backwards compatibility: v0.1.1. ---
@@ -246,7 +256,7 @@ def sdeint_adjoint(sde: nn.Module,
     return ys
 
 
-def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: str) -> str:
+def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: Optional[str]) -> str:
     """Select the default method for adjoint computation based on the noise type of the forward SDE."""
     if adjoint_method is None:
         adjoint_method = {
