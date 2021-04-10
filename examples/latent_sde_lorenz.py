@@ -32,7 +32,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
-from torch import nn, optim
+from torch import nn
+from torch import optim
 from torch.distributions import Normal
 
 import torchsde
@@ -111,25 +112,26 @@ class LatentSDE(nn.Module):
     sde_type = "ito"
     noise_type = "diagonal"
 
-    def __init__(self, data_size, context_size, hidden_size):
+    def __init__(self, data_size, latent_size, context_size, hidden_size):
         super(LatentSDE, self).__init__()
         # Encoder.
         self.encoder = Encoder(input_size=data_size, hidden_size=hidden_size, output_size=context_size)
+        self.qz0_net = nn.Linear(context_size, latent_size + latent_size)
 
         # Decoder.
         self.f_net = nn.Sequential(
-            nn.Linear(data_size + context_size, hidden_size),
+            nn.Linear(latent_size + context_size, hidden_size),
             nn.Softplus(),
             nn.Linear(hidden_size, hidden_size),
             nn.Softplus(),
-            nn.Linear(hidden_size, data_size),
+            nn.Linear(hidden_size, latent_size),
         )
         self.h_net = nn.Sequential(
-            nn.Linear(data_size, hidden_size),
+            nn.Linear(latent_size, hidden_size),
             nn.Softplus(),
             nn.Linear(hidden_size, hidden_size),
             nn.Softplus(),
-            nn.Linear(hidden_size, data_size),
+            nn.Linear(hidden_size, latent_size),
         )
         # This needs to be an element-wise function for the SDE to satisfy diagonal noise.
         self.g_nets = nn.ModuleList(
@@ -140,13 +142,18 @@ class LatentSDE(nn.Module):
                     nn.Linear(hidden_size, 1),
                     nn.Sigmoid()
                 )
-                for _ in range(data_size)
+                for _ in range(latent_size)
             ]
         )
+        self.projector = nn.Linear(latent_size, data_size)
+
+        self.pz0_mean = nn.Parameter(torch.zeros(1, latent_size))
+        self.pz0_logstd = nn.Parameter(torch.zeros(1, latent_size))
+
         self._ctx = None
 
     def contextualize(self, ctx):
-        self._ctx = ctx  # A tuple of tensors of sizes (T,), (T - 1, batch_size, d).
+        self._ctx = ctx  # A tuple of tensors of sizes (T,), (T, batch_size, d).
 
     def f(self, t, y):
         ts, ctx = self._ctx
@@ -167,25 +174,38 @@ class LatentSDE(nn.Module):
         ctx = torch.flip(ctx, dims=(0,))
         self.contextualize((ts, ctx))
 
+        qz0_mean, qz0_logstd = self.qz0_net(ctx[0]).chunk(chunks=2, dim=1)
+        z0 = qz0_mean + qz0_logstd.exp() * torch.randn_like(qz0_mean)
+
         if adjoint:
             # Must use the argument `adjoint_params`, since `ctx` is not part of the input to `f`, `g`, and `h`.
             adjoint_params = (
                     (ctx,) +
                     tuple(self.f_net.parameters()) + tuple(self.g_nets.parameters()) + tuple(self.h_net.parameters())
             )
-            _xs, log_ratio = torchsde.sdeint_adjoint(
-                self, xs[0], ts, adjoint_params=adjoint_params, dt=1e-2, logqp=True, method=method)
+            zs, log_ratio = torchsde.sdeint_adjoint(
+                self, z0, ts, adjoint_params=adjoint_params, dt=1e-2, logqp=True, method=method)
         else:
-            _xs, log_ratio = torchsde.sdeint(self, xs[0], ts, dt=1e-2, logqp=True, method=method)
+            zs, log_ratio = torchsde.sdeint(self, z0, ts, dt=1e-2, logqp=True, method=method)
 
+        _xs = self.projector(zs)
         xs_dist = Normal(loc=_xs, scale=noise_std)
-        log_pxs = xs_dist.log_prob(xs).sum(dim=(0, 2)).mean()
-        log_ratio = log_ratio.sum(dim=0).mean()
-        return log_pxs, log_ratio
+        log_pxs = xs_dist.log_prob(xs).sum(dim=(0, 2)).mean(dim=0)
+
+        qz0 = torch.distributions.Normal(loc=qz0_mean, scale=qz0_logstd.exp())
+        pz0 = torch.distributions.Normal(loc=self.pz0_mean, scale=self.pz0_logstd.exp())
+        logqp0 = torch.distributions.kl_divergence(qz0, pz0).sum(dim=1).mean(dim=0)
+        logqp_path = log_ratio.sum(dim=0).mean(dim=0)
+        return log_pxs, logqp0 + logqp_path
 
     @torch.no_grad()
-    def sample(self, x0, ts, bm=None):
-        return torchsde.sdeint(self, x0, ts, names={'drift': 'h'}, dt=1e-3, bm=bm)
+    def sample(self, batch_size, ts, bm=None):
+        eps = torch.randn(size=(batch_size, *self.pz0_mean.shape[1:]), device=self.pz0_mean.device)
+        z0 = self.pz0_mean + self.pz0_logstd.exp() * eps
+        zs = torchsde.sdeint(self, z0, ts, names={'drift': 'h'}, dt=1e-3, bm=bm)
+        # Most of the times in ML, we don't sample the observation noise for visualization purposes.
+        _xs = self.projector(zs)
+        return _xs
 
 
 def make_dataset(t0, t1, batch_size, noise_std, train_dir, device):
@@ -231,7 +251,7 @@ def vis(xs, ts, latent_sde, bm_vis, img_path, num_samples=10):
     zlim = ax00.get_zlim()
 
     # Right plot: samples from learned model.
-    xs = latent_sde.sample(xs[0], ts, bm=bm_vis).cpu().numpy()
+    xs = latent_sde.sample(batch_size=xs.size(1), ts=ts, bm=bm_vis).cpu().numpy()
     z1, z2, z3 = np.split(xs, indices_or_sections=3, axis=-1)
 
     [ax01.plot(z1[:, i, 0], z2[:, i, 0], z3[:, i, 0]) for i in range(num_samples)]
@@ -253,6 +273,7 @@ def vis(xs, ts, latent_sde, bm_vis, img_path, num_samples=10):
 
 def main(
         batch_size=1024,
+        latent_size=4,
         context_size=64,
         hidden_size=128,
         lr_init=1e-2,
@@ -260,7 +281,7 @@ def main(
         t1=2.,
         lr_gamma=0.997,
         num_iters=5000,
-        kl_anneal_iters=500,
+        kl_anneal_iters=1000,
         pause_every=50,
         noise_std=0.01,
         adjoint=False,
@@ -270,14 +291,19 @@ def main(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     xs, ts = make_dataset(t0=t0, t1=t1, batch_size=batch_size, noise_std=noise_std, train_dir=train_dir, device=device)
-    latent_sde = LatentSDE(data_size=3, context_size=context_size, hidden_size=hidden_size).to(device)
+    latent_sde = LatentSDE(
+        data_size=3,
+        latent_size=latent_size,
+        context_size=context_size,
+        hidden_size=hidden_size,
+    ).to(device)
     optimizer = optim.Adam(params=latent_sde.parameters(), lr=lr_init)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=lr_gamma)
     kl_scheduler = LinearScheduler(iters=kl_anneal_iters)
 
     # Fix the same Brownian motion for visualization.
     bm_vis = torchsde.BrownianInterval(
-        t0=t0, t1=t1, size=(batch_size, 3,), device=device, levy_area_approximation="space-time")
+        t0=t0, t1=t1, size=(batch_size, latent_size,), device=device, levy_area_approximation="space-time")
 
     for global_step in tqdm.tqdm(range(1, num_iters + 1)):
         latent_sde.zero_grad()
