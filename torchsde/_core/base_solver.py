@@ -155,8 +155,8 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                         curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                 else:
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t = next_t
                     curr_y, curr_extra = self.step(curr_t, next_t, curr_y, curr_extra)
+                    curr_t = next_t
             ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
             for extras_i, curr_extra_i in zip(extras, curr_extra):
                 extras_i.append(curr_extra_i)
