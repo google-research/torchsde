@@ -26,11 +26,12 @@ class Euler(base_solver.BaseSDESolver):
         self.strong_order = 1.0 if sde.noise_type == NOISE_TYPES.additive else 0.5
         super(Euler, self).__init__(sde=sde, **kwargs)
 
-    def step(self, t0, t1, y0):
+    def step(self, t0, t1, y0, extra0):
+        del extra0
         dt = t1 - t0
         I_k = self.bm(t0, t1)
 
         f, g_prod = self.sde.f_and_g_prod(t0, y0, I_k)
 
         y1 = y0 + f * dt + g_prod
-        return y1
+        return y1, ()

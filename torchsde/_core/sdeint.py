@@ -84,7 +84,9 @@ def sdeint(sde,
     sde, y0, ts, bm, method = check_contract(sde, y0, ts, bm, method, names, logqp)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'atol', 'dt_min'],
                         [ts, dt, rtol, atol, dt_min])
-    return integrate(
+    extra0 = None
+
+    result = integrate(
         sde=sde,
         y0=y0,
         ts=ts,
@@ -96,8 +98,16 @@ def sdeint(sde,
         atol=atol,
         dt_min=dt_min,
         options=options,
+        extra0=extra0,
         logqp=logqp
     )
+
+    if logqp:
+        ys, log_ratio_increments, _ = result
+        return ys, log_ratio_increments
+    else:
+        ys, _ = result
+        return ys
 
 
 def check_contract(sde, y0, ts, bm, method, names, logqp):
@@ -258,7 +268,7 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
     return sde, y0, ts, bm, method
 
 
-def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):
+def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, extra0, logqp=False):
     if options is None:
         options = {}
 
@@ -272,13 +282,14 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
         rtol=rtol,
         atol=atol,
         dt_min=dt_min,
-        options=options
+        options=options,
+        extra0=extra0
     )
     if adaptive and method == METHODS.euler and sde.noise_type != NOISE_TYPES.additive:
         warnings.warn(f"Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
                       f"time-stepping with the Euler--Maruyama method with non-additive noise.")
 
-    ys = solver.integrate(ts)
+    ys, extras = solver.integrate(ts)
 
     # --- Backwards compatibility: v0.1.1. ---
     if logqp:
@@ -287,7 +298,7 @@ def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options
             [log_ratio_t_plus_1 - log_ratio_t
              for log_ratio_t_plus_1, log_ratio_t in zip(log_ratio[1:], log_ratio[:-1])], dim=0
         ).squeeze(dim=2)
-        return ys, log_ratio_increments
+        return ys, log_ratio_increments, extras
     # ----------------------------------------
 
-    return ys
+    return ys, extras

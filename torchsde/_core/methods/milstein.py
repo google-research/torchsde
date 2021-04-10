@@ -49,7 +49,8 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
     def y_prime_f_factor(self, dt, f):
         raise NotImplementedError
 
-    def step(self, t0, t1, y0):
+    def step(self, t0, t1, y0, extra0):
+        del extra0
         dt = t1 - t0
         I_k = self.bm(t0, t1)
         v = self.v_term(I_k, dt)
@@ -70,7 +71,7 @@ class BaseMilstein(base_solver.BaseSDESolver, metaclass=abc.ABCMeta):
 
         y1 = y0 + f * dt + g_prod_I_k + gdg_prod
 
-        return y1
+        return y1, ()
 
 
 class MilsteinIto(BaseMilstein):

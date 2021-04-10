@@ -24,11 +24,22 @@ from ..settings import METHODS, NOISE_TYPES, SDE_TYPES
 from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Vector
 
 
+def _separate_extra_adjoint_params(len_extras, extras_and_adjoint_params):
+    if len_extras == 0:
+        extra0 = None
+        adjoint_params = extras_and_adjoint_params
+    else:
+        extra0 = extras_and_adjoint_params[:len_extras]
+        adjoint_params = extras_and_adjoint_params[len_extras:]
+    return extra0, adjoint_params
+
+
 class _SdeintAdjointMethod(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol,  # noqa
-                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params):
+                adjoint_rtol, atol, adjoint_atol, dt_min, options, adjoint_options, y0, len_extras,
+                *extras_and_adjoint_params):
         ctx.sde = sde
         ctx.dt = dt
         ctx.bm = bm
@@ -38,8 +49,11 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         ctx.adjoint_atol = adjoint_atol
         ctx.dt_min = dt_min
         ctx.adjoint_options = adjoint_options
+        ctx.len_extras = len_extras
 
-        ys = sdeint.integrate(
+        extra0, adjoint_params = _separate_extra_adjoint_params(len_extras, extras_and_adjoint_params)
+
+        ys, extras = sdeint.integrate(
             sde=sde,
             y0=y0.detach(),  # This .detach() is VERY IMPORTANT. See adjoint_sde.py::AdjointSDE._get_state.
             ts=ts,
@@ -51,13 +65,15 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             atol=atol,
             dt_min=dt_min,
             options=options,
+            extra0=extra0
         )
-        ctx.save_for_backward(ys, ts, *adjoint_params)
+        ctx.save_for_backward(ys, ts, *extras, *adjoint_params)
         return ys
 
     @staticmethod
     def backward(ctx, grad_ys):  # noqa
-        ys, ts, *adjoint_params = ctx.saved_tensors
+        ys, ts, *extras_and_adjoint_params = ctx.saved_tensors
+        extras, adjoint_params = _separate_extra_adjoint_params(ctx.len_extras, extras_and_adjoint_params)
         sde = ctx.sde
         dt = ctx.dt
         bm = ctx.bm
@@ -75,6 +91,13 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
         for i in range(ys.size(0) - 1, 0, -1):
             aug_state = misc.flatten(aug_state)
+            if extras is None:
+                len_extras = 0
+                extras_and_adjoint_params = adjoint_params
+            else:
+                len_extras = len(extras)
+                extras_i = tuple(extras_j[i] for extras_j in extras)
+                extras_and_adjoint_params = extras_i + adjoint_params
             aug_state = _SdeintAdjointMethod.apply(adjoint_sde,
                                                    torch.stack([-ts[i], -ts[i - 1]]),
                                                    dt,
@@ -91,13 +114,15 @@ class _SdeintAdjointMethod(torch.autograd.Function):
                                                    adjoint_options,
                                                    adjoint_options,
                                                    aug_state,
-                                                   *adjoint_params)
+                                                   len_extras,
+                                                   *extras_and_adjoint_params)
             aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
             aug_state[0] = ys[i - 1]
             aug_state[1] = aug_state[1] + grad_ys[i - 1]
 
         return (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, *aug_state[1:]
+            None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+            *[None for _ in range(ctx.len_extras)], *aug_state[1:]
         )
 
 
@@ -198,13 +223,14 @@ def sdeint_adjoint(sde: nn.Module,
     sde, y0, ts, bm, method = sdeint.check_contract(sde, y0, ts, bm, method, names, logqp)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'adjoint_rtol', 'atol', 'adjoint_atol', 'dt_min'],
                         [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
+    len_extras = 0
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
 
     ys = _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
-        adjoint_atol, dt_min, options, adjoint_options, y0, *adjoint_params
+        adjoint_atol, dt_min, options, adjoint_options, y0, len_extras, *adjoint_params
     )
 
     # --- Backwards compatibility: v0.1.1. ---

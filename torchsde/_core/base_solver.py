@@ -24,7 +24,7 @@ from . import misc
 from .base_sde import BaseSDE
 from .._brownian import BaseBrownian
 from ..settings import NOISE_TYPES
-from ..types import Scalar, Tensor, Dict
+from ..types import Scalar, Tensor, Dict, Tuple, Optional
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -46,6 +46,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                  atol: Scalar,
                  dt_min: Scalar,
                  options: Dict,
+                 extra0: Optional[Tuple[Tensor, ...]],
                  **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
         if sde.sde_type != self.sde_type:
@@ -68,12 +69,22 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         self.atol = atol
         self.dt_min = dt_min
         self.options = options
+        self.extra0 = extra0
 
     def __repr__(self):
         return f"{self.__class__.__name__} of strong order: {self.strong_order}, and weak order: {self.weak_order}"
 
+    def _init_extra(self, t0, y0) -> Tuple[Tensor, ...]:
+        return ()
+
+    def init_extra(self, t0, y0) -> Tuple[Tensor, ...]:
+        if self.extra0 is None:
+            return self._init_extra(t0, y0)
+        else:
+            return self.extra0
+
     @abc.abstractmethod
-    def step(self, t0: Scalar, t1: Scalar, y0: Tensor) -> Tensor:
+    def step(self, t0: Scalar, t1: Scalar, y0: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
         """Propose a step with step size from time t to time next_t, with
          current state y.
 
@@ -81,13 +92,15 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             t0: float or Tensor of size (,).
             t1: float or Tensor of size (,).
             y0: Tensor of size (batch_size, d).
+            extra0: Any extra state.
 
         Returns:
             y1, where y1 is a Tensor of size (batch_size, d).
+            extra1: Modified extra state.
         """
         raise NotImplementedError
 
-    def integrate(self, ts: Tensor) -> Tensor:
+    def integrate(self, ts: Tensor) -> Tuple[Tensor, Tuple[Tensor]]:
         """Integrate along trajectory.
 
         Args:
@@ -105,7 +118,10 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         prev_t = curr_t = ts[0]
         prev_y = curr_y = y0
 
+        curr_extra = extra0 = self.init_extra(ts[0], y0)
+
         ys = [y0]
+        extras = [[extra0_i] for extra0_i in extra0]
         prev_error_ratio = None
 
         for out_t in ts[1:]:
@@ -113,11 +129,11 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 next_t = min(curr_t + step_size, ts[-1])
                 if adaptive:
                     # Take 1 full step.
-                    next_y_full = self.step(curr_t, next_t, curr_y)
+                    next_y_full, _ = self.step(curr_t, next_t, curr_y, curr_extra)
                     # Take 2 half steps.
                     midpoint_t = 0.5 * (curr_t + next_t)
-                    midpoint_y = self.step(curr_t, midpoint_t, curr_y)
-                    next_y = self.step(midpoint_t, next_t, midpoint_y)
+                    midpoint_y, midpoint_extra = self.step(curr_t, midpoint_t, curr_y, curr_extra)
+                    next_y, next_extra = self.step(midpoint_t, next_t, midpoint_y, midpoint_extra)
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
@@ -136,10 +152,13 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     # Accept step.
                     if error_estimate <= 1 or step_size <= dt_min:
                         prev_t, prev_y = curr_t, curr_y
-                        curr_t, curr_y = next_t, next_y
+                        curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                 else:
                     prev_t, prev_y = curr_t, curr_y
-                    curr_t, curr_y = next_t, self.step(curr_t, next_t, curr_y)
+                    curr_t = next_t
+                    curr_y, curr_extra = self.step(curr_t, next_t, curr_y, curr_extra)
             ys.append(interp.linear_interp(t0=prev_t, y0=prev_y, t1=curr_t, y1=curr_y, t=out_t))
+            for extras_i, curr_extra_i in zip(extras, curr_extra):
+                extras_i.append(curr_extra_i)
 
-        return torch.stack(ys, dim=0)
+        return torch.stack(ys, dim=0), tuple(torch.stack(extras_i, dim=0) for extras_i in extras)

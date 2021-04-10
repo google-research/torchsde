@@ -12,17 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stratonovich Heun method (strong order 1.0 scheme) from
-
-Burrage K., Burrage P. M. and Tian T. 2004 "Numerical methods for strong solutions
-of stochastic differential equations: an overview" Proc. R. Soc. Lond. A. 460: 373–402.
-"""
-
 from .. import base_solver
 from ...settings import SDE_TYPES, NOISE_TYPES, LEVY_AREA_APPROXIMATIONS
 
 
-class Heun(base_solver.BaseSDESolver):
+class ReversibleMidpoint(base_solver.BaseSDESolver):
     weak_order = 1.0
     sde_type = SDE_TYPES.stratonovich
     noise_types = NOISE_TYPES.all()
@@ -30,19 +24,24 @@ class Heun(base_solver.BaseSDESolver):
 
     def __init__(self, sde, **kwargs):
         self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
-        super(Heun, self).__init__(sde=sde, **kwargs)
+        super(ReversibleMidpoint, self).__init__(sde=sde, **kwargs)
+
+    def _init_extra(self, t0, y0):
+        return self.sde.f_and_g(t0, y0)
 
     def step(self, t0, t1, y0, extra0):
-        del extra0
+        f0, g0 = extra0
         dt = t1 - t0
-        I_k = self.bm(t0, t1)
+        dW = self.bm(t0, t1)
 
-        f, g_prod = self.sde.f_and_g_prod(t0, y0, I_k)
+        half_dt = 0.5 * dt
+        t_prime = t0 + half_dt
+        y_prime = y0 + half_dt * f0 + 0.5 * self.sde.prod(g0, dW)
 
-        y0_prime = y0 + dt * f + g_prod
+        f_prime, g_prime = self.sde.f_and_g(t_prime, y_prime)
 
-        f_prime, g_prod_prime = self.sde.f_and_g_prod(t1, y0_prime, I_k)
+        y1 = y0 + dt * f_prime + self.sde.prod(g_prime, dW)
+        f1 = 2 * f_prime - f0
+        g1 = 2 * g_prime - g0
 
-        y1 = y0 + (dt * (f + f_prime) + g_prod + g_prod_prime) * 0.5
-
-        return y1, ()
+        return y1, (f1, g1)
