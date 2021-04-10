@@ -84,7 +84,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             # The extra solver values represent vector field evaluations, which are reversed for the backward pass.
             # (Ideally the minus signs would go in on the dt and dW, but they're currently on the vector fields
             # instead.)
-            extras_for_backward = tuple(-extra_solver_state_j for extra_solver_state_j in extra_solver_state)
+            extras_for_backward = tuple(-extra_solver_state_j.detach() for extra_solver_state_j in extra_solver_state)
         else:
             # Else just remove the `extra_solver_state` information.
             ctx.len_extras = 0
