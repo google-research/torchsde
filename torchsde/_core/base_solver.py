@@ -118,10 +118,10 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         prev_t = curr_t = ts[0]
         prev_y = curr_y = y0
 
-        curr_extra = extra0 = self.init_extra(ts[0], y0)
+        curr_extra = self.init_extra(ts[0], y0)
 
         ys = [y0]
-        extras = [[extra0_i] for extra0_i in extra0]
+        extras = [[extra_i] for extra_i in curr_extra]
         prev_error_ratio = None
 
         for out_t in ts[1:]:
