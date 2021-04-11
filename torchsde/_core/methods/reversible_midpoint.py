@@ -30,7 +30,7 @@ class ReversibleMidpoint(base_solver.BaseSDESolver):
         self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(ReversibleMidpoint, self).__init__(sde=sde, **kwargs)
 
-    def _init_extra_solver_state(self, t0, y0):
+    def init_extra_solver_state(self, t0, y0):
         return self.sde.f_and_g(t0, y0)
 
     def step(self, t0, t1, y0, extra0):
@@ -63,7 +63,7 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
         super(AdjointReversibleMidpoint, self).__init__(sde=sde, **kwargs)
         self.forward_sde = sde.base_sde
 
-    def _init_extra_solver_state(self, t0, y0):
+    def init_extra_solver_state(self, t0, y0):
         # We expect to always be given the extra state from the forward pass.
         raise RuntimeError("Please report a bug to torchsde.")
 
@@ -100,7 +100,7 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
                                                   grad_outputs=[adj_y0] + adj_extra_solver_states0,
                                                   allow_unused=True,
                                                   create_graph=requires_grad)
-            dy1 = misc.flatten([forward_dy1] + vjp_y_and_extra_and_params)
-            y1 = y0 + dy1
+        dy1 = misc.flatten([forward_dy1] + vjp_y_and_extra_and_params)
+        y1 = y0 + dy1
 
         return y1, (forward_f1, forward_g1)

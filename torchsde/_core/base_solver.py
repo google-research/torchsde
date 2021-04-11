@@ -23,7 +23,7 @@ from . import interp
 from .base_sde import BaseSDE
 from .._brownian import BaseBrownian
 from ..settings import NOISE_TYPES
-from ..types import Scalar, Tensor, Dict, Tuple, Optional
+from ..types import Scalar, Tensor, Dict, Tuple
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -38,14 +38,12 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     def __init__(self,
                  sde: BaseSDE,
                  bm: BaseBrownian,
-                 y0: Tensor,
                  dt: Scalar,
                  adaptive: bool,
                  rtol: Scalar,
                  atol: Scalar,
                  dt_min: Scalar,
                  options: Dict,
-                 extra_solver_state: Optional[Tuple[Tensor, ...]],
                  **kwargs):
         super(BaseSDESolver, self).__init__(**kwargs)
         if sde.sde_type != self.sde_type:
@@ -61,26 +59,18 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
         self.sde = sde
         self.bm = bm
-        self.y0 = y0
         self.dt = dt
         self.adaptive = adaptive
         self.rtol = rtol
         self.atol = atol
         self.dt_min = dt_min
         self.options = options
-        self.extra_solver_state = extra_solver_state
 
     def __repr__(self):
         return f"{self.__class__.__name__} of strong order: {self.strong_order}, and weak order: {self.weak_order}"
 
-    def _init_extra_solver_state(self, t0, y0) -> Tuple[Tensor, ...]:
-        return ()
-
     def init_extra_solver_state(self, t0, y0) -> Tuple[Tensor, ...]:
-        if self.extra_solver_state is None:
-            return self._init_extra_solver_state(t0, y0)
-        else:
-            return self.extra_solver_state
+        return ()
 
     @abc.abstractmethod
     def step(self, t0: Scalar, t1: Scalar, y0: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
@@ -91,33 +81,32 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             t0: float or Tensor of size (,).
             t1: float or Tensor of size (,).
             y0: Tensor of size (batch_size, d).
-            extra0: Any extra state.
+            extra0: Any extra state for the solver.
 
         Returns:
             y1, where y1 is a Tensor of size (batch_size, d).
-            extra1: Modified extra state.
+            extra1: Modified extra state for the solver.
         """
         raise NotImplementedError
 
-    def integrate(self, ts: Tensor) -> Tuple[Tensor, Tuple[Tensor, ...]]:
+    def integrate(self, y0: Tensor, ts: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
         """Integrate along trajectory.
 
         Args:
+            y0: Tensor of size (batch_size, d)
             ts: Tensor of size (T,).
+            extra0: Any extra state for the solver.
 
         Returns:
             ys, where ys is a Tensor of size (T, batch_size, d).
             extra_solver_state, which is a tuple of Tensors of shape (T, ...), where ... is arbitrary and
                 solver-dependent.
         """
-        y0, dt, adaptive, rtol, atol, dt_min = self.y0, self.dt, self.adaptive, self.rtol, self.atol, self.dt_min
-
-        step_size = dt
+        step_size = self.dt
 
         prev_t = curr_t = ts[0]
         prev_y = curr_y = y0
-
-        curr_extra = self.init_extra_solver_state(ts[0], y0)
+        curr_extra = extra0
 
         ys = [y0]
         prev_error_ratio = None
@@ -125,7 +114,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         for out_t in ts[1:]:
             while curr_t < out_t:
                 next_t = min(curr_t + step_size, ts[-1])
-                if adaptive:
+                if self.adaptive:
                     # Take 1 full step.
                     next_y_full, _ = self.step(curr_t, next_t, curr_y, curr_extra)
                     # Take 2 half steps.
@@ -135,20 +124,20 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
 
                     # Estimate error based on difference between 1 full step and 2 half steps.
                     with torch.no_grad():
-                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, rtol, atol)
+                        error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, self.rtol, self.atol)
                         step_size, prev_error_ratio = adaptive_stepping.update_step_size(
                             error_estimate=error_estimate,
                             prev_step_size=step_size,
                             prev_error_ratio=prev_error_ratio
                         )
 
-                    if step_size < dt_min:
+                    if step_size < self.dt_min:
                         warnings.warn("Hitting minimum allowed step size in adaptive time-stepping.")
-                        step_size = dt_min
+                        step_size = self.dt_min
                         prev_error_ratio = None
 
                     # Accept step.
-                    if error_estimate <= 1 or step_size <= dt_min:
+                    if error_estimate <= 1 or step_size <= self.dt_min:
                         prev_t, prev_y = curr_t, curr_y
                         curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                 else:

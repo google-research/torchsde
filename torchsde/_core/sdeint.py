@@ -90,48 +90,29 @@ def sdeint(sde,
     misc.handle_unused_kwargs(unused_kwargs, msg="`sdeint`")
     del unused_kwargs
 
-    sde, y0, ts, bm, method = check_contract(sde, y0, ts, bm, method, names, logqp)
+    sde, y0, ts, bm, method, options = check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'atol', 'dt_min'],
                         [ts, dt, rtol, atol, dt_min])
 
-    ys, extra_solver_state = integrate(
+    solver_fn = methods.select(method=method, sde_type=sde.sde_type)
+    solver = solver_fn(
         sde=sde,
-        y0=y0,
-        ts=ts,
         bm=bm,
-        method=method,
         dt=dt,
         adaptive=adaptive,
         rtol=rtol,
         atol=atol,
         dt_min=dt_min,
-        options=options,
-        extra_solver_state=extra_solver_state,
+        options=options
     )
+    if extra_solver_state is None:
+        extra_solver_state = solver.init_extra_solver_state(ts[0], y0)
+    ys, extra_solver_state = solver.integrate(y0, ts, extra_solver_state)
 
     return parse_return(y0, ys, extra_solver_state, extra, logqp)
 
 
-def parse_return(y0, ys, extra_solver_state, extra, logqp):
-    if logqp:
-        ys, log_ratio = ys.split(split_size=(y0.size(1) - 1, 1), dim=2)
-        log_ratio_increments = torch.stack(
-            [log_ratio_t_plus_1 - log_ratio_t
-             for log_ratio_t_plus_1, log_ratio_t in zip(log_ratio[1:], log_ratio[:-1])], dim=0
-        ).squeeze(dim=2)
-
-        if extra:
-            return ys, log_ratio_increments, extra_solver_state
-        else:
-            return ys, log_ratio_increments
-    else:
-        if extra:
-            return ys, extra_solver_state
-        else:
-            return ys
-
-
-def check_contract(sde, y0, ts, bm, method, names, logqp):
+def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
     if names is None:
         names_to_change = {}
     else:
@@ -288,28 +269,30 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], size=(batch_sizes[0], noise_sizes[0]), dtype=y0.dtype,
                               device=y0.device, levy_area_approximation=levy_area_approximation)
 
-    return sde, y0, ts, bm, method
-
-
-def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, extra_solver_state):
     if options is None:
         options = {}
 
-    solver_fn = methods.select(method=method, sde_type=sde.sde_type)
-    solver = solver_fn(
-        sde=sde,
-        bm=bm,
-        y0=y0,
-        dt=dt,
-        adaptive=adaptive,
-        rtol=rtol,
-        atol=atol,
-        dt_min=dt_min,
-        options=options,
-        extra_solver_state=extra_solver_state
-    )
     if adaptive and method == METHODS.euler and sde.noise_type != NOISE_TYPES.additive:
         warnings.warn(f"Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
                       f"time-stepping with the Euler--Maruyama method with non-additive noise.")
 
-    return solver.integrate(ts)
+    return sde, y0, ts, bm, method, options
+
+
+def parse_return(y0, ys, extra_solver_state, extra, logqp):
+    if logqp:
+        ys, log_ratio = ys.split(split_size=(y0.size(1) - 1, 1), dim=2)
+        log_ratio_increments = torch.stack(
+            [log_ratio_t_plus_1 - log_ratio_t
+             for log_ratio_t_plus_1, log_ratio_t in zip(log_ratio[1:], log_ratio[:-1])], dim=0
+        ).squeeze(dim=2)
+
+        if extra:
+            return ys, log_ratio_increments, extra_solver_state
+        else:
+            return ys, log_ratio_increments
+    else:
+        if extra:
+            return ys, extra_solver_state
+        else:
+            return ys
