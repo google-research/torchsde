@@ -25,7 +25,8 @@ class AdjointSDE(base_sde.BaseSDE):
     def __init__(self,
                  sde: base_sde.ForwardSDE,
                  params: TensorOrTensors,
-                 shapes: Sequence[torch.Size]):
+                 shapes: Sequence[torch.Size],
+                 num_extra_solver_states: int):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
@@ -39,8 +40,9 @@ class AdjointSDE(base_sde.BaseSDE):
         super(AdjointSDE, self).__init__(sde_type=sde_type, noise_type=noise_type)
 
         self.base_sde = sde
-        self._params = params
+        self.params = params
         self._shapes = shapes
+        self._num_extra_solver_states = num_extra_solver_states
 
         # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
         # by making sure it's a one-time cost. The `sde_type` and `noise_type` of the forward SDE determines the
@@ -71,11 +73,11 @@ class AdjointSDE(base_sde.BaseSDE):
     #            Helper functions          #
     ########################################
 
-    def _get_state(self, t, y_aug, v=None):
+    def get_state(self, t, y_aug, v=None):
         """Unpacks y_aug, whilst enforcing the necessary checks so that we can calculate derivatives wrt state."""
 
         # These leaf checks are very important.
-        # _get_state is used where we want to compute:
+        # get_state is used where we want to compute:
         # ```
         # with torch.enable_grad():
         #     s = some_function(y)
@@ -96,19 +98,19 @@ class AdjointSDE(base_sde.BaseSDE):
 
         requires_grad = torch.is_grad_enabled()
 
-        shapes = self._shapes[:2]
+        shapes = self._shapes[:2 + self._num_extra_solver_states]
         numel = sum(shape.numel() for shape in shapes)
-        y, adj_y = misc.flat_to_shape(y_aug[:numel], shapes)
+        y, adj_y, *adj_extra_solver_states = misc.flat_to_shape(y_aug[:numel], shapes)
 
         # To support the later differentiation wrt y, we set it to require_grad if it doesn't already.
         if not y.requires_grad:
             y = y.detach().requires_grad_(True)
-        return y, adj_y, requires_grad
+        return y, adj_y, adj_extra_solver_states, requires_grad
 
     def _f_uncorrected(self, f, y, adj_y, requires_grad):
         vjp_y_and_params = misc.vjp(
             outputs=f,
-            inputs=[y] + self._params,
+            inputs=[y] + self.params,
             grad_outputs=adj_y,
             allow_unused=True,
             retain_graph=True,
@@ -139,7 +141,7 @@ class AdjointSDE(base_sde.BaseSDE):
         f = f - dg_g_jvp
         vjp_y_and_params = misc.vjp(
             outputs=f,
-            inputs=[y] + self._params,
+            inputs=[y] + self.params,
             grad_outputs=adj_y,
             allow_unused=True,
             retain_graph=True,
@@ -158,7 +160,7 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             extra_vjp_y_and_params_column = misc.vjp(
                 outputs=g_column,
-                inputs=[y] + self._params,
+                inputs=[y] + self.params,
                 grad_outputs=a_dg_vjp,
                 allow_unused=True,
                 retain_graph=True,
@@ -183,7 +185,7 @@ class AdjointSDE(base_sde.BaseSDE):
         f = f - g_dg_vjp
         vjp_y_and_params = misc.vjp(
             outputs=f,
-            inputs=[y] + self._params,
+            inputs=[y] + self.params,
             grad_outputs=adj_y,
             allow_unused=True,
             retain_graph=True,
@@ -200,7 +202,7 @@ class AdjointSDE(base_sde.BaseSDE):
         )
         extra_vjp_y_and_params = misc.vjp(
             outputs=g,
-            inputs=[y] + self._params,
+            inputs=[y] + self.params,
             grad_outputs=a_dg_vjp,
             allow_unused=True,
             retain_graph=True,
@@ -215,7 +217,7 @@ class AdjointSDE(base_sde.BaseSDE):
     def _g_prod(self, g_prod, y, adj_y, requires_grad):
         vjp_y_and_params = misc.vjp(
             outputs=g_prod,
-            inputs=[y] + self._params,
+            inputs=[y] + self.params,
             grad_outputs=adj_y,
             allow_unused=True,
             retain_graph=True,
@@ -231,19 +233,19 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def f_uncorrected(self, t, y_aug):  # For Ito additive and Stratonovich.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f = self.base_sde.f(-t, y)
             return self._f_uncorrected(f, y, adj_y, requires_grad)
 
     def f_corrected_default(self, t, y_aug):  # For Ito general/scalar.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f, g = self.base_sde.f_and_g(-t, y)
             return self._f_corrected_default(f, g, y, adj_y, requires_grad)
 
     def f_corrected_diagonal(self, t, y_aug):  # For Ito diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f, g = self.base_sde.f_and_g(-t, y)
             return self._f_corrected_diagonal(f, g, y, adj_y, requires_grad)
@@ -281,7 +283,7 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def g_prod(self, t, y_aug, v):
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug, v)
         with torch.enable_grad():
             g_prod = self.base_sde.g_prod(-t, y, v)
             return self._g_prod(g_prod, y, adj_y, requires_grad)
@@ -291,7 +293,7 @@ class AdjointSDE(base_sde.BaseSDE):
     ########################################
 
     def f_and_g_prod_uncorrected(self, t, y_aug, v):  # For Ito additive and Stratonovich.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f, g_prod = self.base_sde.f_and_g_prod(-t, y, v)
 
@@ -300,7 +302,7 @@ class AdjointSDE(base_sde.BaseSDE):
             return f_out, g_prod_out
 
     def f_and_g_prod_corrected_default(self, t, y_aug, v):  # For Ito general/scalar.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f, g = self.base_sde.f_and_g(-t, y)
             g_prod = self.base_sde.prod(g, v)
@@ -310,7 +312,7 @@ class AdjointSDE(base_sde.BaseSDE):
             return f_out, g_prod_out
 
     def f_and_g_prod_corrected_diagonal(self, t, y_aug, v):  # For Ito diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug)
         with torch.enable_grad():
             f, g = self.base_sde.f_and_g(-t, y)
             g_prod = self.base_sde.prod(g, v)
@@ -327,7 +329,7 @@ class AdjointSDE(base_sde.BaseSDE):
         raise NotImplementedError
 
     def g_prod_and_gdg_prod_diagonal(self, t, y_aug, v1, v2):  # For Ito/Stratonovich diagonal.
-        y, adj_y, requires_grad = self._get_state(t, y_aug, v2)
+        y, adj_y, _, requires_grad = self.get_state(t, y_aug, v2)
         with torch.enable_grad():
             g = self.base_sde.g(-t, y)
             g_prod = self.base_sde.prod(g, v1)
@@ -349,7 +351,7 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             prod_partials_adj_y_and_params = misc.vjp(
                 outputs=g,
-                inputs=[y] + self._params,
+                inputs=[y] + self.params,
                 grad_outputs=adj_y * v2 * dgdy,
                 allow_unused=True,
                 retain_graph=True,
@@ -364,7 +366,7 @@ class AdjointSDE(base_sde.BaseSDE):
             )
             mixed_partials_adj_y_and_params = misc.vjp(
                 outputs=avg_dg_vjp.sum(),
-                inputs=[y] + self._params,
+                inputs=[y] + self.params,
                 allow_unused=True,
                 retain_graph=True,
                 create_graph=requires_grad

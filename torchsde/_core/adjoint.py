@@ -66,7 +66,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
         ys, extra_solver_state = sdeint.integrate(
             sde=sde,
-            y0=y0.detach(),  # This .detach() is VERY IMPORTANT. See adjoint_sde.py::AdjointSDE._get_state.
+            y0=y0.detach(),  # This .detach() is VERY IMPORTANT. See adjoint_sde.py::AdjointSDE.get_state.
             ts=ts,
             bm=bm,
             method=method,
@@ -90,14 +90,13 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             ctx.len_extras = 0
             extras_for_backward = ()
         ctx.save_for_backward(ys, ts, *extras_for_backward, *adjoint_params)
-        return ys, extra_solver_state
+        return ys, *extra_solver_state
 
     @staticmethod
-    def backward(ctx, grad_ys, grad_extras):  # noqa
-        del grad_extras
+    def backward(ctx, grad_ys, *grad_extra_solver_state):  # noqa
         ys, ts, *extras_and_adjoint_params = ctx.saved_tensors
         extra_solver_state, adjoint_params = _unravel_extra_solver_state_and_adjoint_params(ctx.len_extras,
-                                                                                             extras_and_adjoint_params)
+                                                                                            extras_and_adjoint_params)
         sde = ctx.sde
         dt = ctx.dt
         bm = ctx.bm
@@ -108,40 +107,41 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         dt_min = ctx.dt_min
         adjoint_options = ctx.adjoint_options
 
-        aug_state = [ys[-1], grad_ys[-1]] + [torch.zeros_like(param) for param in adjoint_params]
+        aug_state = [ys[-1], grad_ys[-1]] + list(grad_extra_solver_state) + [torch.zeros_like(param)
+                                                                             for param in adjoint_params]
         shapes = [t.size() for t in aug_state]
-        adjoint_sde = AdjointSDE(sde, adjoint_params, shapes)
+        adjoint_sde = AdjointSDE(sde, adjoint_params, shapes, len(grad_extra_solver_state))
         reverse_bm = ReverseBrownian(bm)
 
         for i in range(ys.size(0) - 1, 0, -1):
             aug_state = misc.flatten(aug_state)
             len_extras, extras_and_adjoint_params = _ravel_extra_solver_state_and_adjoint_params(extra_solver_state,
                                                                                                  adjoint_params)
-            aug_state, extra_solver_state = _SdeintAdjointMethod.apply(adjoint_sde,
-                                                                       torch.stack([-ts[i], -ts[i - 1]]),
-                                                                       dt,
-                                                                       reverse_bm,
-                                                                       adjoint_method,
-                                                                       adjoint_method,
-                                                                       adjoint_adaptive,
-                                                                       adjoint_adaptive,
-                                                                       adjoint_rtol,
-                                                                       adjoint_rtol,
-                                                                       adjoint_atol,
-                                                                       adjoint_atol,
-                                                                       dt_min,
-                                                                       adjoint_options,
-                                                                       adjoint_options,
-                                                                       len_extras,
-                                                                       aug_state,
-                                                                       *extras_and_adjoint_params)
+            aug_state, *extra_solver_state = _SdeintAdjointMethod.apply(adjoint_sde,
+                                                                        torch.stack([-ts[i], -ts[i - 1]]),
+                                                                        dt,
+                                                                        reverse_bm,
+                                                                        adjoint_method,
+                                                                        adjoint_method,
+                                                                        adjoint_adaptive,
+                                                                        adjoint_adaptive,
+                                                                        adjoint_rtol,
+                                                                        adjoint_rtol,
+                                                                        adjoint_atol,
+                                                                        adjoint_atol,
+                                                                        dt_min,
+                                                                        adjoint_options,
+                                                                        adjoint_options,
+                                                                        len_extras,
+                                                                        aug_state,
+                                                                        *extras_and_adjoint_params)
             aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
             aug_state[0] = ys[i - 1]
             aug_state[1] = aug_state[1] + grad_ys[i - 1]
 
         return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            *[None for _ in range(ctx.len_extras)], *aug_state[1:]
+            *aug_state[1:]
         )
 
 
@@ -254,17 +254,32 @@ def sdeint_adjoint(sde: nn.Module,
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
-    if method == METHODS.reversible_midpoint and adjoint_method != METHODS.adjoint_reversible_midpoint:
-        warnings.warn(f"method={repr(METHODS.reversible_midpoint)}, but "
-                      f"adjoint_method!={repr(METHODS.adjoint_reversible_midpoint)}, which is probably a mistake.")
+    # Note that all of these warnings are only applicable for reversible_midpoint with sdeint_adjoint; none of them
+    # apply to sdeint.
+    if method == METHODS.reversible_midpoint:
+        if adjoint_method != METHODS.adjoint_reversible_midpoint:
+            warnings.warn(f"method={repr(METHODS.reversible_midpoint)}, but "
+                          f"adjoint_method!={repr(METHODS.adjoint_reversible_midpoint)}.")
+        if adaptive or adjoint_adaptive:
+            warnings.warn(f"A limitation of the current method={repr(METHODS.reversible_midpoint)} implementation is "
+                          f"that it does not save the time steps used. This means that it may not be perfectly "
+                          f"accurate when used with `adaptive` or `adjoint_adaptive`.")
+        else:
+            num_steps = (ts - ts[0]) / dt
+            if not torch.allclose(num_steps, num_steps.round()):
+                warnings.warn(f"The spacing between time points `ts` is not an integer multiple of the time step `dt`. "
+                              f"This means that the backward pass (which is forced to step to each of `ts` to get "
+                              f"dL/dy(t) for t in ts) will not perfectly mimick the forward pass (which does not step "
+                              f"to each `ts`, and instead interpolates to them). This means that "
+                              f"method={repr(METHODS.reversible_midpoint)} may not be perfectly accurate.")
 
-    len_extras, extras_and_adjoint_params = _ravel_extra_solver_state_and_adjoint_params(extra_solver_state, adjoint_params)
+    len_extras, extras_and_adjoint_params = _ravel_extra_solver_state_and_adjoint_params(extra_solver_state,
+                                                                                         adjoint_params)
 
-    ys, extra_solver_state = _SdeintAdjointMethod.apply(  # noqa
+    ys, *extra_solver_state = _SdeintAdjointMethod.apply(  # noqa
         sde, ts, dt, bm, method, adjoint_method, adaptive, adjoint_adaptive, rtol, adjoint_rtol, atol,
         adjoint_atol, dt_min, options, adjoint_options, len_extras, y0, *extras_and_adjoint_params
     )
-    extra_solver_state = tuple(extra_i.detach() for extra_i in extra_solver_state)
 
     return sdeint.parse_return(y0, ys, extra_solver_state, extra, logqp)
 
