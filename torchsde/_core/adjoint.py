@@ -60,6 +60,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         ctx.adjoint_atol = adjoint_atol
         ctx.dt_min = dt_min
         ctx.adjoint_options = adjoint_options
+        ctx.len_extras = len_extras
 
         extra_solver_state, adjoint_params = _unravel_extra_solver_state_and_adjoint_params(len_extras,
                                                                                             extras_and_adjoint_params)
@@ -80,14 +81,14 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         )
         if method == METHODS.reversible_midpoint and adjoint_method == METHODS.adjoint_reversible_midpoint:
             # At the moment this is the only pair of solvers that know how to communicate via `extra_solver_state`.
-            ctx.len_extras = len(extra_solver_state)
+            ctx.len_extras_saved = len(extra_solver_state)
             # The extra solver values represent vector field evaluations, which are reversed for the backward pass.
             # (Ideally the minus signs would go in on the dt and dW, but they're currently on the vector fields
             # instead.)
             extras_for_backward = tuple(-extra_solver_state_j.detach() for extra_solver_state_j in extra_solver_state)
         else:
             # Else just remove the `extra_solver_state` information.
-            ctx.len_extras = 0
+            ctx.len_extras_saved = 0
             extras_for_backward = ()
         ctx.save_for_backward(ys, ts, *extras_for_backward, *adjoint_params)
         return ys, *extra_solver_state
@@ -95,7 +96,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_ys, *grad_extra_solver_state):  # noqa
         ys, ts, *extras_and_adjoint_params = ctx.saved_tensors
-        extra_solver_state, adjoint_params = _unravel_extra_solver_state_and_adjoint_params(ctx.len_extras,
+        extra_solver_state, adjoint_params = _unravel_extra_solver_state_and_adjoint_params(ctx.len_extras_saved,
                                                                                             extras_and_adjoint_params)
         sde = ctx.sde
         dt = ctx.dt
@@ -141,7 +142,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
 
         return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-            *aug_state[1:]
+            aug_state[1], *aug_state[2 + ctx.len_extras_saved - ctx.len_extras:]
         )
 
 

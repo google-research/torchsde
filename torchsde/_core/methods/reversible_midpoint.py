@@ -75,27 +75,32 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
         forward_y0, adj_y0, adj_extra_solver_states0, requires_grad = self.sde.get_state(t0, y0)
 
         t_prime = t0 + half_dt
-        forward_y_prime = forward_y0 + half_dt * forward_f0 + 0.5 * self.sde.prod(forward_g0, dW)
-        forward_f_prime, forward_g_prime = self.forward_sde.f_and_g(t_prime, forward_y_prime)
+        forward_y_prime = forward_y0 - half_dt * forward_f0 - 0.5 * self.forward_sde.prod(forward_g0, dW)
+        forward_f_prime, forward_g_prime = self.forward_sde.f_and_g(-t_prime, forward_y_prime)
 
-        forward_y1 = y0 + dt * forward_f_prime + self.forward_sde.prod(forward_g_prime, dW)
+        forward_dy1 = - dt * forward_f_prime - self.forward_sde.prod(forward_g_prime, dW)
+        forward_y1 = forward_y0 + forward_dy1
         forward_f1 = 2 * forward_f_prime - forward_f0
         forward_g1 = 2 * forward_g_prime - forward_g0
 
         # TODO: efficiency
         with torch.enable_grad():
-            reconstructed_y_prime = forward_y1 + half_dt * forward_f1 + 0.5 * self.sde.prod(forward_g1, dW)
-            reconstructed_f_prime, reconstructed_g_prime = self.sde.f_and_g(t_prime, reconstructed_y_prime)
+            forward_y1 = forward_y1 if forward_y1.requires_grad else forward_y1.detach().requires_grad_()
+            forward_f1 = forward_f1 if forward_f1.requires_grad else forward_f1.detach().requires_grad_()
+            forward_g1 = forward_g1 if forward_g1.requires_grad else forward_g1.detach().requires_grad_()
+            reconstructed_y_prime = forward_y1 + half_dt * forward_f1 + 0.5 * self.forward_sde.prod(forward_g1, dW)
+            reconstructed_f_prime, reconstructed_g_prime = self.forward_sde.f_and_g(-t_prime, reconstructed_y_prime)
 
-            reconstructed_y0 = forward_y1 + dt * reconstructed_f_prime + self.sde.prod(reconstructed_g_prime, dW)
-            reconstructed_f0 = 2 * reconstructed_f_prime - forward_f1
-            reconstructed_g0 = 2 * reconstructed_g_prime - forward_g1
+            reconstructed_y0_offset = dt * reconstructed_f_prime + self.forward_sde.prod(reconstructed_g_prime, dW)
+            reconstructed_f0_offset = 2 * (reconstructed_f_prime - forward_f1)
+            reconstructed_g0_offset = 2 * (reconstructed_g_prime - forward_g1)
 
-            vjp_y_and_extra_and_params = misc.vjp(outputs=(reconstructed_y0, reconstructed_f0, reconstructed_g0),
-                                                  inputs=(forward_y1, forward_f1, forward_g1) + self.sde.params,
-                                                  grad_outputs=(adj_y0,) + adj_extra_solver_states0,
+            vjp_y_and_extra_and_params = misc.vjp(outputs=(reconstructed_y0_offset, reconstructed_f0_offset, reconstructed_g0_offset),
+                                                  inputs=[forward_y1, forward_f1, forward_g1] + self.sde.params,
+                                                  grad_outputs=[adj_y0] + adj_extra_solver_states0,
                                                   allow_unused=True,
-                                                  create_graph=torch.is_grad_enabled())
-            y1 = misc.flatten((forward_y1,) + vjp_y_and_extra_and_params)
+                                                  create_graph=requires_grad)
+            dy1 = misc.flatten([forward_dy1] + vjp_y_and_extra_and_params)
+            y1 = y0 + dy1
 
         return y1, (forward_f1, forward_g1)

@@ -33,14 +33,18 @@ torch.set_default_dtype(torch.float64)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype = torch.get_default_dtype()
 
-ito_methods = {'milstein': 'ito', 'srk': 'ito'}
-stratonovich_methods = {'midpoint': 'stratonovich'}
+ito_methods = {'milstein', 'srk'}
+stratonovich_methods = {'midpoint', 'reversible_midpoint'}
 
 
 @pytest.mark.parametrize("sde_cls", [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive, problems.NeuralGeneral])
-@pytest.mark.parametrize("method, sde_type", itertools.chain(ito_methods.items(), stratonovich_methods.items()))
+@pytest.mark.parametrize("method", itertools.chain(ito_methods, stratonovich_methods))
 @pytest.mark.parametrize('adaptive', (False,))
-def test_adjoint(sde_cls, method, sde_type, adaptive):
+def test_adjoint(sde_cls, method, adaptive):
+    if method in ito_methods:
+        sde_type = 'ito'
+    else:
+        sde_type = 'stratonovich'
     # Skipping below, since method not supported for corresponding noise types.
     if sde_cls.noise_type == NOISE_TYPES.general and method in (METHODS.milstein, METHODS.srk):
         return
@@ -55,23 +59,27 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
     batch_size = 4
     t0, t1 = ts = torch.tensor([0.0, 0.5], device=device)
     dt = 1e-3
-    y0 = torch.zeros(batch_size, d).to(device).fill_(0.1)
+    y0 = torch.full((batch_size, d), 0.1, device=device)
     sde = sde_cls(d=d, m=m, sde_type=sde_type).to(device)
 
-    levy_area_approximation = {
-        'euler': 'none',
-        'milstein': 'none',
-        'srk': 'space-time',
-        'midpoint': 'none'
-    }[method]
+    if method == 'srk':
+        levy_area_approximation = 'space-time'
+    else:
+        levy_area_approximation = 'none'
     bm = torchsde.BrownianInterval(
         t0=t0, t1=t1, size=(batch_size, m), dtype=dtype, device=device,
         levy_area_approximation=levy_area_approximation
     )
 
+    if method == 'reversible_midpoint':
+        adjoint_method = 'adjoint_reversible_midpoint'
+    else:
+        adjoint_method = None
+
     def func(inputs, modules):
         y0, sde = inputs[0], modules[0]
-        ys = torchsde.sdeint_adjoint(sde, y0, ts, bm, dt=dt, method=method, adaptive=adaptive)
+        ys = torchsde.sdeint_adjoint(sde, y0, ts, dt=dt, method=method, adjoint_method=adjoint_method,
+                                     adaptive=adaptive, bm=bm)
         return (ys[-1] ** 2).sum(dim=1).mean(dim=0)
 
     # `grad_inputs=True` also works, but we really only care about grad wrt params and want fast tests.
@@ -79,7 +87,7 @@ def test_adjoint(sde_cls, method, sde_type, adaptive):
 
 
 @pytest.mark.parametrize("problem", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])
-@pytest.mark.parametrize("method", ito_methods.keys())
+@pytest.mark.parametrize("method", ito_methods)
 @pytest.mark.parametrize('adaptive', (False, True))
 def test_basic(problem, method, adaptive):
     d = 10
