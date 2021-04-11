@@ -98,6 +98,7 @@ def _method_dt_tol():
 
 
 # TODO: these tests are mysteriously flaky when using ExScalar.
+# TODO: these tests are mysteriously flaky when using srk/Milstein and NeuralDiagonal.
 @pytest.mark.parametrize("sde_cls", [problems.NeuralDiagonal, problems.NeuralScalar, problems.NeuralAdditive,
                                      problems.NeuralGeneral])
 @pytest.mark.parametrize("method, dt, tol", _method_dt_tol())

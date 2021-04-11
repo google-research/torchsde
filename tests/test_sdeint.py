@@ -214,3 +214,40 @@ def _test_sdeint(sde, bm, method, adaptive, logqp, device, should_fail, options)
         ans, log_ratio = ans
         assert log_ratio.shape == (T - 1, batch_size)
     assert ans.shape == (T, batch_size, d)
+
+
+@pytest.mark.parametrize("sde_cls", [problems.NeuralDiagonal, problems.NeuralScalar, problems.NeuralAdditive,
+                                     problems.NeuralGeneral])
+def test_reversibility(sde_cls):
+    batch_size = 32
+    state_size = 4
+    t_size = 20
+    dt = 0.1
+
+    brownian_size = {
+        NOISE_TYPES.scalar: 1,
+        NOISE_TYPES.diagonal: state_size,
+        NOISE_TYPES.general: 2,
+        NOISE_TYPES.additive: 2
+    }[sde_cls.noise_type]
+
+    class MinusSDE(torch.nn.Module):
+        def __init__(self, sde):
+            self.noise_type = sde.noise_type
+            self.sde_type = sde.sde_type
+            self.f = lambda t, y: -sde.f(-t, y)
+            self.g = lambda t, y: -sde.g(-t, y)
+
+    sde = sde_cls(d=state_size, m=brownian_size, sde_type='stratonovich')
+    minus_sde = MinusSDE(sde)
+    y0 = torch.full((batch_size, state_size), 0.1)
+    ts = torch.linspace(0, (t_size - 1) * dt, t_size)
+    bm = torchsde.BrownianInterval(t0=ts[0], t1=ts[-1], size=(batch_size, brownian_size))
+    ys, extra_solver_states = torchsde.sdeint(sde, y0, ts, bm=bm, method='reversible_midpoint', dt=dt, extra=True)
+    extra_solver_state = tuple(-extra_solver_state_j for extra_solver_state_j in extra_solver_states)
+    backward_ts = -ts.flip(0)
+    backward_ys = torchsde.sdeint(minus_sde, ys[-1], backward_ts, bm=torchsde.ReverseBrownian(bm),
+                                  method='reversible_midpoint', dt=dt, extra_solver_state=extra_solver_state)
+    backward_ys = backward_ys.flip(0)
+
+    torch.testing.assert_allclose(ys, backward_ys, rtol=1e-6, atol=1e-6)
