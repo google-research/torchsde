@@ -89,10 +89,10 @@ If you found this codebase useful in your research, please consider citing eithe
 ```
 
 ```
-@article{kidger2020neuralsde,
-  title={Neural {SDE}s {M}ade {E}asy: {SDE}s are {I}nfinite-{D}imensional {GAN}s},
+@article{kidger2021neuralsde,
+  title={Neural {SDE}s as {I}nfinite-{D}imensional {GAN}s},
   author={Kidger, Patrick and Foster, James and Li, Xuechen and Oberhauser, Harald and Lyons, Terry},
-  journal={arXiv:2102.03657},
+  journal={International Conference on Machine Learning},
   year={2021}
 }
 ```
@@ -100,7 +100,7 @@ If you found this codebase useful in your research, please consider citing eithe
 ## References
 \[1\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations". *International Conference on Artificial Intelligence and Statistics.* 2020. [[arXiv]](https://arxiv.org/pdf/2001.01328.pdf)
 
-\[2\] Patrick Kidger, James Foster, Xuechen Li, Harald Oberhauser, Terry Lyons. "Neural SDEs as Infinite-Dimensional GANs". *Machine Learning and the Physical Sciences, NeurIPS* 2020 [[arXiv]](https://arxiv.org/abs/2102.03657)
+\[2\] Patrick Kidger, James Foster, Xuechen Li, Harald Oberhauser, Terry Lyons. "Neural SDEs as Infinite-Dimensional GANs". *International Conference on Machine Learning* 2021 [[arXiv]](https://arxiv.org/abs/2102.03657)
 
 \[3\] Patrick Kidger, James Morrill, James Foster, Terry Lyons, "Neural Controlled Differential Equations for Irregular Time Series". *Neural Information Processing Systems* 2020. [[arXiv]](https://arxiv.org/abs/2005.08926)
 
