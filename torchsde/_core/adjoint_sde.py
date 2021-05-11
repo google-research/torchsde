@@ -100,7 +100,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
         shapes = self._shapes[:2 + self._num_extra_solver_states]
         numel = sum(shape.numel() for shape in shapes)
-        y, adj_y, *adj_extra_solver_states = misc.flat_to_shape(y_aug[:numel], shapes)
+        y, adj_y, *adj_extra_solver_states = misc.flat_to_shape(y_aug.squeeze(0)[:numel], shapes)
 
         # To support the later differentiation wrt y, we set it to require_grad if it doesn't already.
         if not y.requires_grad:
@@ -124,7 +124,7 @@ class AdjointSDE(base_sde.BaseSDE):
 
             # Note: `requires_grad` might not be equal to what `torch.is_grad_enabled` returns here.
             f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+        return misc.flatten((-f, *vjp_y_and_params)).unsqueeze(0)
 
     def _f_corrected_default(self, f, g, y, adj_y, requires_grad):
         g_columns = [g_column.squeeze(dim=-1) for g_column in g.split(1, dim=-1)]
@@ -171,7 +171,7 @@ class AdjointSDE(base_sde.BaseSDE):
         if not requires_grad:
             # See corresponding note in _f_uncorrected.
             f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+        return misc.flatten((-f, *vjp_y_and_params)).unsqueeze(0)
 
     def _f_corrected_diagonal(self, f, g, y, adj_y, requires_grad):
         g_dg_vjp, = misc.vjp(
@@ -212,7 +212,7 @@ class AdjointSDE(base_sde.BaseSDE):
         if not requires_grad:
             # See corresponding note in _f_uncorrected.
             f = f.detach()
-        return misc.flatten((-f, *vjp_y_and_params))
+        return misc.flatten((-f, *vjp_y_and_params)).unsqueeze(0)
 
     def _g_prod(self, g_prod, y, adj_y, requires_grad):
         vjp_y_and_params = misc.vjp(
@@ -226,7 +226,7 @@ class AdjointSDE(base_sde.BaseSDE):
         if not requires_grad:
             # See corresponding note in _f_uncorrected.
             g_prod = g_prod.detach()
-        return misc.flatten((-g_prod, *vjp_y_and_params))
+        return misc.flatten((-g_prod, *vjp_y_and_params)).unsqueeze(0)
 
     ########################################
     #                  f                   #
@@ -372,4 +372,4 @@ class AdjointSDE(base_sde.BaseSDE):
                 create_graph=requires_grad
             )
             vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
-            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, *vjp_y_and_params))
+            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, *vjp_y_and_params)).unsqueeze(0)

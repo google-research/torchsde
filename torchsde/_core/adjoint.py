@@ -66,6 +66,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             extra_solver_state = extras_and_adjoint_params[:ctx.len_extras]
             adjoint_params = extras_and_adjoint_params[ctx.len_extras:]
         else:
+            grad_extra_solver_state = ()
             extra_solver_state = None
             adjoint_params = extras_and_adjoint_params
 
@@ -73,6 +74,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
                                                                              for param in adjoint_params]
         shapes = [t.size() for t in aug_state]
         aug_state = misc.flatten(aug_state)
+        aug_state = aug_state.unsqueeze(0)  # dummy batch dimension
         adjoint_sde = AdjointSDE(ctx.sde, adjoint_params, shapes, len(grad_extra_solver_state))
         reverse_bm = ReverseBrownian(ctx.bm)
 
@@ -91,30 +93,36 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             extra_solver_state = solver.init_extra_solver_state(ts[-1], aug_state)
 
         for i in range(ys.size(0) - 1, 0, -1):
-            aug_state, *extra_solver_state = _SdeintAdjointMethod.apply(adjoint_sde,
-                                                                        torch.stack([-ts[i], -ts[i - 1]]),
-                                                                        ctx.dt,
-                                                                        reverse_bm,
-                                                                        solver,
-                                                                        ctx.adjoint_method,
-                                                                        ctx.adjoint_method,
-                                                                        ctx.adjoint_adaptive,
-                                                                        ctx.adjoint_rtol,
-                                                                        ctx.adjoint_atol,
-                                                                        ctx.dt_min,
-                                                                        ctx.adjoint_options,
-                                                                        len(extra_solver_state),
-                                                                        aug_state,
-                                                                        *extra_solver_state,
-                                                                        *adjoint_params)
-            aug_state = misc.flat_to_shape(aug_state[1], shapes)  # Unpack the state at time -ts[i - 1].
+            (_, aug_state), *extra_solver_state = _SdeintAdjointMethod.apply(adjoint_sde,
+                                                                             torch.stack([-ts[i], -ts[i - 1]]),
+                                                                             ctx.dt,
+                                                                             reverse_bm,
+                                                                             solver,
+                                                                             ctx.adjoint_method,
+                                                                             ctx.adjoint_method,
+                                                                             ctx.adjoint_adaptive,
+                                                                             ctx.adjoint_rtol,
+                                                                             ctx.adjoint_atol,
+                                                                             ctx.dt_min,
+                                                                             ctx.adjoint_options,
+                                                                             len(extra_solver_state),
+                                                                             aug_state,
+                                                                             *extra_solver_state,
+                                                                             *adjoint_params)
+            aug_state = misc.flat_to_shape(aug_state.squeeze(0), shapes)
             aug_state[0] = ys[i - 1]
             aug_state[1] = aug_state[1] + grad_ys[i - 1]
             if i != 1:
                 aug_state = misc.flatten(aug_state)
+                aug_state = aug_state.unsqueeze(0)  # dummy batch dimension
+
+        if ctx.saved_extras_for_backward:
+            out = aug_state[1:]
+        else:
+            out = [aug_state[1]] + ([None] * ctx.len_extras) + aug_state[2:]
 
         return (
-            None, None, None, None, None, None, None, None, None, None, None, None, None, *aug_state[1:],
+            None, None, None, None, None, None, None, None, None, None, None, None, None, *out,
         )
 
 
