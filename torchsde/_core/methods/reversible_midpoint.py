@@ -104,6 +104,7 @@ class AdjointReversibleMidpoint(base_solver.BaseSDESolver):
                                           grad_outputs=[twice_adj_f0 + dt * adj_y0,
                                                         twice_adj_g0 + self._adjoint_of_prod(adj_y0, dW)],
                                           allow_unused=True,
+                                          retain_graph=True,
                                           create_graph=requires_grad)
             if not requires_grad:
                 forward_f_prime = forward_f_prime.detach()
