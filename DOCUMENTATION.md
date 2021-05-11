@@ -24,6 +24,7 @@ where
     - an attribute `noise_type`, which should either be `"scalar"`, `"additive"`, `"diagonal"`, `"general"`,
     - a method `f(t, y)` corresponding to the drift, producing a tensor of shape `(batch_size, state_size)`,
     - a method `g(t, y)` corresponding to the diffusion. The appropriate output shape depends on the noise type.
+    - Optionally: a method `h(t, y)` corresponding to a prior drift to calculate a KL divergence from. (See the discussion on `logqp` and the [notes on KL divergence](#calculating-kl-divergence) below.)
 - `y0` is a tensor of shape `(batch_size, state_size)`, giving the initial value of the SDE at time `ts[0]`, 
 - `ts` is a tensor of times to output `y` at, of shape `(t_size,)`. The SDE will be solved over the interval `[ts[0], ts[-1]]`.
 
@@ -37,15 +38,20 @@ The output tensor `ys` will have shape `(t_size, batch_size, state_size)`, and c
 - `diagonal`: The diffusion `g` is element-wise and has output size `(batch_size, state_size)`. The Brownian motion is a batch of `state_size`-dimensional Brownian motions.
 - `general`: The diffusion `g` has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is a batch of `brownian_size`-dimensional Brownian motions.
 
+Whilst `scalar`, `additive` and `general` are special cases of `general` noise, they allows for additional solvers to be used and additional optimisations to take place.
+
 ### Keyword arguments for `sdeint`
 - `bm`: A `BrownianInterval` object, see [below](#brownian-motion). Optionally include to control the Brownian motion.
-- `method`: A string, corresponding to one of the solvers listed [below](#list-of-sde-solvers).
+- `method`: A string, corresponding to one of the solvers listed [below](#list-of-sde-solvers). If not passed then a sensible default is used.
 - `dt`: A float for the constant step size, or initial step size for adaptive time-stepping. Defaults to `1e-3`.
-- `adaptive`: If True, use adaptive time-stepping. Defaults to False.
+- `adaptive`: If True, use adaptive time-stepping. Defaults to `False`.
 - `rtol`: Relative tolerance for adaptive time-stepping. Defaults to `1e-5`.
 - `atol`: Absolute tolerance for adaptive time-stepping. Defaults to `1e-4`.
 - `dt_min`: Minimum step size for adaptive time-stepping. Defaults to `1e-5`.
-- `names`: A dictionary giving alternate names for the drift and diffusion methods. Acceptable keys are `"drift"` and `"diffusion"`. For example `{"drift": "foo"}` will use `foo` instead of `f`.
+- `names`: A dictionary giving alternate names for the drift and diffusion methods. Acceptable keys are `"drift"`,`"diffusion"` and `"prior_drift"`. For example `{"drift": "foo"}` will use `foo` instead of `f`.
+- `logqp`: Whether to calculate an estimate of the KL-divergence between two SDEs. See the [notes on KL divergence](#calculating-kl-divergence) below. This is returned as an additional tensor.
+- `extra`: Whether to also return any additional variables tracked by the solver. This is returned as an additional tensor.
+- `extra_solver_state`: Initial values for any additional variables tracked by the solver. (Rather than constructing sensible defaults automatically.) In particular, between this and the `extra` argument, it is possible to solve an SDE forwards in time, and then exactly reconstruct it backwards in time. (Without any additional numerical error.) This represents advanced functionality best used only if you know what you're doing, as it's not really documented yet.
 
 ### List of SDE solvers
 The available solvers depends on the SDE type and the noise type.
@@ -60,6 +66,8 @@ The available solvers depends on the SDE type and the noise type.
 - `"heun"`: [Heun's method](https://arxiv.org/abs/1102.4401)
 - `"midpoint"`: Midpoint method
 - `"milstein"`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
+- `"reversible_midpoint"`: The reversible midpoint method, as introduced in TODO.
+- `"adjoint_reversible_midpoint"`: A special method: pass this as part of `sdeint_adjoint(..., method="reversible_midpoint", adjoint_method="adjoint_reversible_midpoint")` for more accurate gradient estimation with the adjoint method, see [the notes on adjoint methods](#adjoints).
 
 Note that Milstein and SRK don't support general noise.
 
@@ -71,27 +79,66 @@ If your drift/diffusion have special structure, for example the drift and diffus
 
 Depending on the integration method used it may suffice to provide only some of these methods (`f` and `g` are not mandatory).
 
+## Choice of solver
+
+If calculating an Ito SDE, then `srk` will generally produce a more accurate estimate of the solution than `milstein`, which will generally produce a more accurate estimate than `euler`. Meanwhile `srk` is the most expensive, followed by `milstein`, followed by `euler` as the computationally cheapest.
+
+If calculating a Stratonovich SDE, then `midpoint` , `heun` and `milstein` are the most expensive, followed by `euler_heun`. Finally `reversible_midpoint` is the cheapest.
+
+Note that if you're training neural SDEs without the adjoint method then accurate solutions usually aren't super important -- everything is learnt anyway -- and computational cost often matters a lot, so `euler` or `reversible_midpoint` is probably best. If you are using the adjoint method then Stratonovich SDEs and `reversible_midpoint` come strongly recommended; [see below](#adjoints).
+
+## Calculating KL divergence
+
+If `logqp=True` then an additional tensor of shape `(t_size - 1, batch_size)`, will be returned, corresponding to
+
+```
+\int_{ts[i-1]}^{ts[i]} g(t, y(t))^-1 (f(t, y(y)) - h(t, y(t))) dt
+```
+
+for all `i`, for each sample path `y(t)` that is generated by the solver. Taking an average over the `batch_size` dimension then represents an estimate of the KL divergence between
+
+```
+dy(t) = f(t, y(t)) dt + g(t, y(t)) dW(t)        y(ts[0]) = y0 
+```
+
+and
+
+```
+dz(t) = h(t, z(t)) dt + g(t, z(t)) dW(t)        y(ts[0]) = y0 
+```
+
+for each time interval `ts[i - 1]`, `ts[i]`.
+
+Note that this implies calculating a matrix inverse of `g`. This can be quite expensive for `general` or `additive` noise, and `diagonal` noise is generally much computationally cheaper.
+
 ## Adjoints
 
 The SDE solve may be backpropagated through. This may be done either by backpropagating through the internal operations of the solver (when using `sdeint`), or via the _adjoint method_ [\[1\]](https://arxiv.org/pdf/2001.01328.pdf), which solves another "adjoint SDE" backwards in time to calculate the gradients (when using `sdeint_adjoint`).
 
-Using the adjoint method will reduce memory usage, but takes (much) longer to compute. In addition, because the backward SDE is solved numerically, there will be a certain amount of numerical error, which can be nontrivial for large step sizes.
-
-If using the adjoint method, then we recommend using Stratonovich SDEs if possible, as these are faster to calculate the adjoint SDE for. We also recommend using adaptive step sizes on both the forward and backward passes, as this will help to reduce the numerical error.
+Using the adjoint method will reduce memory usage, but takes longer to compute.
 
 `sdeint_adjoint` supports all the arguments and keyword arguments that `sdeint` does, as well as the following additional keyword arguments: 
-- `adjoint_method`, `adjoint_adaptive`, `adjoint_rtol`, `adjoint_atol`: as for the forward pass.  
 
+- `adjoint_method`, `adjoint_adaptive`, `adjoint_rtol`, `adjoint_atol`: as for the forward pass.  
 - `adjoint_params`: the tensors to calculate gradients with respect to. If not passed, defaults to `sde.parameters()`.
 
-Double backward is supported through the adjoint method, and is calculated using an adjoint-of-adjoint SDE, with the same method, tolerances, etc. as for the adjoint SDE. Note that the numerical errors can easily grow very large for adjoint-of-adjoint SDEs.
+Double backward is supported through the adjoint method, and is calculated using an adjoint-of-adjoint SDE, with the same method, tolerances, etc. as for the adjoint SDE. Note that the numerical errors can easily grow large for adjoint-of-adjoint SDEs.
+
+#### Advice on adjoint methods
+
+Use Stratonovich SDEs if possible, as these have a computationally cheaper adjoint SDE than Ito SDEs.
+
+Solving the adjoint SDE implies incurring additional numerical error, on top of whatever error is computed in the forward SDE. If not managed then this can make training more difficult, as the gradients calculated will be less accurate. Whilst the issue can just be ignored -- it's usually not a deal-breaker -- there are two main options available for managing it:
+
+- Usually the best approach is to use `method="reversible_midpoint"` and `adjoint_method="adjoint_reversible_midpoint"`, as introduced in TODO. These are a special pair of solvers which when used in conjunction have almost zero numerical error, as the adjoint solver carefully reconstructs the numerical trajectory taken by the forward solver.
+- Use adaptive step sizes on both the forward and backward pass. This usually implies additional computational cost, but can reduce numerical error.
 
 
 ## Brownian motion
 
 The `bm` argument to `sdeint` and `sdeint_adjoint` allows for tighter control on the Brownian motion. This should be a `torchsde.BrownianInterval` object. In particular, this allows for fixing its random seed (to produce the same Brownian motion every time), and for adjusting certain parameters that may affect its speed or memory usage.
 
-`BrownianInterval` can also be used as a standalone object, if you just want to be able to sample Brownian motion for any other reason (including the ability to sample Levy area).
+`BrownianInterval` can also be used as a standalone object, if you just want to be able to sample Brownian motion for any other reason.
 
 ### Examples
 **Quick example**
