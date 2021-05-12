@@ -11,7 +11,7 @@ This library provides [stochastic differential equation (SDE)](https://en.wikipe
 pip install git+https://github.com/google-research/torchsde.git
 ```
 
-**Requirements:** Python >=3.6 and PyTorch >=1.6.0, <1.8.0.
+**Requirements:** Python >=3.6 and PyTorch >=1.6.0.
 
 ## Documentation
 Available [here](./DOCUMENTATION.md).
