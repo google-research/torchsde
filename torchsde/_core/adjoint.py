@@ -46,10 +46,15 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         adjoint_params = extras_and_adjoint_params[len_extras:]
 
         # This .detach() is VERY IMPORTANT. See adjoint_sde.py::AdjointSDE.get_state.
-        ys, extra_solver_state = solver.integrate(y0.detach(), ts, extra_solver_state)
+        y0 = y0.detach()
+        # Necessary for the same reason
+        extra_solver_state = tuple(x.detach() for x in extra_solver_state)
+        ys, extra_solver_state = solver.integrate(y0, ts, extra_solver_state)
 
         if method == METHODS.reversible_midpoint and adjoint_method == METHODS.adjoint_reversible_midpoint:
-            # At the moment this is the only pair of solvers that know how to communicate via `extra_solver_state`.
+            ctx.saved_extras_for_backward = True
+            extras_for_backward = extra_solver_state
+        elif method == METHODS.reversible_heun and adjoint_method == METHODS.adjoint_reversible_heun:
             ctx.saved_extras_for_backward = True
             extras_for_backward = extra_solver_state
         else:
@@ -120,7 +125,6 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             out = aug_state[1:]
         else:
             out = [aug_state[1]] + ([None] * ctx.len_extras) + aug_state[2:]
-
         return (
             None, None, None, None, None, None, None, None, None, None, None, None, None, *out,
         )
@@ -237,15 +241,21 @@ def sdeint_adjoint(sde: nn.Module,
     adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
     if adjoint_options is None:
         adjoint_options = {}
+    else:
+        adjoint_options = adjoint_options.copy()
 
-    # Note that all of these warnings are only applicable for reversible_midpoint with sdeint_adjoint; none of them
+    # Note that all of these warnings are only applicable for reversible solvers with sdeint_adjoint; none of them
     # apply to sdeint.
-    if method == METHODS.reversible_midpoint:
-        if adjoint_method != METHODS.adjoint_reversible_midpoint:
-            warnings.warn(f"method={repr(METHODS.reversible_midpoint)}, but "
-                          f"adjoint_method!={repr(METHODS.adjoint_reversible_midpoint)}.")
+    try:
+        expected_adjoint_method = {METHODS.reversible_midpoint: METHODS.adjoint_reversible_midpoint,
+                                   METHODS.reversible_heun: METHODS.adjoint_reversible_heun}[method]
+    except KeyError:
+        pass
+    else:
+        if adjoint_method != expected_adjoint_method:
+            warnings.warn(f"method={repr(method)}, but adjoint_method!={repr(expected_adjoint_method)}.")
         if adaptive or adjoint_adaptive:
-            warnings.warn(f"A limitation of the current method={repr(METHODS.reversible_midpoint)} implementation is "
+            warnings.warn(f"A limitation of the current method={repr(method)} implementation is "
                           f"that it does not save the time steps used. This means that it may not be perfectly "
                           f"accurate when used with `adaptive` or `adjoint_adaptive`.")
         else:
@@ -255,7 +265,7 @@ def sdeint_adjoint(sde: nn.Module,
                               f"This means that the backward pass (which is forced to step to each of `ts` to get "
                               f"dL/dy(t) for t in ts) will not perfectly mimick the forward pass (which does not step "
                               f"to each `ts`, and instead interpolates to them). This means that "
-                              f"method={repr(METHODS.reversible_midpoint)} may not be perfectly accurate.")
+                              f"method={repr(method)} may not be perfectly accurate.")
 
     solver_fn = methods.select(method=method, sde_type=sde.sde_type)
     solver = solver_fn(
@@ -270,6 +280,10 @@ def sdeint_adjoint(sde: nn.Module,
     )
     if extra_solver_state is None:
         extra_solver_state = solver.init_extra_solver_state(ts[0], y0)
+
+    # TODO
+    y0 = y0.view(y0.shape)
+    extra_solver_state = tuple(x.view(x.shape) for x in extra_solver_state)
 
     ys, *extra_solver_state = _SdeintAdjointMethod.apply(
         sde, ts, dt, bm, solver, method, adjoint_method, adjoint_adaptive, adjoint_rtol, adjoint_atol, dt_min,

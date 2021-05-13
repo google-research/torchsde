@@ -34,7 +34,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype = torch.get_default_dtype()
 
 ito_methods = {'milstein', 'srk'}
-stratonovich_methods = {'midpoint', 'reversible_midpoint'}
+stratonovich_methods = {'midpoint', 'reversible_heun'}
 
 
 @pytest.mark.parametrize("sde_cls", [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive, problems.NeuralGeneral])
@@ -71,9 +71,9 @@ def test_against_numerical(sde_cls, method, adaptive):
         levy_area_approximation=levy_area_approximation
     )
 
-    if method == 'reversible_midpoint':
+    if method == 'reversible_heun':
         tol = 1e-6
-        adjoint_method = 'adjoint_reversible_midpoint'
+        adjoint_method = 'adjoint_reversible_heun'
     else:
         tol = 1e-2
         adjoint_method = None
@@ -90,7 +90,9 @@ def test_against_numerical(sde_cls, method, adaptive):
 
 def _method_dt_tol():
     for method in itertools.chain(ito_methods, stratonovich_methods):
-        if method == 'reversible_midpoint':
+        if method != "reversible_heun":
+            continue
+        if method == 'reversible_heun':
             yield method, 0.05, 1e-4
             yield method, 1e-3, 1e-4
         else:
@@ -135,8 +137,8 @@ def test_against_sdeint(sde_cls, method, dt, tol, len_ts):
         levy_area_approximation=levy_area_approximation
     )
 
-    if method == 'reversible_midpoint':
-        adjoint_method = 'adjoint_reversible_midpoint'
+    if method == 'reversible_heun':
+        adjoint_method = 'adjoint_reversible_heun'
     else:
         adjoint_method = None
 
@@ -152,6 +154,8 @@ def test_against_sdeint(sde_cls, method, dt, tol, len_ts):
     ys_test = torchsde.sdeint_adjoint(sde, y0, ts, dt=dt, method=method, bm=bm, adjoint_method=adjoint_method)
     ys_test.backward(grad)
     test_grad = torch.cat([y0.grad.view(-1)] + [param.grad.view(-1) for param in sde.parameters()])
+
+    breakpoint()
 
     torch.testing.assert_allclose(ys_true, ys_test)
     torch.testing.assert_allclose(true_grad, test_grad, rtol=tol, atol=tol)

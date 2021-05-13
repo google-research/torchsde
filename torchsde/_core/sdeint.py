@@ -271,6 +271,8 @@ def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
 
     if options is None:
         options = {}
+    else:
+        options = options.copy()
 
     if adaptive and method == METHODS.euler and sde.noise_type != NOISE_TYPES.additive:
         warnings.warn(f"Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
