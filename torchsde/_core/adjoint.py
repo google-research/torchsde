@@ -80,7 +80,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         shapes = [t.size() for t in aug_state]
         aug_state = misc.flatten(aug_state)
         aug_state = aug_state.unsqueeze(0)  # dummy batch dimension
-        adjoint_sde = AdjointSDE(ctx.sde, adjoint_params, shapes, len(grad_extra_solver_state))
+        adjoint_sde = AdjointSDE(ctx.sde, adjoint_params, shapes)
         reverse_bm = ReverseBrownian(ctx.bm)
 
         solver_fn = methods.select(method=ctx.adjoint_method, sde_type=adjoint_sde.sde_type)

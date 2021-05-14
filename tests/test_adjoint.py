@@ -90,22 +90,20 @@ def test_against_numerical(sde_cls, method, adaptive):
 
 def _method_dt_tol():
     for method in itertools.chain(ito_methods, stratonovich_methods):
-        if method != "reversible_heun":
-            continue
         if method == 'reversible_heun':
-            yield method, 0.05, 1e-4
-            yield method, 1e-3, 1e-4
+            yield method, 0.05, 1e-3, 1e-4
+            yield method, 1e-3, 1e-3, 1e-4
         else:
-            yield method, 1e-3, 1e-2
+            yield method, 1e-3, 1e-2, 1e-2
 
 
 # TODO: these tests are mysteriously flaky when using ExScalar.
 # TODO: these tests are mysteriously flaky when using srk/Milstein and NeuralDiagonal.
 @pytest.mark.parametrize("sde_cls", [problems.NeuralDiagonal, problems.NeuralScalar, problems.NeuralAdditive,
                                      problems.NeuralGeneral])
-@pytest.mark.parametrize("method, dt, tol", _method_dt_tol())
+@pytest.mark.parametrize("method, dt, rtol, atol", _method_dt_tol())
 @pytest.mark.parametrize("len_ts", [2, 11])
-def test_against_sdeint(sde_cls, method, dt, tol, len_ts):
+def test_against_sdeint(sde_cls, method, dt, rtol, atol, len_ts):
     if method in ito_methods:
         sde_type = 'ito'
     else:
@@ -155,10 +153,8 @@ def test_against_sdeint(sde_cls, method, dt, tol, len_ts):
     ys_test.backward(grad)
     test_grad = torch.cat([y0.grad.view(-1)] + [param.grad.view(-1) for param in sde.parameters()])
 
-    breakpoint()
-
     torch.testing.assert_allclose(ys_true, ys_test)
-    torch.testing.assert_allclose(true_grad, test_grad, rtol=tol, atol=tol)
+    torch.testing.assert_allclose(true_grad, test_grad, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize("problem", [problems.BasicSDE1, problems.BasicSDE2, problems.BasicSDE3, problems.BasicSDE4])

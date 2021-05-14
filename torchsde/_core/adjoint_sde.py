@@ -25,8 +25,7 @@ class AdjointSDE(base_sde.BaseSDE):
     def __init__(self,
                  sde: base_sde.ForwardSDE,
                  params: TensorOrTensors,
-                 shapes: Sequence[torch.Size],
-                 num_extra_solver_states: int):
+                 shapes: Sequence[torch.Size]):
         # There's a mapping from the noise type of the forward SDE to the noise type of the adjoint.
         # Usually, these two aren't the same, e.g. when the forward SDE has additive noise, the adjoint SDE's diffusion
         # is a linear function of the adjoint variable, so it is not of additive noise.
@@ -42,7 +41,6 @@ class AdjointSDE(base_sde.BaseSDE):
         self.base_sde = sde
         self.params = params
         self._shapes = shapes
-        self._num_extra_solver_states = num_extra_solver_states
 
         # Register the core functions. This avoids polluting the codebase with if-statements and achieves speed-ups
         # by making sure it's a one-time cost. The `sde_type` and `noise_type` of the forward SDE determines the
@@ -73,7 +71,7 @@ class AdjointSDE(base_sde.BaseSDE):
     #            Helper functions          #
     ########################################
 
-    def get_state(self, t, y_aug, v=None):
+    def get_state(self, t, y_aug, v=None, extra_states=False):
         """Unpacks y_aug, whilst enforcing the necessary checks so that we can calculate derivatives wrt state."""
 
         # These leaf checks are very important.
@@ -98,14 +96,17 @@ class AdjointSDE(base_sde.BaseSDE):
 
         requires_grad = torch.is_grad_enabled()
 
-        shapes = self._shapes[:2 + self._num_extra_solver_states]
+        if extra_states:
+            shapes = self._shapes
+        else:
+            shapes = self._shapes[:2]
         numel = sum(shape.numel() for shape in shapes)
-        y, adj_y, *adj_extra_solver_states = misc.flat_to_shape(y_aug.squeeze(0)[:numel], shapes)
+        y, adj_y, *extra_states = misc.flat_to_shape(y_aug.squeeze(0)[:numel], shapes)
 
         # To support the later differentiation wrt y, we set it to require_grad if it doesn't already.
         if not y.requires_grad:
             y = y.detach().requires_grad_(True)
-        return y, adj_y, adj_extra_solver_states, requires_grad
+        return y, adj_y, extra_states, requires_grad
 
     def _f_uncorrected(self, f, y, adj_y, requires_grad):
         vjp_y_and_params = misc.vjp(

@@ -110,7 +110,8 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         quarter_dW = 0.25 * dW
         half_dt = 0.5 * dt
         half_dW = 0.5 * dW
-        forward_y0, adj_y0, (adj_f0, adj_g0, adj_z0), requires_grad = self.sde.get_state(t0, y0)
+        forward_y0, adj_y0, (adj_f0, adj_g0, adj_z0, *adj_params), requires_grad = self.sde.get_state(t0, y0,
+                                                                                                      extra_states=True)
         half_adj_y0 = 0.5 * adj_y0
 
         adj_y_prime = half_adj_y0
@@ -144,6 +145,10 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
                                                  retain_graph=True,
                                                  create_graph=requires_grad)
         adj_y_prime = adj_y_prime + vjp_y_prime
+        assert len(adj_params) == len(vjp_params)
+        assert len(adj_params) == len(vjp_params2)
+        adj_params = [adj_param_i + vjp_param_i + vjp_param2_i
+                      for adj_param_i, vjp_param_i, vjp_param2_i in zip(adj_params, vjp_params, vjp_params2)]
 
         forward_z1 = forward_z0 - f_prime * dt - self.forward_sde.prod(g_prime, dW)
 
@@ -158,7 +163,7 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
 
         forward_y1 = forward_y0 - forward_f1 * half_dt - self.forward_sde.prod(forward_g1, half_dW)
 
-        y1 = misc.flatten([forward_y1, adj_y1, adj_f1, adj_g1, adj_z1] + vjp_params).unsqueeze(0)
+        y1 = misc.flatten([forward_y1, adj_y1, adj_f1, adj_g1, adj_z1] + adj_params).unsqueeze(0)
 
         return y1, (forward_f1, forward_g1, forward_z1)
 
@@ -168,7 +173,8 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         dW = self.bm(t0, t1)
         half_dt = 0.5 * dt
         half_dW = 0.5 * dW
-        forward_y0, adj_y0, (adj_f0, adj_g0, adj_z0), requires_grad = self.sde.get_state(t0, y0)
+        forward_y0, adj_y0, (adj_f0, adj_g0, adj_z0, *adj_params), requires_grad = self.sde.get_state(t0, y0,
+                                                                                                      extra_states=True)
         adj_y0_half_dt = adj_y0 * half_dt
         adj_y0_half_dW = self._adjoint_of_prod(adj_y0, half_dW)
 
@@ -193,6 +199,8 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
                                           retain_graph=True,
                                           create_graph=requires_grad)
         adj_z0 = adj_z0 + vjp_z
+        assert len(adj_params) == len(vjp_params)
+        adj_params = [adj_param_i + vjp_param_i for adj_param_i, vjp_param_i in zip(adj_params, vjp_params)]
 
         # TODO
         # with torch.enable_grad():
@@ -207,6 +215,6 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         adj_f1 = adj_f1 + adj_z0 * dt
         adj_g1 = adj_g1 + self._adjoint_of_prod(adj_z0, dW)
 
-        y1 = misc.flatten([forward_y1, adj_y1, adj_f1, adj_g1, adj_z1] + vjp_params).unsqueeze(0)
+        y1 = misc.flatten([forward_y1, adj_y1, adj_f1, adj_g1, adj_z1] + adj_params).unsqueeze(0)
 
         return y1, (forward_f1, forward_g1, forward_z1)
