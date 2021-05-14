@@ -120,14 +120,21 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         adj_g0 = adj_g0 + self._adjoint_of_prod(adj_y0, quarter_dW)
 
         t_prime = t0 + half_dt
-        y_prime = 2 * (forward_y0 - forward_f0 * quarter_dt - self.forward_sde.prod(forward_g0, quarter_dW)) - forward_z0
+        y_prime = 2 * (forward_y0 - forward_f0 * quarter_dt
+                       - self.forward_sde.prod(forward_g0, quarter_dW)) - forward_z0
 
-        vjp_z, *vjp_params = misc.vjp(outputs=[forward_f0, forward_g0],
-                                      inputs=[forward_z0] + self.sde.params,
-                                      grad_outputs=[adj_f0, adj_g0],
-                                      allow_unused=True,
-                                      retain_graph=True,
-                                      create_graph=requires_grad)
+        # TODO: efficiency. It should be possible to make one fewer forward call by re-using the forward computation
+        #  in the previous step.
+        with torch.enable_grad():
+            if not forward_z0.requires_grad:
+                forward_z0 = forward_z0.detach().requires_grad_()
+            re_forward_f0, re_forward_g0 = self.forward_sde.f_and_g(-t0, forward_z0)
+            vjp_z, *vjp_params = misc.vjp(outputs=[re_forward_f0, re_forward_g0],
+                                          inputs=[forward_z0] + self.sde.params,
+                                          grad_outputs=[adj_f0, adj_g0],
+                                          allow_unused=True,
+                                          retain_graph=True,
+                                          create_graph=requires_grad)
         adj_z0 = adj_z0 + vjp_z
 
         adj_z1 = adj_z0
@@ -156,11 +163,7 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         adj_f1 = adj_y_prime * half_dt
         adj_g1 = self._adjoint_of_prod(adj_y_prime, half_dW)
 
-        with torch.enable_grad():
-            if not forward_z1.requires_grad:
-                forward_z1 = forward_z1.detach().requires_grad_()
-            forward_f1, forward_g1 = self.forward_sde.f_and_g(-t1, forward_z1)
-
+        forward_f1, forward_g1 = self.forward_sde.f_and_g(-t1, forward_z1)
         forward_y1 = forward_y0 - forward_f1 * half_dt - self.forward_sde.prod(forward_g1, half_dW)
 
         y1 = misc.flatten([forward_y1, adj_y1, adj_f1, adj_g1, adj_z1] + adj_params).unsqueeze(0)
@@ -186,26 +189,27 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
         adj_g1 = adj_y0_half_dW
         adj_g0 = adj_g0 + adj_y0_half_dW
 
-        # TODO
+        # TODO: efficiency. It should be possible to make one fewer forward call by re-using the forward computation
+        #  in the previous step.
         with torch.enable_grad():
             if not forward_z0.requires_grad:
                 forward_z0 = forward_z0.detach().requires_grad_()
             re_forward_f0, re_forward_g0 = self.forward_sde.f_and_g(-t0, forward_z0)
 
-            vjp_z, *vjp_params = misc.vjp(outputs=(re_forward_f0, re_forward_g0),
-                                          inputs=[forward_z0] + self.sde.params,
-                                          grad_outputs=[adj_f0, adj_g0],
-                                          allow_unused=True,
-                                          retain_graph=True,
-                                          create_graph=requires_grad)
+            try:
+                vjp_z, *vjp_params = misc.vjp(outputs=(re_forward_f0, re_forward_g0),
+                                              inputs=[forward_z0] + self.sde.params,
+                                              grad_outputs=[adj_f0, adj_g0],
+                                              allow_unused=True,
+                                              retain_graph=True,
+                                              create_graph=requires_grad)
+            except:
+                breakpoint()
+                raise
         adj_z0 = adj_z0 + vjp_z
         assert len(adj_params) == len(vjp_params)
         adj_params = [adj_param_i + vjp_param_i for adj_param_i, vjp_param_i in zip(adj_params, vjp_params)]
 
-        # TODO
-        # with torch.enable_grad():
-        #     if not forward_z1.requires_grad:
-        #         forward_z1 = forward_z1.detach().requires_grad_()
         forward_f1, forward_g1 = self.forward_sde.f_and_g(-t1, forward_z1)
         forward_y1 = forward_y0 - (forward_f0 + forward_f1) * half_dt - self.forward_sde.prod(forward_g0 + forward_g1,
                                                                                               half_dW)
