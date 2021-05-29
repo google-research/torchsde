@@ -244,8 +244,7 @@ def sdeint_adjoint(sde: nn.Module,
     # Note that all of these warnings are only applicable for reversible solvers with sdeint_adjoint; none of them
     # apply to sdeint.
     try:
-        expected_adjoint_method = {METHODS.reversible_midpoint: METHODS.adjoint_reversible_midpoint,
-                                   METHODS.reversible_heun: METHODS.adjoint_reversible_heun}[method]
+        expected_adjoint_method = {METHODS.reversible_heun: METHODS.adjoint_reversible_heun}[method]
     except KeyError:
         pass
     else:
