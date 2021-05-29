@@ -277,10 +277,6 @@ def sdeint_adjoint(sde: nn.Module,
     if extra_solver_state is None:
         extra_solver_state = solver.init_extra_solver_state(ts[0], y0)
 
-    # TODO
-    y0 = y0.view(y0.shape)
-    extra_solver_state = tuple(x.view(x.shape) for x in extra_solver_state)
-
     ys, *extra_solver_state = _SdeintAdjointMethod.apply(
         sde, ts, dt, bm, solver, method, adjoint_method, adjoint_adaptive, adjoint_rtol, adjoint_atol, dt_min,
         adjoint_options, len(extra_solver_state), y0, *extra_solver_state, *adjoint_params
