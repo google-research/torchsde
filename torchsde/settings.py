@@ -31,8 +31,6 @@ class METHODS(metaclass=ContainerMeta):
     milstein = 'milstein'
     srk = 'srk'
     midpoint = 'midpoint'
-    reversible_midpoint = 'reversible_midpoint'
-    adjoint_reversible_midpoint = 'adjoint_reversible_midpoint'
     reversible_heun = 'reversible_heun'
     adjoint_reversible_heun = 'adjoint_reversible_heun'
     heun = 'heun'
@@ -61,4 +59,3 @@ class LEVY_AREA_APPROXIMATIONS(metaclass=ContainerMeta):  # noqa
 
 class METHOD_OPTIONS(metaclass=ContainerMeta):  # noqa
     grad_free = 'grad_free'
-    alternate = 'alternate'

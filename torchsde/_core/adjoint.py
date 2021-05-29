@@ -51,10 +51,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
         extra_solver_state = tuple(x.detach() for x in extra_solver_state)
         ys, extra_solver_state = solver.integrate(y0, ts, extra_solver_state)
 
-        if method == METHODS.reversible_midpoint and adjoint_method == METHODS.adjoint_reversible_midpoint:
-            ctx.saved_extras_for_backward = True
-            extras_for_backward = extra_solver_state
-        elif method == METHODS.reversible_heun and adjoint_method == METHODS.adjoint_reversible_heun:
+        if method == METHODS.reversible_heun and adjoint_method == METHODS.adjoint_reversible_heun:
             ctx.saved_extras_for_backward = True
             extras_for_backward = extra_solver_state
         else:

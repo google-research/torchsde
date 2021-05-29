@@ -35,9 +35,9 @@ def main():
     sde = NeuralAdditive(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Milstein and log-ODE should in theory both superfluously compute zeros here.
     # We include them anyway to check that they do what they claim to do.
-    methods = ('euler_heun', 'heun', 'midpoint', 'reversible_heun', 'reversible_heun', 'milstein', 'milstein', 'log_ode')
-    options = (None, None, None, None, dict(alternate=True), None, dict(grad_free=True), None)
-    labels = ('euler-heun', 'heun', 'midpoint', 'reversible_heun', 'alternate reversible_heun' 'milstein', 'grad-free milstein', 'log_ode')
+    methods = ('euler_heun', 'heun', 'midpoint', 'reversible_heun', 'milstein', 'milstein', 'log_ode')
+    options = (None, None, None, None, None, dict(grad_free=True), None)
+    labels = ('euler-heun', 'heun', 'midpoint', 'reversible_heun', 'milstein', 'grad-free milstein', 'log_ode')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'stratonovich_additive')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)
