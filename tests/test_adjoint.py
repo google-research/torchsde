@@ -90,18 +90,16 @@ def test_against_numerical(sde_cls, sde_type, method, options, adaptive):
 def _methods_dt_tol():
     for sde_type, method, options in _methods():
         if method == METHODS.reversible_heun:
-            yield sde_type, method, options, 0.05, 1e-3, 1e-4
+            yield sde_type, method, options, 2**-3, 1e-3, 1e-4
             yield sde_type, method, options, 1e-3, 1e-3, 1e-4
         else:
             yield sde_type, method, options, 1e-3, 1e-2, 1e-2
 
 
-# TODO: these tests are mysteriously flaky when using ExScalar.
-# TODO: these tests are mysteriously flaky when using srk/Milstein and NeuralDiagonal.
 @pytest.mark.parametrize("sde_cls", [problems.NeuralDiagonal, problems.NeuralScalar, problems.NeuralAdditive,
                                      problems.NeuralGeneral])
 @pytest.mark.parametrize("sde_type, method, options, dt, rtol, atol", _methods_dt_tol())
-@pytest.mark.parametrize("len_ts", [2, 11])
+@pytest.mark.parametrize("len_ts", [2, 9])
 def test_against_sdeint(sde_cls, sde_type, method, options, dt, rtol, atol, len_ts):
     # Skipping below, since method not supported for corresponding noise types.
     if sde_cls.noise_type == NOISE_TYPES.general and method in (METHODS.milstein, METHODS.srk):
@@ -115,7 +113,7 @@ def test_against_sdeint(sde_cls, sde_type, method, options, dt, rtol, atol, len_
         NOISE_TYPES.additive: 2
     }[sde_cls.noise_type]
     batch_size = 4
-    ts = torch.linspace(0.0, 0.5, len_ts, device=device, dtype=torch.float64)
+    ts = torch.linspace(0.0, 1.0, len_ts, device=device, dtype=torch.float64)
     t0 = ts[0]
     t1 = ts[-1]
     y0 = torch.full((batch_size, d), 0.1, device=device, dtype=torch.float64, requires_grad=True)
