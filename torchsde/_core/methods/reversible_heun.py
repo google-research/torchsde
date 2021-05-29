@@ -196,16 +196,12 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
                 forward_z0 = forward_z0.detach().requires_grad_()
             re_forward_f0, re_forward_g0 = self.forward_sde.f_and_g(-t0, forward_z0)
 
-            try:
-                vjp_z, *vjp_params = misc.vjp(outputs=(re_forward_f0, re_forward_g0),
-                                              inputs=[forward_z0] + self.sde.params,
-                                              grad_outputs=[adj_f0, adj_g0],
-                                              allow_unused=True,
-                                              retain_graph=True,
-                                              create_graph=requires_grad)
-            except:
-                breakpoint()
-                raise
+            vjp_z, *vjp_params = misc.vjp(outputs=(re_forward_f0, re_forward_g0),
+                                          inputs=[forward_z0] + self.sde.params,
+                                          grad_outputs=[adj_f0, adj_g0],
+                                          allow_unused=True,
+                                          retain_graph=True,
+                                          create_graph=requires_grad)
         adj_z0 = adj_z0 + vjp_z
         assert len(adj_params) == len(vjp_params)
         adj_params = [adj_param_i + vjp_param_i for adj_param_i, vjp_param_i in zip(adj_params, vjp_params)]

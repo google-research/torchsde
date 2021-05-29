@@ -34,9 +34,10 @@ def main():
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
     sde = NeuralGeneral(d=d, m=m, sde_type=SDE_TYPES.stratonovich).to(device)
     # Don't include Milstein as it doesn't work for general noise.
-    methods = ('euler_heun', 'heun', 'midpoint', 'reversible_midpoint', 'log_ode')
-    options = (None, None, None, None, None)
-    labels = ('euler_heun', 'heun', 'midpoint', 'reversible_midpoint', 'log_ode')
+    methods = ('euler_heun', 'heun', 'midpoint', 'reversible_heun', 'reversible_heun', 'log_ode')
+    options = (None, None, None, None, dict(alternate=True), None)
+    labels = ('euler-heun', 'heun', 'midpoint', 'reversible_heun', 'alternate reversible_heun', 'log_ode')
+
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'stratonovich_general')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)

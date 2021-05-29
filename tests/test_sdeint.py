@@ -243,11 +243,10 @@ def test_reversibility(sde_cls):
     y0 = torch.full((batch_size, state_size), 0.1)
     ts = torch.linspace(0, (t_size - 1) * dt, t_size)
     bm = torchsde.BrownianInterval(t0=ts[0], t1=ts[-1], size=(batch_size, brownian_size))
-    ys, extra_solver_states = torchsde.sdeint(sde, y0, ts, bm=bm, method='reversible_midpoint', dt=dt, extra=True)
-    extra_solver_state = tuple(-extra_solver_state_j for extra_solver_state_j in extra_solver_states)
+    ys, (f, g, z) = torchsde.sdeint(sde, y0, ts, bm=bm, method='reversible_heun', dt=dt, extra=True)
     backward_ts = -ts.flip(0)
     backward_ys = torchsde.sdeint(minus_sde, ys[-1], backward_ts, bm=torchsde.ReverseBrownian(bm),
-                                  method='reversible_midpoint', dt=dt, extra_solver_state=extra_solver_state)
+                                  method='reversible_heun', dt=dt, extra_solver_state=(-f, -g, z))
     backward_ys = backward_ys.flip(0)
 
     torch.testing.assert_allclose(ys, backward_ys, rtol=1e-6, atol=1e-6)
