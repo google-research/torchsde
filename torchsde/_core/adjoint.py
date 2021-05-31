@@ -59,7 +59,7 @@ class _SdeintAdjointMethod(torch.autograd.Function):
             ctx.saved_extras_for_backward = False
             extras_for_backward = ()
         ctx.save_for_backward(ys, ts, *extras_for_backward, *adjoint_params)
-        return ys, *extra_solver_state
+        return (ys, *extra_solver_state)
 
     @staticmethod
     def backward(ctx, grad_ys, *grad_extra_solver_state):  # noqa
