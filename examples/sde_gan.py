@@ -20,7 +20,7 @@ https://arxiv.org/abs/2102.03657
 This reproduces the toy example in Section 4.1 of that paper.
 
 This additionally uses the improvements introduced in "Efficient and Accurate Gradients for Neural SDEs".
-https://arxiv.org/abs/TODO
+https://arxiv.org/abs/2105.13493
 
 To run this file, first run the following to install extra requirements:
 pip install fire

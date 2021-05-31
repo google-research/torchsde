@@ -75,7 +75,7 @@ The available solvers depends on the SDE type and the noise type.
 - `"heun"`: [Heun's method](https://arxiv.org/abs/1102.4401)
 - `"midpoint"`: Midpoint method
 - `"milstein"`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
-- `"reversible_heun"`: The reversible midpoint method, as introduced in [\[1\]](TODO).
+- `"reversible_heun"`: The reversible midpoint method, as introduced in [\[1\]](https://arxiv.org/abs/2105.13493).
 - `"adjoint_reversible_heun"`: A special method: pass this as part of `sdeint_adjoint(..., method="reversible_heun", adjoint_method="adjoint_reversible_heun")` for more accurate gradient calculations with the adjoint method, see [the notes on adjoint methods](#adjoints).
 
 Note that Milstein and SRK don't support general noise.
@@ -111,7 +111,7 @@ Use Stratonovich SDEs if possible, as these have a computationally cheaper adjoi
 
 Solving the adjoint SDE implies making some numerical error. If not managed carefully then this can make training more difficult, as the gradients calculated will be less accurate. Whilst the issue can just be ignored -- it's usually not a deal-breaker -- there are two main options available for managing it:
 
-- The usual best approach is to use `method="reversible_heun"` and `adjoint_method="adjoint_reversible_heun"`, as introduced in [\[1\]](TODO). These are a special pair of solvers which when used in conjunction have almost zero numerical error, as the adjoint solver carefully reconstructs the numerical trajectory taken by the forward solver.
+- The usual best approach is to use `method="reversible_heun"` and `adjoint_method="adjoint_reversible_heun"`, as introduced in [\[1\]](https://arxiv.org/abs/2105.13493). These are a special pair of solvers which when used in conjunction have almost zero numerical error, as the adjoint solver carefully reconstructs the numerical trajectory taken by the forward solver.
 - Use adaptive step sizes, or small step sizes, on both the forward and backward pass. This usually implies additional computational cost, but can reduce numerical error.
 
 ## Calculating KL divergence
@@ -145,7 +145,7 @@ The `bm` argument to `sdeint` and `sdeint_adjoint` allows for tighter control on
 
 `BrownianInterval` can also be used as a standalone object, if you just want to be able to sample Brownian motion for any other reason.
 
-The time and memory efficient sampling provided by the Brownian Interval was introduced in [\[1\]](TODO).
+The time and memory efficient sampling provided by the Brownian Interval was introduced in [\[1\]](https://arxiv.org/abs/2105.13493).
 
 ### Examples
 **Quick example**
@@ -231,7 +231,7 @@ In particular, space-time Levy area is used in the stochastic Runge--Kutta solve
 
 # References
 
-\[1\] Patrick Kidger, James Foster, Xuechen Li, Terry Lyons. "Efficient and Accurate Gradients for Neural SDEs". 2021. [[arXiv]](TODO)
+\[1\] Patrick Kidger, James Foster, Xuechen Li, Terry Lyons. "Efficient and Accurate Gradients for Neural SDEs". 2021. [[arXiv]](https://arxiv.org/abs/2105.13493)
 
 \[2\] Xuechen Li, Ting-Kam Leonard Wong, Ricky T. Q. Chen, David Duvenaud. "Scalable Gradients for Stochastic Differential Equations". *International Conference on Artificial Intelligence and Statistics.* 2020. [[arXiv]](https://arxiv.org/pdf/2001.01328.pdf)
 
