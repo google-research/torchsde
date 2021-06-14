@@ -38,7 +38,7 @@ The output tensor `ys` will have shape `(t_size, batch_size, state_size)`, and c
 - `diagonal`: The diffusion `g` is element-wise and has output size `(batch_size, state_size)`. The Brownian motion is a batch of `state_size`-dimensional Brownian motions.
 - `general`: The diffusion `g` has output size `(batch_size, state_size, brownian_size)`. The Brownian motion is a batch of `brownian_size`-dimensional Brownian motions.
 
-Whilst `scalar`, `additive` and `general` are special cases of `general` noise, they allows for additional solvers to be used and additional optimisations to take place.
+Whilst `scalar`, `additive` and `diagonal` are special cases of `general` noise, they allow for additional solvers to be used and additional optimisations to take place.
 
 ### Keyword arguments for `sdeint`
 - `bm`: A `BrownianInterval` object, see [below](#brownian-motion). Optionally include to control the Brownian motion.
@@ -55,7 +55,11 @@ Whilst `scalar`, `additive` and `general` are special cases of `general` noise, 
 
 
 ### Providing specialised methods
-If your drift/diffusion have special structure, for example the drift and diffusion share some computations, then it may be more efficient to evaluate them together rather than alone. As such, if the following methods are present on `sde`, then they will be used if possible: `g_prod(t, y, v)`, `f_and_g(t, y)`, `f_and_g_prod(t, y, v)`. Here `g_prod` is expected to compute the batch matrix-vector product between the diffusion and the vector `v`. `f_and_*` should return a 2-tuple of `f(t, y)` and `g(t, y)`/`g_prod(t, y, v)` as appropriate.
+If your drift/diffusion have special structure, for example the drift and diffusion share some computations, then it may be more efficient to evaluate them together rather than alone.
+
+As such, if the following methods are present on `sde`, then they will be used if possible: `g_prod(t, y, v)`, `f_and_g(t, y)`, `f_and_g_prod(t, y, v)`. Here `g_prod` is expected to compute the batch matrix-vector product between the diffusion and the vector `v`. `f_and_*` should return a 2-tuple of `f(t, y)` and `g(t, y)`/`g_prod(t, y, v)` as appropriate.
+
+(Although at present the `names` argument only works for renaming `f`, `g`, `h`, and not any of these.)
 
 ## Choice of solver
 
@@ -66,7 +70,7 @@ The available solvers depends on the SDE type and the noise type.
 **Ito solvers**
 
 - `"euler"`: [Euler-Maruyama method](https://en.wikipedia.org/wiki/Euler%E2%80%93Maruyama_method)
-- `"milstein"`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method).
+- `"milstein"`: [Milstein method](https://en.wikipedia.org/wiki/Milstein_method)
 - `"srk"`: [Stochastic Runge-Kutta method](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_method_(SDE))
 
 **Stratonovich solvers**
@@ -88,7 +92,7 @@ If calculating an Ito SDE, then `srk` will generally produce a more accurate est
 
 If calculating a Stratonovich SDE, then `midpoint` , `heun` and `milstein` are more computationally expensive. `euler_heun` and `reversible_heun` are the cheapest.
 
-If training neural SDEs _without_ the adjoint method then accurate SDE solutions usually aren't super important - the vector fields can learn to work with the discretisation chosen - whilst computational cost often matters a lot. This makes `euler` (for Ito) or `reversible_heun` (for Stratonovich) good choices.
+If training neural SDEs _without_ the adjoint method then accurate SDE solutions usually aren't super important (unless e.g. wanting to use a different discretisation between training and inference). So the vector fields can learn to work with the discretisation chosen, whilst computational cost often matters a lot. This makes `euler` (for Ito) or `reversible_heun` (for Stratonovich) good choices.
 
 If training neural SDEs _with_ the adjoint method, then specifically Stratonovich SDEs and `reversible_heun` come strongly recommended; [see the notes on adjoints](#adjoints).
 

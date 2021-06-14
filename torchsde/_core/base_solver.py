@@ -23,7 +23,7 @@ from . import interp
 from .base_sde import BaseSDE
 from .._brownian import BaseBrownian
 from ..settings import NOISE_TYPES
-from ..types import Scalar, Tensor, Dict, Tuple
+from ..types import Scalar, Tensor, Dict, Tensors, Tuple
 
 
 class BaseSDESolver(metaclass=better_abc.ABCMeta):
@@ -69,11 +69,11 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
     def __repr__(self):
         return f"{self.__class__.__name__} of strong order: {self.strong_order}, and weak order: {self.weak_order}"
 
-    def init_extra_solver_state(self, t0, y0) -> Tuple[Tensor, ...]:
+    def init_extra_solver_state(self, t0, y0) -> Tensors:
         return ()
 
     @abc.abstractmethod
-    def step(self, t0: Scalar, t1: Scalar, y0: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
+    def step(self, t0: Scalar, t1: Scalar, y0: Tensor, extra0: Tensors) -> Tuple[Tensor, Tensors]:
         """Propose a step with step size from time t to time next_t, with
          current state y.
 
@@ -89,7 +89,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def integrate(self, y0: Tensor, ts: Tensor, extra0: Tuple[Tensor, ...]) -> Tuple[Tensor, Tuple[Tensor, ...]]:
+    def integrate(self, y0: Tensor, ts: Tensor, extra0: Tensors) -> Tuple[Tensor, Tensors]:
         """Integrate along trajectory.
 
         Args:

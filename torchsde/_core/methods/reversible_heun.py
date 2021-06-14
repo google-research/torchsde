@@ -12,6 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+"""Reversible Heun method from
+
+https://arxiv.org/abs/2105.13493
+
+Known to be strong order 0.5 in general and strong order 1.0 for additive noise.
+Precise strong orders for diagonal/scalar noise, and weak order in general, are
+for the time being unknown.
+
+This solver uses some extra state such that it is _algebraically reversible_:
+it is possible to reconstruct its input (y0, f0, g0, z0) given its output
+(y1, f1, g1, z1).
+
+This means we can backpropagate by (a) inverting these operations, (b) doing a local
+forward operation to construct a computation graph, (c) differentiate the local
+forward. This is what the adjoint method here does.
+
+This is in contrast to standard backpropagation, which requires holding all of these
+values in memory.
+
+This is contrast to the standard continuous adjoint method (sdeint_adjoint), which
+can only perform this procedure approximately, and only produces approximate gradients
+as a result.
+"""
+
 import torch
 
 from .. import adjoint_sde
@@ -35,6 +60,9 @@ class ReversibleHeun(base_solver.BaseSDESolver):
 
     def step(self, t0, t1, y0, extra0):
         f0, g0, z0 = extra0
+        # f is a drift-like quantity
+        # g is a diffusion-like quantity
+        # z is a state-like quantity (like y)
         dt = t1 - t0
         dW = self.bm(t0, t1)
 
@@ -56,7 +84,7 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
             raise ValueError(f"{METHODS.adjoint_reversible_heun} can only be used for adjoint_method.")
         self.strong_order = 1.0 if sde.noise_type == NOISE_TYPES.additive else 0.5
         super(AdjointReversibleHeun, self).__init__(sde=sde, **kwargs)
-        self.forward_sde = sde.base_sde
+        self.forward_sde = sde.forward_sde
 
         if self.forward_sde.noise_type == NOISE_TYPES.diagonal:
             self._adjoint_of_prod = lambda tensor1, tensor2: tensor1 * tensor2
@@ -100,8 +128,7 @@ class AdjointReversibleHeun(base_solver.BaseSDESolver):
                                           retain_graph=True,
                                           create_graph=requires_grad)
         adj_z0 = adj_z0 + vjp_z
-        assert len(adj_params) == len(vjp_params)
-        adj_params = [adj_param_i + vjp_param_i for adj_param_i, vjp_param_i in zip(adj_params, vjp_params)]
+        adj_params = misc.seq_add(adj_params, vjp_params)
 
         forward_f1, forward_g1 = self.forward_sde.f_and_g(-t1, forward_z1)
         forward_y1 = forward_y0 - (forward_f0 + forward_f1) * half_dt - self.forward_sde.prod(forward_g0 + forward_g1,

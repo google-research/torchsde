@@ -21,7 +21,7 @@ from . import methods
 from . import misc
 from .._brownian import BaseBrownian, BrownianInterval
 from ..settings import LEVY_AREA_APPROXIMATIONS, METHODS, NOISE_TYPES, SDE_TYPES
-from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Tuple, Vector
+from ..types import Any, Dict, Optional, Scalar, Tensor, Tensors, TensorOrTensors, Vector
 
 
 def sdeint(sde,
@@ -38,7 +38,7 @@ def sdeint(sde,
            names: Optional[Dict[str, str]] = None,
            logqp: bool = False,
            extra: bool = False,
-           extra_solver_state: Optional[Tuple[Tensor, ...]] = None,
+           extra_solver_state: Optional[Tensors] = None,
            **unused_kwargs) -> TensorOrTensors:
     """Numerically integrate an SDE.
 

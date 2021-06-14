@@ -23,7 +23,7 @@ from . import sdeint
 from .adjoint_sde import AdjointSDE
 from .._brownian import BaseBrownian, ReverseBrownian
 from ..settings import METHODS, NOISE_TYPES, SDE_TYPES
-from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Tuple, Vector
+from ..types import Any, Dict, Optional, Scalar, Tensor, Tensors, TensorOrTensors, Vector
 
 
 class _SdeintAdjointMethod(torch.autograd.Function):
@@ -147,7 +147,7 @@ def sdeint_adjoint(sde: nn.Module,
                    names: Optional[Dict[str, str]] = None,
                    logqp: bool = False,
                    extra: bool = False,
-                   extra_solver_state: Optional[Tuple[Tensor, ...]] = None,
+                   extra_solver_state: Optional[Tensors] = None,
                    **unused_kwargs) -> TensorOrTensors:
     """Numerically integrate an SDE with stochastic adjoint support.
 
@@ -235,21 +235,14 @@ def sdeint_adjoint(sde: nn.Module,
                         [ts, dt, rtol, adjoint_rtol, atol, adjoint_atol, dt_min])
     adjoint_params = tuple(sde.parameters()) if adjoint_params is None else tuple(adjoint_params)
     adjoint_params = filter(lambda x: x.requires_grad, adjoint_params)
-    adjoint_method = _select_default_adjoint_method(sde, adjoint_method)
-    if adjoint_options is None:
-        adjoint_options = {}
-    else:
-        adjoint_options = adjoint_options.copy()
+    adjoint_method = _select_default_adjoint_method(sde, method, adjoint_method)
+    adjoint_options = {} if adjoint_options is None else adjoint_options.copy()
 
     # Note that all of these warnings are only applicable for reversible solvers with sdeint_adjoint; none of them
     # apply to sdeint.
-    try:
-        expected_adjoint_method = {METHODS.reversible_heun: METHODS.adjoint_reversible_heun}[method]
-    except KeyError:
-        pass
-    else:
-        if adjoint_method != expected_adjoint_method:
-            warnings.warn(f"method={repr(method)}, but adjoint_method!={repr(expected_adjoint_method)}.")
+    if method == METHODS.reversible_heun:
+        if adjoint_method != METHODS.adjoint_reversible_heun:
+            warnings.warn(f"method={repr(method)}, but adjoint_method!={repr(METHODS.adjoint_reversible_heun)}.")
         if adaptive or adjoint_adaptive:
             warnings.warn(f"A limitation of the current method={repr(method)} implementation is "
                           f"that it does not save the time steps used. This means that it may not be perfectly "
@@ -285,10 +278,14 @@ def sdeint_adjoint(sde: nn.Module,
     return sdeint.parse_return(y0, ys, extra_solver_state, extra, logqp)
 
 
-def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: Optional[str]) -> str:
+def _select_default_adjoint_method(sde: base_sde.ForwardSDE, method: str, adjoint_method: Optional[str]) -> str:
     """Select the default method for adjoint computation based on the noise type of the forward SDE."""
-    if adjoint_method is None:
-        adjoint_method = {
+    if adjoint_method is not None:
+        return adjoint_method
+    elif method == METHODS.reversible_heun:
+        return METHODS.adjoint_reversible_heun
+    else:
+        return {
             SDE_TYPES.ito: {
                 NOISE_TYPES.diagonal: METHODS.milstein,
                 NOISE_TYPES.additive: METHODS.euler,
@@ -297,4 +294,3 @@ def _select_default_adjoint_method(sde: base_sde.ForwardSDE, adjoint_method: Opt
             }[sde.noise_type],
             SDE_TYPES.stratonovich: METHODS.midpoint,
         }[sde.sde_type]
-    return adjoint_method
