@@ -33,9 +33,9 @@ def main():
     ts = torch.linspace(t0, t1, steps=steps, device=device)
     dts = tuple(2 ** -i for i in range(1, 7))  # For checking strong order.
     sde = NeuralScalar(d=d, sde_type=SDE_TYPES.stratonovich).to(device)
-    methods = ('euler_heun', 'heun', 'midpoint', 'milstein', 'milstein', 'log_ode')
-    options = (None, None, None, None, dict(grad_free=True), None)
-    labels = ('euler-heun', 'heun', 'midpoint', 'milstein', 'grad-free milstein', 'log_ode')
+    methods = ('euler_heun', 'heun', 'midpoint', 'reversible_heun', 'milstein', 'milstein', 'log_ode')
+    options = (None, None, None, None, None, dict(grad_free=True), None)
+    labels = ('euler-heun', 'heun', 'midpoint', 'reversible_heun', 'milstein', 'grad-free milstein', 'log_ode')
     img_dir = os.path.join(os.path.dirname(__file__), 'plots', 'stratonovich_scalar')
 
     y0 = torch.full((small_batch_size, d), fill_value=0.1, device=device)

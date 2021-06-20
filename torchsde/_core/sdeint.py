@@ -21,7 +21,7 @@ from . import methods
 from . import misc
 from .._brownian import BaseBrownian, BrownianInterval
 from ..settings import LEVY_AREA_APPROXIMATIONS, METHODS, NOISE_TYPES, SDE_TYPES
-from ..types import Any, Dict, Optional, Scalar, Tensor, TensorOrTensors, Vector
+from ..types import Any, Dict, Optional, Scalar, Tensor, Tensors, TensorOrTensors, Vector
 
 
 def sdeint(sde,
@@ -29,14 +29,16 @@ def sdeint(sde,
            ts: Vector,
            bm: Optional[BaseBrownian] = None,
            method: Optional[str] = None,
-           dt: Optional[Scalar] = 1e-3,
-           adaptive: Optional[bool] = False,
-           rtol: Optional[Scalar] = 1e-5,
-           atol: Optional[Scalar] = 1e-4,
-           dt_min: Optional[Scalar] = 1e-5,
+           dt: Scalar = 1e-3,
+           adaptive: bool = False,
+           rtol: Scalar = 1e-5,
+           atol: Scalar = 1e-4,
+           dt_min: Scalar = 1e-5,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
-           logqp: Optional[bool] = False,
+           logqp: bool = False,
+           extra: bool = False,
+           extra_solver_state: Optional[Tensors] = None,
            **unused_kwargs) -> TensorOrTensors:
     """Numerically integrate an SDE.
 
@@ -68,11 +70,18 @@ def sdeint(sde,
             use methods with names not in `("f", "g")`, e.g. to use the
             method "foo" for the drift, we supply `names={"drift": "foo"}`.
         logqp (bool, optional): If `True`, also return the log-ratio penalty.
-            This argument will be deprecated in the future and is only included
-            to support backward compatibility.
+        extra (bool, optional): If `True`, also return the extra hidden state
+            used internally in the solver.
+        extra_solver_state: (tuple of Tensors, optional): Additional state to
+            initialise the solver with. Some solvers keep track of additional
+            state besides y0, and this offers a way to optionally initialise
+            that state.
 
     Returns:
         A single state tensor of size (T, batch_size, d).
+        if logqp is True, then the log-ratio penalty is also returned.
+        If extra is True, the any extra internal state of the solver is also
+        returned.
 
     Raises:
         ValueError: An error occurred due to unrecognized noise type/method,
@@ -81,26 +90,29 @@ def sdeint(sde,
     misc.handle_unused_kwargs(unused_kwargs, msg="`sdeint`")
     del unused_kwargs
 
-    sde, y0, ts, bm, method = check_contract(sde, y0, ts, bm, method, names, logqp)
+    sde, y0, ts, bm, method, options = check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp)
     misc.assert_no_grad(['ts', 'dt', 'rtol', 'atol', 'dt_min'],
                         [ts, dt, rtol, atol, dt_min])
-    return integrate(
+
+    solver_fn = methods.select(method=method, sde_type=sde.sde_type)
+    solver = solver_fn(
         sde=sde,
-        y0=y0,
-        ts=ts,
         bm=bm,
-        method=method,
         dt=dt,
         adaptive=adaptive,
         rtol=rtol,
         atol=atol,
         dt_min=dt_min,
-        options=options,
-        logqp=logqp
+        options=options
     )
+    if extra_solver_state is None:
+        extra_solver_state = solver.init_extra_solver_state(ts[0], y0)
+    ys, extra_solver_state = solver.integrate(y0, ts, extra_solver_state)
+
+    return parse_return(y0, ys, extra_solver_state, extra, logqp)
 
 
-def check_contract(sde, y0, ts, bm, method, names, logqp):
+def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
     if names is None:
         names_to_change = {}
     else:
@@ -150,6 +162,8 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
         if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
             raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
         ts = torch.tensor(ts, dtype=y0.dtype, device=y0.device)
+    if not misc.is_strictly_increasing(ts):
+        raise ValueError("Evaluation times `ts` must be strictly increasing.")
 
     batch_sizes = []
     state_sizes = []
@@ -255,39 +269,32 @@ def check_contract(sde, y0, ts, bm, method, names, logqp):
         bm = BrownianInterval(t0=ts[0], t1=ts[-1], size=(batch_sizes[0], noise_sizes[0]), dtype=y0.dtype,
                               device=y0.device, levy_area_approximation=levy_area_approximation)
 
-    return sde, y0, ts, bm, method
-
-
-def integrate(sde, y0, ts, bm, method, dt, adaptive, rtol, atol, dt_min, options, logqp=False):
     if options is None:
         options = {}
+    else:
+        options = options.copy()
 
-    solver_fn = methods.select(method=method, sde_type=sde.sde_type)
-    solver = solver_fn(
-        sde=sde,
-        bm=bm,
-        y0=y0,
-        dt=dt,
-        adaptive=adaptive,
-        rtol=rtol,
-        atol=atol,
-        dt_min=dt_min,
-        options=options
-    )
     if adaptive and method == METHODS.euler and sde.noise_type != NOISE_TYPES.additive:
         warnings.warn(f"Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
                       f"time-stepping with the Euler--Maruyama method with non-additive noise.")
 
-    ys = solver.integrate(ts)
+    return sde, y0, ts, bm, method, options
 
-    # --- Backwards compatibility: v0.1.1. ---
+
+def parse_return(y0, ys, extra_solver_state, extra, logqp):
     if logqp:
         ys, log_ratio = ys.split(split_size=(y0.size(1) - 1, 1), dim=2)
         log_ratio_increments = torch.stack(
             [log_ratio_t_plus_1 - log_ratio_t
              for log_ratio_t_plus_1, log_ratio_t in zip(log_ratio[1:], log_ratio[:-1])], dim=0
         ).squeeze(dim=2)
-        return ys, log_ratio_increments
-    # ----------------------------------------
 
-    return ys
+        if extra:
+            return ys, log_ratio_increments, extra_solver_state
+        else:
+            return ys, log_ratio_increments
+    else:
+        if extra:
+            return ys, extra_solver_state
+        else:
+            return ys

@@ -36,7 +36,8 @@ class LogODEMidpoint(base_solver.BaseSDESolver):
         self.strong_order = 0.5 if sde.noise_type == NOISE_TYPES.general else 1.0
         super(LogODEMidpoint, self).__init__(sde=sde, **kwargs)
 
-    def step(self, t0, t1, y0):
+    def step(self, t0, t1, y0, extra0):
+        del extra0
         dt = t1 - t0
         I_k, A = self.bm(t0, t1, return_A=True)
 
@@ -52,4 +53,4 @@ class LogODEMidpoint(base_solver.BaseSDESolver):
 
         y1 = y0 + dt * f_prime + g_prod_prime + dg_ga_prime
 
-        return y1
+        return y1, ()
