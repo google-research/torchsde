@@ -36,7 +36,8 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['benchmarks', 'diagnostics', 'examples', 'tests']),
     install_requires=[
         "boltons>=20.2.1",
-        "numpy>=1.19",
+        "numpy==1.19.*;python_version<'3.7'",
+        "numpy>=1.19.*;python_version>='3.7'",
         "scipy==1.5.*;python_version<'3.7'",
         "scipy>=1.5;python_version>='3.7'",
         "torch>=1.6.0",
