@@ -26,12 +26,16 @@ with open(os.path.join(here, 'torchsde', '__init__.py')) as f:
     else:
         raise RuntimeError("Unable to find __version__ string.")
 
+with open(os.path.join(here, 'README.md')) as f:
+    readme = f.read()
+
 setuptools.setup(
     name="torchsde",
     version=version,
     author="Xuechen Li",
     author_email="lxuechen@cs.toronto.edu",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
+    long_description=readme,
     url="https://github.com/google-research/torchsde",
     packages=setuptools.find_packages(exclude=['benchmarks', 'diagnostics', 'examples', 'tests']),
     install_requires=[
