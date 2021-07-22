@@ -63,14 +63,14 @@ def _check_tensor_info(*tensors, size, dtype, device):
     devices += [t.device for t in tensors]
 
     if len(sizes) == 0:
-        raise ValueError(f"Must either specify `size` or pass in `W` or `H` to implicitly define the size.")
+        raise ValueError("Must either specify `size` or pass in `W` or `H` to implicitly define the size.")
 
     if not all(i == sizes[0] for i in sizes):
-        raise ValueError(f"Multiple sizes found. Make sure `size` and `W` or `H` are consistent.")
+        raise ValueError("Multiple sizes found. Make sure `size` and `W` or `H` are consistent.")
     if not all(i == dtypes[0] for i in dtypes):
-        raise ValueError(f"Multiple dtypes found. Make sure `dtype` and `W` or `H` are consistent.")
+        raise ValueError("Multiple dtypes found. Make sure `dtype` and `W` or `H` are consistent.")
     if not all(i == devices[0] for i in devices):
-        raise ValueError(f"Multiple devices found. Make sure `device` and `W` or `H` are consistent.")
+        raise ValueError("Multiple devices found. Make sure `device` and `W` or `H` are consistent.")
 
     # Make sure size is a tuple (not a torch.Size) for neat repr-printing purposes.
     return tuple(sizes[0]), dtypes[0], devices[0]

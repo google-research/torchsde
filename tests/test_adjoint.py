@@ -38,7 +38,8 @@ def _methods():
     yield SDE_TYPES.stratonovich, METHODS.reversible_heun, None
 
 
-@pytest.mark.parametrize("sde_cls", [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive, problems.NeuralGeneral])
+@pytest.mark.parametrize("sde_cls", [problems.ExDiagonal, problems.ExScalar, problems.ExAdditive,
+                                     problems.NeuralGeneral])
 @pytest.mark.parametrize("sde_type, method, options", _methods())
 @pytest.mark.parametrize('adaptive', (False,))
 def test_against_numerical(sde_cls, sde_type, method, options, adaptive):

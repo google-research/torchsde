@@ -71,7 +71,7 @@ def stable_division(a, b, epsilon=1e-7):
 def vjp(outputs, inputs, **kwargs):
     if torch.is_tensor(inputs):
         inputs = [inputs]
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.  # noqa: 74
 
     if torch.is_tensor(outputs):
         outputs = [outputs]
@@ -85,7 +85,7 @@ def jvp(outputs, inputs, grad_inputs=None, **kwargs):
     # Unlike `torch.autograd.functional.jvp`, this function avoids repeating forward computation.
     if torch.is_tensor(inputs):
         inputs = [inputs]
-    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.
+    _dummy_inputs = [torch.as_strided(i, (), ()) for i in inputs]  # Workaround for PyTorch bug #39784.  # noqa: 88
 
     if torch.is_tensor(outputs):
         outputs = [outputs]
