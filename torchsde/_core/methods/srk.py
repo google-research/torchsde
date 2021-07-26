@@ -44,9 +44,9 @@ class SRK(base_solver.BaseSDESolver):
             self.step = self.diagonal_or_scalar_step
 
         if isinstance(sde, adjoint_sde.AdjointSDE):
-            raise ValueError(f"Stochastic Runge–Kutta methods cannot be used for adjoint SDEs, because it requires "
-                             f"direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
-                             f"diffusion-vector product. Use a different method instead.")
+            raise ValueError("Stochastic Runge–Kutta methods cannot be used for adjoint SDEs, because it requires "
+                             "direct access to the diffusion, whilst adjoint SDEs rely on a more efficient "
+                             "diffusion-vector product. Use a different method instead.")
 
         super(SRK, self).__init__(sde=sde, **kwargs)
 

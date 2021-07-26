@@ -331,11 +331,11 @@ def main(
             if global_step % pause_every == 0:
                 logging.warning(f'global_step: {global_step:06d}, loss: {loss:.4f}')
 
-                img_path = os.path.join(train_dir, f'ode_samples', f'global_step_{global_step:07d}.png')
+                img_path = os.path.join(train_dir, 'ode_samples', f'global_step_{global_step:07d}.png')
                 ode_samples = reverse.ode_sample_final(tau=tau)
                 plot(ode_samples, img_path)
 
-                img_path = os.path.join(train_dir, f'sde_samples', f'global_step_{global_step:07d}.png')
+                img_path = os.path.join(train_dir, 'sde_samples', f'global_step_{global_step:07d}.png')
                 sde_samples = reverse.sde_sample_final(tau=tau)
                 plot(sde_samples, img_path)
 

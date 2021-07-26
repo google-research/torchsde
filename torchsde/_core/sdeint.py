@@ -122,13 +122,13 @@ def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
         sde = base_sde.RenameMethodsSDE(sde, **names_to_change)
 
     if not hasattr(sde, "noise_type"):
-        raise ValueError(f"sde does not have the attribute noise_type.")
+        raise ValueError("sde does not have the attribute noise_type.")
 
     if sde.noise_type not in NOISE_TYPES:
         raise ValueError(f"Expected noise type in {NOISE_TYPES}, but found {sde.noise_type}.")
 
     if not hasattr(sde, "sde_type"):
-        raise ValueError(f"sde does not have the attribute sde_type.")
+        raise ValueError("sde does not have the attribute sde_type.")
 
     if sde.sde_type not in SDE_TYPES:
         raise ValueError(f"Expected sde type in {SDE_TYPES}, but found {sde.sde_type}.")
@@ -160,7 +160,7 @@ def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
 
     if not torch.is_tensor(ts):
         if not isinstance(ts, (tuple, list)) or not all(isinstance(t, (float, int)) for t in ts):
-            raise ValueError(f"Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
+            raise ValueError("Evaluation times `ts` must be a 1-D Tensor or list/tuple of floats.")
         ts = torch.tensor(ts, dtype=y0.dtype, device=y0.device)
     if not misc.is_strictly_increasing(ts):
         raise ValueError("Evaluation times `ts` must be strictly increasing.")
@@ -275,8 +275,8 @@ def check_contract(sde, y0, ts, bm, method, adaptive, options, names, logqp):
         options = options.copy()
 
     if adaptive and method == METHODS.euler and sde.noise_type != NOISE_TYPES.additive:
-        warnings.warn(f"Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
-                      f"time-stepping with the Euler--Maruyama method with non-additive noise.")
+        warnings.warn("Numerical solution is not guaranteed to converge to the correct solution when using adaptive "
+                      "time-stepping with the Euler--Maruyama method with non-additive noise.")
 
     return sde, y0, ts, bm, method, options
 

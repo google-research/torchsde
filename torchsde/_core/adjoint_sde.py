@@ -373,4 +373,5 @@ class AdjointSDE(base_sde.BaseSDE):
                 create_graph=requires_grad
             )
             vjp_y_and_params = misc.seq_sub(prod_partials_adj_y_and_params, mixed_partials_adj_y_and_params)
-            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, *vjp_y_and_params)).unsqueeze(0)
+            return self._g_prod(g_prod, y, adj_y, requires_grad), misc.flatten((vg_dg_vjp, 
+                                                                                *vjp_y_and_params)).unsqueeze(0)

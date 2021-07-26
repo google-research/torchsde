@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # We import from `typing` more than what's enough, so that other modules can import from this file and not `typing`.
-from typing import Sequence, Union, Optional, Any, Dict, Tuple, Callable
+from typing import Sequence, Union, Optional, Any, Dict, Tuple, Callable  # noqa: F401
 
 import torch
 
