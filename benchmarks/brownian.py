@@ -238,7 +238,12 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0)
 
     args = parser.parse_args()
-    device = torch.device('cuda' if torch.cuda.is_available() and not args.no_gpu else 'cpu')
+    if torch.cuda.is_available() and not args.no_gpu:
+        device = torch.device('cuda')
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() and not args.no_gpu:
+        device = torch.device('mps')
+    else:
+        device = torch.device('cpu')
 
     npr.seed(args.seed)
     torch.manual_seed(args.seed)

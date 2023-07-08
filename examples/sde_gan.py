@@ -355,9 +355,15 @@ def main(
         plot_locs=(0.1, 0.3, 0.5, 0.7, 0.9),  # Plot some marginal distributions at this proportion of the way along.
 ):
     is_cuda = torch.cuda.is_available()
-    device = 'cuda' if is_cuda else 'cpu'
-    if not is_cuda:
-        print("Warning: CUDA not available; falling back to CPU but this is likely to be very slow.")
+    is_mps = hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    if is_cuda:
+        device = torch.device('cuda')
+    elif is_mps:
+        device = torch.device('mps')
+    else:
+        device = torch.device('cpu')
+    if not is_cuda and not is_mps:
+        print("Warning: GPU not available; falling back to CPU but this is likely to be very slow.")
 
     # Data
     ts, data_size, train_dataloader = get_data(batch_size=batch_size, device=device)
