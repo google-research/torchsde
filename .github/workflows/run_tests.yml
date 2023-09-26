@@ -28,7 +28,9 @@ jobs:
           cache-dependency-path: setup.py
 
       - name: Install
-        run: pip install pytest -e .
+        run: pip install pytest -e . --only-binary=numpy,scipy,matplotlib,torch
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
 
       - name: Test with pytest
         run: python -m pytest
