@@ -9,78 +9,45 @@ on:
     - cron: "0 2 * * 6"
 
 jobs:
-  check_version:
+  build:
     strategy:
       matrix:
         python-version: [ 3.8 ]
-        os: [ ubuntu-latest ]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Check version
-        if: (github.event_name == 'pull_request' && github.base_ref == 'master')
-        run: |
-          python -m pip install --upgrade pip
-
-          python -m pip install git+https://github.com/google-research/torchsde.git
-          master_info=$(pip list | grep torchsde)
-          master_version=$(echo ${master_info} | cut -d " " -f2)
-          python -m pip uninstall -y torchsde
-
-          python setup.py install
-          pr_info=$(pip list | grep torchsde)
-          pr_version=$(echo ${pr_info} | cut -d " " -f2)
-
-          python -c "import itertools as it
-          import sys
-
-          _, master_version, pr_version = sys.argv
-
-          master_version_ = [int(i) for i in master_version.split('.')]
-          pr_version_ = [int(i) for i in pr_version.split('.')]
-
-          master_version__ = tuple(m for p, m in it.zip_longest(pr_version_, master_version_, fillvalue=0))
-          pr_version__ = tuple(p for p, m in it.zip_longest(pr_version_, master_version_, fillvalue=0))
-          sys.exit(pr_version__ < master_version__)" ${master_version} ${pr_version}
-
-  build:
-    needs: [ check_version ]
-    strategy:
-      matrix:
-        python-version: [ 3.6, 3.8 ]
         os: [ ubuntu-latest, macOS-latest, windows-latest ]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: setup.py
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install flake8 pytest
+      - name: Install
+        run: pip install pytest -e . --only-binary=numpy,scipy,matplotlib,torch
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
 
-      - name: Windows patch  # Specifically for windows, since pip fails to fetch torch 1.6.0 as of Oct 2020.
-        if: runner.os == 'Windows'
-        run: python -m pip install torch==1.6.0+cpu torchvision==0.7.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+      - name: Test with pytest
+        run: python -m pytest -v
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: setup.py
 
       - name: Lint with flake8
         run: |
+          python -m pip install flake8
           python -m flake8 .
-
-      - name: Test with pytest
-        run: |
-          python setup.py install
-          python -m pytest

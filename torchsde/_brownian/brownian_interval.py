@@ -16,7 +16,6 @@ import math
 import trampoline
 import warnings
 
-import boltons.cacheutils
 import numpy as np
 import torch
 
@@ -110,6 +109,21 @@ class _EmptyDict:
 
     def __getitem__(self, item):
         raise KeyError
+
+
+class _LRUDict(dict):
+    def __init__(self, max_size):
+        super().__init__()
+        self._max_size = max_size
+        self._keys = []
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self._keys.remove(key)
+        elif len(self) >= self._max_size:
+            del self[self._keys.pop(0)]
+        super().__setitem__(key, value)
+        self._keys.append(key)
 
 
 class _Interval:
@@ -505,7 +519,7 @@ class BrownianInterval(brownian_base.BaseBrownian, _Interval):
         elif cache_size == 0:
             self._increment_and_space_time_levy_area_cache = _EmptyDict()
         else:
-            self._increment_and_space_time_levy_area_cache = boltons.cacheutils.LRU(max_size=cache_size)
+            self._increment_and_space_time_levy_area_cache = _LRUDict(max_size=cache_size)
 
         # We keep track of the most recently queried interval, and start searching for the next interval from that
         # element of the binary tree. This is because subsequent queries are likely to be near the most recent query.
