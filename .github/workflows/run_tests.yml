@@ -33,7 +33,7 @@ jobs:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
 
       - name: Test with pytest
-        run: python -m pytest
+        run: python -m pytest -v
 
   lint:
     runs-on: ubuntu-latest
