@@ -147,7 +147,7 @@ class Blur(nn.Module):
         self.register_buffer('f', f)
 
     def forward(self, x):
-        return kornia.filter2D(x, self.f, normalized=True)
+        return kornia.filters.filter2d(x, self.f, normalized=True)
 
 
 class Downsample(nn.Module):

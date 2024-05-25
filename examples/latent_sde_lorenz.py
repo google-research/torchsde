@@ -238,7 +238,7 @@ def vis(xs, ts, latent_sde, bm_vis, img_path, num_samples=10):
     # Left plot: data.
     z1, z2, z3 = np.split(xs.cpu().numpy(), indices_or_sections=3, axis=-1)
     [ax00.plot(z1[:, i, 0], z2[:, i, 0], z3[:, i, 0]) for i in range(num_samples)]
-    ax00.scatter(z1[0, :num_samples, 0], z2[0, :num_samples, 0], z3[0, :10, 0], marker='x')
+    ax00.scatter(z1[0, :num_samples, 0], z2[0, :num_samples, 0], z3[0, :num_samples, 0], marker='x')
     ax00.set_yticklabels([])
     ax00.set_xticklabels([])
     ax00.set_zticklabels([])
@@ -255,7 +255,7 @@ def vis(xs, ts, latent_sde, bm_vis, img_path, num_samples=10):
     z1, z2, z3 = np.split(xs, indices_or_sections=3, axis=-1)
 
     [ax01.plot(z1[:, i, 0], z2[:, i, 0], z3[:, i, 0]) for i in range(num_samples)]
-    ax01.scatter(z1[0, :num_samples, 0], z2[0, :num_samples, 0], z3[0, :10, 0], marker='x')
+    ax01.scatter(z1[0, :num_samples, 0], z2[0, :num_samples, 0], z3[0, :num_samples, 0], marker='x')
     ax01.set_yticklabels([])
     ax01.set_xticklabels([])
     ax01.set_zticklabels([])
