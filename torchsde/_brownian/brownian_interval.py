@@ -28,7 +28,7 @@ _r12 = 1 / 12
 
 
 def _randn(size, dtype, device, seed):
-    generator = torch.Generator(device).manual_seed(int(seed))
+    generator = torch.Generator().manual_seed(int(seed))
     return torch.randn(size, dtype=dtype, device=device, generator=generator)
 
 
