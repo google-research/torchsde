@@ -58,7 +58,7 @@ def _dict_to_sorted_list(*dicts):
 @pytest.mark.parametrize("device", devices)
 def test_basic(device):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t, bm = _setup(device, SMALL_BATCH_SIZE)
     sample = bm(t)
@@ -68,7 +68,7 @@ def test_basic(device):
 @pytest.mark.parametrize("device", devices)
 def test_determinism(device):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t, bm = _setup(device, SMALL_BATCH_SIZE)
     vals = [bm(t) for _ in range(REPS)]
@@ -79,7 +79,7 @@ def test_determinism(device):
 @pytest.mark.parametrize("device", devices)
 def test_normality(device):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t0_, t1_ = 0.0, 1.0
     t0, t1 = torch.tensor([t0_, t1_], device=device)

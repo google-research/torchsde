@@ -70,7 +70,7 @@ def _levy_returns():
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_shape(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     for shape, A_shape in (((SMALL_BATCH_SIZE, D), (SMALL_BATCH_SIZE, D, D)),
                            ((SMALL_BATCH_SIZE,), (SMALL_BATCH_SIZE,)),
@@ -111,7 +111,7 @@ def test_shape(device, levy_area_approximation, return_U, return_A):
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_determinism_simple(device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     vals = [bm(ta, tb, return_U=return_U, return_A=return_A) for _ in range(REPS)]
@@ -136,7 +136,7 @@ def test_determinism_large(device, levy_area_approximation, return_U, return_A):
     points, and compare.
     """
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     ta, tb, bm = _setup(device, levy_area_approximation, (SMALL_BATCH_SIZE, D))
     cache = {}
@@ -165,7 +165,7 @@ def test_determinism_large(device, levy_area_approximation, return_U, return_A):
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
 def test_normality_simple(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
@@ -199,7 +199,7 @@ def test_normality_simple(device, levy_area_approximation):
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
 def test_normality_conditional(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
@@ -262,7 +262,7 @@ def test_normality_conditional(device, levy_area_approximation):
 @pytest.mark.parametrize("levy_area_approximation", ['none', 'space-time', 'davie', 'foster'])
 def test_consistency(device, levy_area_approximation):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     for _ in range(REPS):
@@ -293,7 +293,7 @@ def test_consistency(device, levy_area_approximation):
 @pytest.mark.parametrize("levy_area_approximation, return_U, return_A", _levy_returns())
 def test_entropy_determinism(random_order, device, levy_area_approximation, return_U, return_A):
     if device == gpu and not torch.cuda.is_available():
-        pytest.skip(msg="CUDA not available.")
+        pytest.skip(reason="CUDA not available.")
 
     t0, t1 = 0.0, 1.0
     entropy = 56789
