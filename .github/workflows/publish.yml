@@ -1,0 +1,99 @@
+name: Publish
+on:
+  release:
+    types: [published]
+    branches: [master]
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        python-version: [ 3.6, 3.8 ]
+        os: [ macos-latest, ubuntu-latest, windows-latest ]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          
+      - name: Check version
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+
+          python -m pip install torchsde
+          pypi_info=$(pip list | grep torchsde)
+          pypi_version=$(echo ${pypi_info} | cut -d " " -f2)
+          python -m pip uninstall -y torchsde
+
+          python setup.py install
+          master_info=$(pip list | grep torchsde)
+          master_version=$(echo ${master_info} | cut -d " " -f2)
+          python -m pip uninstall -y torchsde
+
+          python -c "import itertools as it
+          import sys
+          _, pypi_version, master_version = sys.argv
+          pypi_version_ = [int(i) for i in pypi_version.split('.')]
+          master_version_ = [int(i) for i in master_version.split('.')]
+          pypi_version__ = tuple(p for m, p in it.zip_longest(master_version_, pypi_version_, fillvalue=0))
+          master_version__ = tuple(m for m, p in it.zip_longest(master_version_, pypi_version_, fillvalue=0))
+          sys.exit(master_version__ <= pypi_version__)" ${pypi_version} ${master_version}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install flake8 pytest wheel
+
+      - name: Lint with flake8
+        run: |
+          python -m flake8 .
+
+      - name: Build
+        shell: bash
+        run: |
+          python setup.py sdist bdist_wheel
+          rm -f dist/*.egg
+
+      - name: Run sdist tests
+        shell: bash
+        run: |
+          python -m pip install dist/*.tar.gz
+          python -m pytest
+          python -m pip uninstall -y torchsde
+          
+      - name: Run bdist_wheel tests
+        shell: bash
+        run: |
+          python -m pip install dist/*.whl
+          python -m pytest
+          python -m pip uninstall -y torchsde
+
+      - name: Upload builds
+        if: matrix.python-version == '3.8' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-artifact
+          path: dist/
+
+  publish:
+    needs: [ build_and_test ]
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download builds
+        uses: actions/download-artifact@v2
+        with:
+          name: build-artifact
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.4.2
+        with:
+          user: ${{ secrets.pypi_username }}
+          password: ${{ secrets.pypi_password }}
